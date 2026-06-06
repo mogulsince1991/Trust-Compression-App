@@ -15,3 +15,7 @@ A minimal Trust Library MVP for turning existing video assets into searchable, s
 - Supabase
 - OpenAI API
 - Vercel
+
+## Deployment
+
+This app deploys from the `main` branch through Vercel.
