@@ -1,5 +1,5 @@
-import { TrustApp } from "@/components/trust-app";
+import { TrustAppFunctional } from "@/components/trust-app-functional";
 
 export default function HomePage() {
-  return <TrustApp />;
+  return <TrustAppFunctional />;
 }
