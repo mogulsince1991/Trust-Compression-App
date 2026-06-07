@@ -19,3 +19,5 @@ A minimal Trust Library MVP for turning existing video assets into searchable, s
 ## Deployment
 
 This app deploys from the `main` branch through Vercel.
+
+Last redeploy trigger: framework preset updated to Next.js.
