@@ -368,15 +368,46 @@ function RoleGate({ onChoose }: { onChoose: (role: RoleId) => void }) {
 
 function AuthGate({ role, supabase, onBack }: { role: (typeof roles)[RoleId]; supabase: ReturnType<typeof createBrowserSupabaseClient>; onBack: () => void }) {
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
+  const [isError, setIsError] = useState(false);
   const [sending, setSending] = useState(false);
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
+  async function sendMagicLink(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!supabase || !email) return;
     setSending(true);
+    setIsError(false);
+    setMessage("Sending sign-in link...");
     const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin } });
-    setMessage(error ? error.message : "Check your email for the sign-in link.");
+    setIsError(Boolean(error));
+    setMessage(error ? friendlyAuthError(error.message) : "Check your email. The sign-in link has been sent.");
+    setSending(false);
+  }
+
+  async function signInWithPassword() {
+    if (!supabase || !email || !password) return;
+    setSending(true);
+    setIsError(false);
+    setMessage("Signing in...");
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setIsError(Boolean(error));
+    setMessage(error ? friendlyAuthError(error.message) : "Signed in. Opening your workspace...");
+    setSending(false);
+  }
+
+  async function createAccount() {
+    if (!supabase || !email || !password) return;
+    setSending(true);
+    setIsError(false);
+    setMessage("Creating account...");
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: window.location.origin }
+    });
+    setIsError(Boolean(error));
+    setMessage(error ? friendlyAuthError(error.message) : "Account created. If Supabase asks for confirmation, check your email; otherwise the workspace will open now.");
     setSending(false);
   }
 
@@ -390,21 +421,52 @@ function AuthGate({ role, supabase, onBack }: { role: (typeof roles)[RoleId]; su
         <h1>Sign in.</h1>
         <p>{role.description}</p>
       </section>
-      <form className="prospect-brief" onSubmit={submit}>
+      <form className="prospect-brief" onSubmit={sendMagicLink}>
         <div className="brief-grid">
           <label className="wide-field">
             <span>Email</span>
             <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@company.com" required />
+          </label>
+          <label className="wide-field">
+            <span>Password</span>
+            <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Optional for password login" minLength={6} />
           </label>
         </div>
         <button className="wide-action" disabled={sending}>
           {sending ? <Loader2 className="spin" /> : <ArrowUpRight />}
           Send magic link
         </button>
-        {message && <p style={{ marginTop: 14 }}>{message}</p>}
+        <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+          <button className="text-button" type="button" disabled={sending || !email || password.length < 6} onClick={signInWithPassword}>
+            Sign in with password
+          </button>
+          <button className="text-button" type="button" disabled={sending || !email || password.length < 6} onClick={createAccount}>
+            Create password account
+          </button>
+        </div>
+        {message && (
+          <p
+            style={{
+              border: "1px solid rgba(255,255,255,.16)",
+              color: isError ? "#ffd4d4" : "#e9e2d6",
+              marginTop: 16,
+              padding: "14px 16px"
+            }}
+          >
+            {message}
+          </p>
+        )}
       </form>
     </main>
   );
+}
+
+function friendlyAuthError(message: string) {
+  if (message.toLowerCase().includes("rate limit")) {
+    return "Supabase is rate-limiting magic-link emails right now. Wait a few minutes, or use the password option below for testing.";
+  }
+
+  return message;
 }
 
 function VideoForm({ disabled, hasVideos, onSubmit, onSeed }: { disabled: boolean; hasVideos: boolean; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onSeed: () => void }) {
