@@ -36,6 +36,7 @@ export async function POST(request: Request) {
     const parsed = parseSourceUrl(sourceUrl);
     const apiKey = process.env.YOUTUBE_API_KEY;
     const importedVideos = await importYouTubeSource(parsed, apiKey);
+    const importMode = String(importedVideos[0]?.metadata.importMode ?? (apiKey ? "youtube_api" : "unknown"));
 
     const { data: source, error: sourceError } = await supabase
       .from("sources")
@@ -48,7 +49,8 @@ export async function POST(request: Request) {
           sourceUrl,
           canonicalUrl: parsed.canonicalUrl,
           kind: parsed.kind,
-          requiresApiKeyForBulk: parsed.kind !== "youtube_video" && !apiKey
+          importMode,
+          requiresApiKeyForBulk: parsed.kind === "youtube_playlist" && !apiKey
         }
       })
       .select("id")
@@ -125,6 +127,7 @@ export async function POST(request: Request) {
           sourceUrl,
           canonicalUrl: parsed.canonicalUrl,
           kind: parsed.kind,
+          importMode,
           imported: inserted,
           updated
         }
@@ -135,7 +138,8 @@ export async function POST(request: Request) {
       sourceId: source.id,
       imported: inserted,
       updated,
-      total: importedVideos.length
+      total: importedVideos.length,
+      importMode
     });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Source import failed." }, { status: 400 });
