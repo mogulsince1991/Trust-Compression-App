@@ -26,3 +26,20 @@ export function createServiceSupabaseClient() {
     }
   });
 }
+
+export function createUserSupabaseClient(accessToken: string) {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error("Supabase is not configured.");
+  }
+
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: false
+    },
+    global: {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      }
+    }
+  });
+}
