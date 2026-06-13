@@ -1,5 +1,6 @@
 "use client";
 
+import { createBrowserSupabaseClient } from "@/lib/supabase";
 import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -59,17 +60,13 @@ export function JourneyViewer({ journey }: { journey: PublicJourney }) {
     trackedVideos.current.add(key);
 
     const viewerId = getViewerId();
-    void fetch("/api/journey-events", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        journeyId: journey.id,
-        videoId: activeVideo.id,
-        eventType: "video_active",
-        viewerId,
-        activeIndex: active
-      })
-    }).catch(() => undefined);
+    void trackJourneyEvent({
+      journeyId: journey.id,
+      videoId: activeVideo.id,
+      eventType: "video_active",
+      viewerId,
+      activeIndex: active
+    });
   }, [active, activeVideo?.id, journey.id]);
 
   useEffect(() => {
@@ -188,4 +185,38 @@ function getViewerId() {
   const next = crypto.randomUUID();
   window.localStorage.setItem(key, next);
   return next;
+}
+
+type JourneyEventPayload = {
+  journeyId: string;
+  videoId: string;
+  eventType: string;
+  viewerId: string;
+  activeIndex: number;
+};
+
+async function trackJourneyEvent(payload: JourneyEventPayload) {
+  const supabase = createBrowserSupabaseClient();
+
+  if (supabase) {
+    const { error } = await supabase.from("journey_views").insert({
+      journey_id: payload.journeyId,
+      video_id: payload.videoId,
+      event_type: payload.eventType,
+      viewer_label: payload.viewerId.slice(0, 80),
+      metadata: {
+        viewerId: payload.viewerId,
+        activeIndex: payload.activeIndex,
+        userAgent: window.navigator.userAgent.slice(0, 240)
+      }
+    });
+
+    if (!error) return;
+  }
+
+  await fetch("/api/journey-events", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  }).catch(() => undefined);
 }
