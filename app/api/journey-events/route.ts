@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createPublicSupabaseClient } from "@/lib/supabase";
+import { createPublicSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase";
 
 type JourneyEventRequest = {
   journeyId?: string;
@@ -11,7 +11,7 @@ type JourneyEventRequest = {
 
 export async function POST(request: Request) {
   try {
-    const supabase = createPublicSupabaseClient();
+    const supabase = createServiceSupabaseClient() ?? createPublicSupabaseClient();
     if (!supabase) return NextResponse.json({ error: "Supabase is not configured." }, { status: 500 });
 
     const body = (await request.json()) as JourneyEventRequest;
@@ -34,9 +34,14 @@ export async function POST(request: Request) {
       }
     });
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      console.error("journey event insert failed", error.message);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
     return NextResponse.json({ ok: true });
   } catch (error) {
+    console.error("journey event tracking failed", error);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not track journey event." }, { status: 400 });
   }
 }
