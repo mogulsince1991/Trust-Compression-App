@@ -11,6 +11,51 @@ type JourneyRequest = {
   videoIds?: string[];
 };
 
+export async function GET(request: Request) {
+  try {
+    const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+    if (!token) return NextResponse.json({ error: "Sign in to load journeys." }, { status: 401 });
+
+    const url = new URL(request.url);
+    const workspaceId = url.searchParams.get("workspaceId")?.trim();
+    if (!workspaceId) return NextResponse.json({ error: "Workspace is required." }, { status: 400 });
+
+    const supabase = createUserSupabaseClient(token);
+    const {
+      data: { user },
+      error: userError
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) return NextResponse.json({ error: "Your session expired. Sign in again." }, { status: 401 });
+
+    const { data, error } = await supabase
+      .from("journeys")
+      .select("id,title,heading,description,share_token,created_at,published_at,is_public")
+      .eq("workspace_id", workspaceId)
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    const origin = url.origin;
+    const journeys = (data ?? []).map((journey) => ({
+      id: journey.id,
+      title: journey.title,
+      heading: journey.heading,
+      description: journey.description,
+      shareToken: journey.share_token,
+      shareUrl: `${origin}/share/${journey.share_token}`,
+      createdAt: journey.created_at,
+      publishedAt: journey.published_at,
+      isPublic: journey.is_public
+    }));
+
+    return NextResponse.json({ journeys });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load journeys." }, { status: 400 });
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
