@@ -61,6 +61,7 @@ export default async function SharePage({ params }: SharePageProps) {
   return (
     <JourneyViewer
       journey={{
+        id: row.id,
         title: row.title,
         heading: row.heading,
         description: row.description,
