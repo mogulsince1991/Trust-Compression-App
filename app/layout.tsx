@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import "./journeys.css";
+import "./configurator.css";
 
 export const metadata: Metadata = {
   title: "Trust Library",
