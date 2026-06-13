@@ -8,6 +8,8 @@ type SharePageProps = {
   };
 };
 
+type JoinedVideo = PublicJourney["videos"][number] | PublicJourney["videos"] | null;
+
 type JourneyRow = {
   title: string;
   heading: string | null;
@@ -16,7 +18,7 @@ type JourneyRow = {
   cta_url: string | null;
   journey_videos: Array<{
     position: number;
-    videos: PublicJourney["videos"][number] | null;
+    videos: JoinedVideo;
   }>;
 };
 
@@ -35,11 +37,13 @@ export default async function SharePage({ params }: SharePageProps) {
 
   if (error || !data) notFound();
 
-  const row = data as JourneyRow;
+  const row = data as unknown as JourneyRow;
   const videos = row.journey_videos
     .sort((a, b) => a.position - b.position)
-    .map((item) => item.videos)
-    .filter(Boolean) as PublicJourney["videos"];
+    .flatMap((item) => {
+      if (!item.videos) return [];
+      return Array.isArray(item.videos) ? item.videos : [item.videos];
+    });
 
   if (!videos.length) notFound();
 
