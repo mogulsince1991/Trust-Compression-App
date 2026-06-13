@@ -106,12 +106,13 @@ export function TrustAppIngestion() {
   useEffect(() => {
     if (!supabase || !session || !isInternal) return;
 
+    const client = supabase;
     let active = true;
 
     async function openWorkspace() {
       setLoading(true);
       setError("");
-      const { data: id, error: workspaceError } = await supabase.rpc("ensure_workspace", {
+      const { data: id, error: workspaceError } = await client.rpc("ensure_workspace", {
         workspace_name: "Trust Library"
       });
 
