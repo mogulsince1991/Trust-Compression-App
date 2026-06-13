@@ -1,5 +1,6 @@
-import { ArrowRight, Play } from "lucide-react";
-import { videos } from "@/lib/mock-data";
+import { notFound } from "next/navigation";
+import { JourneyViewer, type PublicJourney } from "@/components/journey-viewer";
+import { createServiceSupabaseClient } from "@/lib/supabase";
 
 type SharePageProps = {
   params: {
@@ -7,34 +8,51 @@ type SharePageProps = {
   };
 };
 
-export default function SharePage({ params }: SharePageProps) {
+type JourneyRow = {
+  title: string;
+  heading: string | null;
+  description: string | null;
+  cta_label: string | null;
+  cta_url: string | null;
+  journey_videos: Array<{
+    position: number;
+    videos: PublicJourney["videos"][number] | null;
+  }>;
+};
+
+export default async function SharePage({ params }: SharePageProps) {
+  const supabase = createServiceSupabaseClient();
+  if (!supabase) notFound();
+
+  const { data, error } = await supabase
+    .from("journeys")
+    .select(
+      "title,heading,description,cta_label,cta_url,journey_videos(position,videos(id,title,summary,source_platform,source_url,embed_url,thumbnail_url,duration_seconds))"
+    )
+    .eq("share_token", params.token)
+    .eq("is_public", true)
+    .maybeSingle();
+
+  if (error || !data) notFound();
+
+  const row = data as JourneyRow;
+  const videos = row.journey_videos
+    .sort((a, b) => a.position - b.position)
+    .map((item) => item.videos)
+    .filter(Boolean) as PublicJourney["videos"];
+
+  if (!videos.length) notFound();
+
   return (
-    <main className="share-page">
-      <section className="share-hero">
-        <div>
-          <span>Private journey</span>
-          <h1>Kitchen Remodel Confidence</h1>
-          <p>A calm sequence to help you understand pricing, process, project experience, and next steps before the conversation.</p>
-        </div>
-        <small>Share token: {params.token}</small>
-      </section>
-
-      <section className="share-sequence">
-        {videos.slice(0, 6).map((video, index) => (
-          <article className="share-video" key={video.id}>
-            <div className="share-thumb" style={{ backgroundImage: `url(${video.image})` }}>
-              <button aria-label={`Play ${video.title}`}><Play size={18} /></button>
-            </div>
-            <div>
-              <span>{index + 1}. {video.type} / {video.duration}</span>
-              <h2>{video.title}</h2>
-              <p>{video.summary}</p>
-            </div>
-          </article>
-        ))}
-      </section>
-
-      <a className="share-cta" href="mailto:sales@example.com">Continue the conversation <ArrowRight size={18} /></a>
-    </main>
+    <JourneyViewer
+      journey={{
+        title: row.title,
+        heading: row.heading,
+        description: row.description,
+        cta_label: row.cta_label,
+        cta_url: row.cta_url,
+        videos
+      }}
+    />
   );
 }
