@@ -1,13 +1,14 @@
 "use client";
 
-import { ArrowUpRight, ChevronDown, ChevronUp, Clapperboard, Eye, Import, Loader2, LogOut, Plus, Route, Search, Share2, Trash2, Users, Wand2 } from "lucide-react";
+import { ArrowUpRight, BarChart3, ChevronDown, ChevronUp, Clapperboard, Eye, Import, Loader2, LogOut, Plus, Route, Save, Search, Share2, Trash2, Users, Wand2 } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 
 type RoleId = "libraryManager" | "salesRep" | "owner" | "prospect";
-type ViewId = "sources" | "library" | "prospects" | "journeys";
+type ViewId = "sources" | "library" | "prospects" | "journeys" | "metrics";
+type MetricMode = "sales" | "social";
 
 type DbVideo = {
   id: string;
@@ -23,8 +24,41 @@ type DbVideo = {
   buying_stage: string | null;
   sales_category: string | null;
   funnel_stage: string | null;
-  metadata: Record<string, unknown> | null;
+  metadata: Record<string, any> | null;
   tags: string[];
+};
+
+type SourceRow = {
+  id: string;
+  platform: string;
+  account_label: string | null;
+  status: string | null;
+  last_synced_at: string | null;
+  metadata: Record<string, any> | null;
+};
+
+type JourneyRow = {
+  id: string;
+  title: string;
+  is_public: boolean | null;
+  published_at: string | null;
+  created_at: string | null;
+};
+
+type JourneyViewRow = {
+  id: string;
+  journey_id: string;
+  video_id: string | null;
+  event_type: string;
+  viewer_label: string | null;
+  metadata: Record<string, any> | null;
+  created_at: string | null;
+};
+
+type MetricsState = {
+  sources: SourceRow[];
+  journeys: JourneyRow[];
+  views: JourneyViewRow[];
 };
 
 type JourneyDraft = {
@@ -41,6 +75,17 @@ type SmartGroup = {
   videos: DbVideo[];
 };
 
+type VideoContext = {
+  notes: string;
+  targetBuyer: string;
+  objections: string;
+  offer: string;
+  suggestedUse: string;
+  salesCategory: string;
+  funnelStage: string;
+  tags: string;
+};
+
 const emptyDraft: JourneyDraft = {
   title: "",
   heading: "",
@@ -55,20 +100,20 @@ const roles: Record<RoleId, { label: string; title: string; description: string;
     title: "Connect the content sources.",
     description: "Import public channels, playlists, videos, and folders into a searchable proof library.",
     view: "sources",
-    placeholder: "Search imported videos, transcripts, tags..."
+    placeholder: "Search imported videos, context, tags..."
   },
   salesRep: {
     label: "Sales Rep",
     title: "Find proof for this buyer.",
     description: "Search the saved library and assemble the right proof sequence for a prospect.",
     view: "library",
-    placeholder: "Search by objection, service, concern..."
+    placeholder: "Search by objection, buyer, offer, concern..."
   },
   owner: {
     label: "Owner",
-    title: "See the company's usable proof.",
-    description: "Review which imported videos your team can actually use.",
-    view: "library",
+    title: "See proof and performance.",
+    description: "Review library usage, buyer watch activity, and public source performance.",
+    view: "metrics",
     placeholder: "Search proof, gaps, objections..."
   },
   prospect: {
@@ -90,6 +135,7 @@ export function TrustAppIngestion() {
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [videos, setVideos] = useState<DbVideo[]>([]);
   const [selected, setSelected] = useState<DbVideo | null>(null);
+  const [metrics, setMetrics] = useState<MetricsState>({ sources: [], journeys: [], views: [] });
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
@@ -104,7 +150,22 @@ export function TrustAppIngestion() {
   const isInternal = roleId !== "prospect";
 
   const visibleVideos = videos.filter((video) => {
-    const haystack = [video.title, video.source_platform, video.summary, video.suggested_use, video.proof_type, video.buying_stage, video.sales_category, video.funnel_stage, ...video.tags]
+    const context = video.metadata?.customContext ?? {};
+    const haystack = [
+      video.title,
+      video.source_platform,
+      video.summary,
+      video.suggested_use,
+      video.proof_type,
+      video.buying_stage,
+      video.sales_category,
+      video.funnel_stage,
+      context.notes,
+      context.targetBuyer,
+      context.objections,
+      context.offer,
+      ...video.tags
+    ]
       .join(" ")
       .toLowerCase();
     return !query || haystack.includes(query.toLowerCase());
@@ -129,6 +190,7 @@ export function TrustAppIngestion() {
         setWorkspaceId(null);
         setVideos([]);
         setSelected(null);
+        setMetrics({ sources: [], journeys: [], views: [] });
       }
     });
 
@@ -156,6 +218,7 @@ export function TrustAppIngestion() {
 
       setWorkspaceId(id);
       await loadVideos(id);
+      await loadMetrics(id);
       if (active) setLoading(false);
     }
 
@@ -182,7 +245,29 @@ export function TrustAppIngestion() {
 
     const nextVideos = (data ?? []) as DbVideo[];
     setVideos(nextVideos);
-    setSelected(nextVideos[0] ?? null);
+    setSelected((current) => (current ? nextVideos.find((video) => video.id === current.id) ?? nextVideos[0] ?? null : nextVideos[0] ?? null));
+  }
+
+  async function loadMetrics(nextWorkspaceId = workspaceId) {
+    if (!supabase || !nextWorkspaceId) return;
+
+    const [{ data: sources }, { data: journeys }] = await Promise.all([
+      supabase.from("sources").select("id,platform,account_label,status,last_synced_at,metadata").eq("workspace_id", nextWorkspaceId).order("created_at", { ascending: false }),
+      supabase.from("journeys").select("id,title,is_public,published_at,created_at").eq("workspace_id", nextWorkspaceId).order("created_at", { ascending: false })
+    ]);
+
+    const journeyRows = (journeys ?? []) as JourneyRow[];
+    let views: JourneyViewRow[] = [];
+    if (journeyRows.length) {
+      const { data: viewRows } = await supabase
+        .from("journey_views")
+        .select("id,journey_id,video_id,event_type,viewer_label,metadata,created_at")
+        .in("journey_id", journeyRows.map((journey) => journey.id))
+        .order("created_at", { ascending: false });
+      views = (viewRows ?? []) as JourneyViewRow[];
+    }
+
+    setMetrics({ sources: (sources ?? []) as SourceRow[], journeys: journeyRows, views });
   }
 
   async function importSource(event: FormEvent<HTMLFormElement>) {
@@ -206,19 +291,71 @@ export function TrustAppIngestion() {
         },
         body: JSON.stringify({ workspaceId, sourceUrl })
       });
-      const result = (await response.json()) as { imported?: number; updated?: number; error?: string };
+      const result = (await response.json()) as { imported?: number; updated?: number; importMode?: string; error?: string };
 
       if (!response.ok) throw new Error(result.error ?? "Could not import that source.");
 
       form.reset();
-      setNotice(`Imported ${result.imported ?? 0} new videos and updated ${result.updated ?? 0}.`);
+      setNotice(`Imported ${result.imported ?? 0} new videos and updated ${result.updated ?? 0}. ${result.importMode === "youtube_rss" ? "RSS imported recent uploads." : ""}`);
       await loadVideos();
+      await loadMetrics();
       setView("library");
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Could not import that source.");
     } finally {
       setWorking(false);
     }
+  }
+
+  async function saveVideoContext(video: DbVideo, context: VideoContext) {
+    if (!supabase) return;
+    setWorking(true);
+    setNotice("");
+    setError("");
+
+    const tags = Array.from(
+      new Set([
+        ...(video.tags ?? []),
+        ...context.tags
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean)
+      ])
+    );
+    const nextMetadata = {
+      ...(video.metadata ?? {}),
+      customContext: {
+        notes: context.notes.trim(),
+        targetBuyer: context.targetBuyer.trim(),
+        objections: context.objections.trim(),
+        offer: context.offer.trim(),
+        updatedAt: new Date().toISOString()
+      }
+    };
+
+    const payload = {
+      suggested_use: context.suggestedUse.trim() || null,
+      sales_category: context.salesCategory.trim() || video.sales_category,
+      funnel_stage: context.funnelStage.trim() || video.funnel_stage,
+      proof_type: context.salesCategory.trim() || video.proof_type,
+      buying_stage: context.funnelStage.trim() || video.buying_stage,
+      tags,
+      metadata: nextMetadata,
+      updated_at: new Date().toISOString()
+    };
+
+    const { error: saveError } = await supabase.from("videos").update(payload).eq("id", video.id);
+    if (saveError) {
+      setError(saveError.message);
+      setWorking(false);
+      return;
+    }
+
+    const updatedVideo = { ...video, ...payload } as DbVideo;
+    setVideos((current) => current.map((item) => (item.id === video.id ? updatedVideo : item)));
+    setSelected(updatedVideo);
+    setNotice("Video context saved and searchable.");
+    setWorking(false);
   }
 
   function addToJourney(video: DbVideo) {
@@ -323,6 +460,7 @@ export function TrustAppIngestion() {
       const absoluteUrl = new URL(result.shareUrl, window.location.origin).toString();
       setShareUrl(absoluteUrl);
       setNotice("Journey published. The share link is ready.");
+      await loadMetrics();
       setView("journeys");
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Could not publish the journey.");
@@ -373,6 +511,9 @@ export function TrustAppIngestion() {
           <button className={view === "prospects" ? "icon-button is-active" : "icon-button"} onClick={() => setView("prospects")} aria-label="Prospects">
             <Users />
           </button>
+          <button className={view === "metrics" ? "icon-button is-active" : "icon-button"} onClick={() => setView("metrics")} aria-label="Sales metrics">
+            <BarChart3 />
+          </button>
           <button className={view === "journeys" ? "icon-button is-active" : "icon-button"} onClick={() => setView("journeys")} aria-label="Journeys">
             <Route />
           </button>
@@ -409,8 +550,9 @@ export function TrustAppIngestion() {
         {(notice || error) && <p style={{ margin: "0 6px 18px", color: error ? "#ffd4d4" : "#d8d1c5" }}>{error || notice}</p>}
 
         {view === "sources" && <SourcesView importing={working} onImport={importSource} />}
-        {view === "library" && <LibraryView videos={visibleVideos} selected={selected} groups={smartGroups} onSelect={setSelected} onAdd={addToJourney} />}
+        {view === "library" && <LibraryConfigurator videos={visibleVideos} selected={selected} saving={working} onSelect={setSelected} onAdd={addToJourney} onSaveContext={saveVideoContext} />}
         {view === "prospects" && <SequenceView title="Recommended proof" groups={smartGroups} videos={visibleVideos.slice(0, 6)} onAdd={addToJourney} />}
+        {view === "metrics" && <MetricsView metrics={metrics} videos={videos} />}
         {view === "journeys" && <SequenceView title="Journey draft" groups={smartGroups} videos={draftVideos.length ? draftVideos : visibleVideos.slice(0, 6)} onAdd={addToJourney} shareUrl={shareUrl} />}
       </main>
       {isInternal && (
@@ -531,7 +673,7 @@ function SourcesView({ importing, onImport }: { importing: boolean; onImport: (e
             <span>Sources</span>
             <h1>Import public video sources</h1>
           </div>
-          <p>Paste a video, playlist, or public channel. Channel imports use the YouTube API key in Vercel.</p>
+          <p>Public channels import recent uploads without a key. A YouTube API key unlocks deeper playlist and channel imports.</p>
         </div>
         <form className="prospect-brief" onSubmit={onImport}>
           <div className="brief-grid">
@@ -555,85 +697,184 @@ function SourcesView({ importing, onImport }: { importing: boolean; onImport: (e
   );
 }
 
-function LibraryView({ videos, selected, groups, onSelect, onAdd }: { videos: DbVideo[]; selected: DbVideo | null; groups: SmartGroup[]; onSelect: (video: DbVideo) => void; onAdd: (video: DbVideo) => void }) {
-  return (
-    <section className="library-shell">
-      <section className="browse">
-        <div className="collection-top">
-          <div>
-            <span>Library</span>
-            <h1>Imported videos</h1>
-          </div>
-          <p>{videos.length} videos</p>
-        </div>
-        {groups.length > 0 && <SmartGroups groups={groups} onSelect={onSelect} onAdd={onAdd} />}
-        {videos.length ? (
-          <div className="media-wall">
-            {videos.map((video) => (
-              <button className={selected?.id === video.id ? "media-card is-selected" : "media-card"} key={video.id} onClick={() => onSelect(video)}>
-                <div className="thumb" style={{ backgroundImage: `url(${video.thumbnail_url ?? ""})` }} />
-                <div className="card-copy">
-                  <div className="meta-line">
-                    <span>{video.sales_category ?? video.proof_type ?? video.source_platform}</span>
-                    <span>{formatDuration(video.duration_seconds)}</span>
-                  </div>
-                  <h3>{video.title}</h3>
-                </div>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <section className="prospect-brief">
-            <span>No videos yet</span>
-            <h2>Start by importing a public source.</h2>
-            <p>Paste a YouTube video first, then channels, playlists, Drive, and social accounts can build on the same library.</p>
-          </section>
-        )}
-      </section>
-      <Inspector selected={selected} onAdd={onAdd} />
-    </section>
-  );
-}
+function LibraryConfigurator({ videos, selected, saving, onSelect, onAdd, onSaveContext }: { videos: DbVideo[]; selected: DbVideo | null; saving: boolean; onSelect: (video: DbVideo) => void; onAdd: (video: DbVideo) => void; onSaveContext: (video: DbVideo, context: VideoContext) => void }) {
+  const stripVideos = videos.length > 5 ? [...videos, ...videos] : videos;
 
-function Inspector({ selected, onAdd }: { selected: DbVideo | null; onAdd: (video: DbVideo) => void }) {
-  if (!selected) {
+  if (!videos.length) {
     return (
-      <aside className="focus-panel" style={{ padding: 18 }}>
-        <span>Selected</span>
-        <h2>No video selected.</h2>
-        <p>Imported videos will show their embedded player, metadata, and AI notes here.</p>
-      </aside>
+      <section className="prospect-brief">
+        <span>No videos yet</span>
+        <h2>Start by importing a public source.</h2>
+        <p>Paste a YouTube video first, then channels, playlists, Drive, and social accounts can build on the same library.</p>
+      </section>
     );
   }
 
   return (
-    <aside className="focus-panel">
-      <div className="panel-top">
-        <span>{selected.source_platform}</span>
-        <button className="text-button compact" onClick={() => onAdd(selected)}>
-          <Plus />
-          Journey
-        </button>
+    <section className="library-configurator">
+      <div className="config-topline">
+        <span>{videos.length} videos</span>
+        <p>Scroll sideways, select a video, then add searchable context or send it to a journey.</p>
       </div>
-      {selected.embed_url ? (
-        <iframe className="preview-frame" src={selected.embed_url} title={selected.title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen />
-      ) : (
-        <div className="preview-frame" style={{ backgroundImage: `url(${selected.thumbnail_url ?? ""})` }} />
-      )}
-      <div className="focus-copy">
-        <div className="meta-line">
-          <span>{selected.sales_category ?? selected.proof_type ?? "Imported"} / {selected.funnel_stage ?? selected.buying_stage ?? "Library"}</span>
-          {selected.source_url && (
-            <a href={selected.source_url} target="_blank" rel="noreferrer">
-              Source
-            </a>
-          )}
+
+      <section className="library-strip" aria-label="Video library selector">
+        {stripVideos.map((video, index) => (
+          <button className={selected?.id === video.id ? "strip-card is-selected" : "strip-card"} key={`${video.id}-${index}`} onClick={() => onSelect(video)}>
+            <span className="strip-thumb" style={{ backgroundImage: `url(${video.thumbnail_url ?? ""})` }} />
+            <strong>{video.title}</strong>
+            <small>{video.sales_category ?? video.source_platform} / {formatDuration(video.duration_seconds)}</small>
+          </button>
+        ))}
+      </section>
+
+      <BottomPlayer selected={selected} saving={saving} onAdd={onAdd} onSaveContext={onSaveContext} />
+    </section>
+  );
+}
+
+function BottomPlayer({ selected, saving, onAdd, onSaveContext }: { selected: DbVideo | null; saving: boolean; onAdd: (video: DbVideo) => void; onSaveContext: (video: DbVideo, context: VideoContext) => void }) {
+  if (!selected) return null;
+
+  return (
+    <section className="library-player-dock">
+      <div className="bottom-video">
+        {selected.embed_url ? (
+          <iframe src={selected.embed_url} title={selected.title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen />
+        ) : (
+          <div style={{ backgroundImage: `url(${selected.thumbnail_url ?? ""})` }} />
+        )}
+      </div>
+      <section className="bottom-context">
+        <div className="mini-head">
+          <span>{selected.source_platform}</span>
+          <button className="text-button compact" onClick={() => onAdd(selected)}>
+            <Plus />
+            Journey
+          </button>
         </div>
         <h2>{selected.title}</h2>
-        <p>{selected.summary ?? "Transcript and AI summary will be added in the processing layer."}</p>
+        <ContextEditor key={selected.id} video={selected} saving={saving} onSave={onSaveContext} />
+      </section>
+    </section>
+  );
+}
+
+function ContextEditor({ video, saving, onSave }: { video: DbVideo; saving: boolean; onSave: (video: DbVideo, context: VideoContext) => void }) {
+  const context = video.metadata?.customContext ?? {};
+  const [form, setForm] = useState<VideoContext>({
+    notes: context.notes ?? "",
+    targetBuyer: context.targetBuyer ?? "",
+    objections: context.objections ?? "",
+    offer: context.offer ?? "",
+    suggestedUse: video.suggested_use ?? "",
+    salesCategory: video.sales_category ?? video.proof_type ?? "Education",
+    funnelStage: video.funnel_stage ?? video.buying_stage ?? "consideration",
+    tags: (video.tags ?? []).join(", ")
+  });
+
+  return (
+    <form
+      className="context-form"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSave(video, form);
+      }}
+    >
+      <label className="wide-field">
+        <span>Search context</span>
+        <textarea value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder="What this video proves, when to use it, and what a rep should search to find it." />
+      </label>
+      <div className="brief-grid compact-grid">
+        <label>
+          <span>Buyer</span>
+          <input value={form.targetBuyer} onChange={(event) => setForm({ ...form, targetBuyer: event.target.value })} placeholder="Homeowner, founder, CFO..." />
+        </label>
+        <label>
+          <span>Objections</span>
+          <input value={form.objections} onChange={(event) => setForm({ ...form, objections: event.target.value })} placeholder="Price, trust, timing..." />
+        </label>
+        <label>
+          <span>Offer</span>
+          <input value={form.offer} onChange={(event) => setForm({ ...form, offer: event.target.value })} placeholder="Service, product, package..." />
+        </label>
+        <label>
+          <span>Use case</span>
+          <input value={form.suggestedUse} onChange={(event) => setForm({ ...form, suggestedUse: event.target.value })} placeholder="Send before pricing call" />
+        </label>
+        <label>
+          <span>Sales category</span>
+          <input value={form.salesCategory} onChange={(event) => setForm({ ...form, salesCategory: event.target.value })} placeholder="Testimonial" />
+        </label>
+        <label>
+          <span>Funnel stage</span>
+          <input value={form.funnelStage} onChange={(event) => setForm({ ...form, funnelStage: event.target.value })} placeholder="decision" />
+        </label>
       </div>
-      <div className="trust-tags">{selected.tags.map((tag) => <span key={tag}>{tag}</span>)}</div>
-    </aside>
+      <label className="wide-field">
+        <span>Tags</span>
+        <input value={form.tags} onChange={(event) => setForm({ ...form, tags: event.target.value })} placeholder="comma, separated, tags" />
+      </label>
+      <button className="wide-action" disabled={saving}>
+        {saving ? <Loader2 className="spin" /> : <Save />}
+        Save context
+      </button>
+    </form>
+  );
+}
+
+function MetricsView({ metrics, videos }: { metrics: MetricsState; videos: DbVideo[] }) {
+  const [mode, setMode] = useState<MetricMode>("sales");
+  const watchEvents = metrics.views.filter((event) => event.event_type === "video_active" || event.event_type === "video_started");
+  const viewers = new Set(metrics.views.map((event) => event.viewer_label || event.metadata?.viewerId).filter(Boolean));
+  const sourceModes = metrics.sources.reduce<Record<string, number>>((counts, source) => {
+    const modeLabel = String(source.metadata?.importMode ?? "connected");
+    counts[modeLabel] = (counts[modeLabel] ?? 0) + 1;
+    return counts;
+  }, {});
+
+  return (
+    <section className="metrics-board">
+      <div className="metric-tabs">
+        <button className={mode === "sales" ? "is-active" : ""} onClick={() => setMode("sales")}>Sales metrics</button>
+        <button className={mode === "social" ? "is-active" : ""} onClick={() => setMode("social")}>Social metrics</button>
+      </div>
+
+      {mode === "sales" ? (
+        <div className="metric-grid">
+          <MetricCard label="Journey views" value={String(watchEvents.length)} detail="Tracked when someone opens and watches a shared proof journey." />
+          <MetricCard label="Known viewers" value={String(viewers.size)} detail="Anonymous visitor sessions for now; named prospects can attach later." />
+          <MetricCard label="Published journeys" value={String(metrics.journeys.filter((journey) => journey.is_public).length)} detail="Shareable trust paths your team has created." />
+          <MetricCard label="Library videos" value={String(videos.length)} detail="Imported videos available for sales journeys." />
+        </div>
+      ) : (
+        <div className="metric-grid">
+          <MetricCard label="Connected sources" value={String(metrics.sources.length)} detail="Public channels and accounts added to this workspace." />
+          <MetricCard label="Imported videos" value={String(videos.length)} detail="Videos imported from public or connected source libraries." />
+          <MetricCard label="RSS sources" value={String(sourceModes.youtube_rss ?? 0)} detail="Recent public uploads pulled without a YouTube API key." />
+          <MetricCard label="API sources" value={String(sourceModes.youtube_api ?? 0)} detail="Richer imports from configured YouTube API access." />
+        </div>
+      )}
+
+      <section className="metrics-note">
+        <span>{mode === "sales" ? "Buyer intent" : "Source performance"}</span>
+        <h2>{mode === "sales" ? "This should become the owner's trust pipeline view." : "Public stats come first, private stats come with OAuth."}</h2>
+        <p>
+          {mode === "sales"
+            ? "The most useful next layer is per-journey retention: which video was watched, where viewers dropped, and which proof sequences led to replies or booked calls."
+            : "For public YouTube channels we can store public counts when the API key is present. For private YouTube, Instagram, and Facebook analytics, each platform needs OAuth permissions from the account owner."}
+        </p>
+      </section>
+    </section>
+  );
+}
+
+function MetricCard({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return (
+    <article className="metric-card">
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <p>{detail}</p>
+    </article>
   );
 }
 
