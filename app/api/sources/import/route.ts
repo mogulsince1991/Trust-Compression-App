@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createUserSupabaseClient } from "@/lib/supabase";
 import { importYouTubeSource, parseSourceUrl } from "@/lib/source-import";
+import { classifyVideo } from "@/lib/smart-organize";
 
 type ImportRequest = {
   workspaceId?: string;
@@ -61,6 +62,12 @@ export async function POST(request: Request) {
     let updated = 0;
 
     for (const video of importedVideos) {
+      const smart = classifyVideo({
+        title: video.title,
+        summary: video.description,
+        tags: Array.isArray(video.metadata.tags) ? (video.metadata.tags as string[]) : []
+      });
+
       const { data: existing } = await supabase
         .from("videos")
         .select("id")
@@ -80,10 +87,20 @@ export async function POST(request: Request) {
         thumbnail_url: video.thumbnailUrl,
         duration_seconds: video.durationSeconds,
         summary: video.description?.slice(0, 500) ?? null,
-        proof_type: "Imported",
-        tags: ["YouTube"],
+        proof_type: smart.category,
+        buying_stage: smart.stage,
+        sales_category: smart.category,
+        funnel_stage: smart.stage,
+        transcript_status: video.metadata.captionAvailable ? "available" : "pending",
+        tags: Array.from(new Set(["YouTube", ...smart.tags])),
         published_at: video.publishedAt,
-        metadata: video.metadata,
+        metadata: {
+          ...video.metadata,
+          channelTitle: video.channelTitle,
+          sourceUrl,
+          salesCategory: smart.category,
+          funnelStage: smart.stage
+        },
         created_by: user.id,
         updated_at: new Date().toISOString()
       };
