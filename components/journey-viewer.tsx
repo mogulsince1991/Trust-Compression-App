@@ -63,7 +63,7 @@ export function JourneyViewer({ journey }: { journey: PublicJourney }) {
     void trackJourneyEvent({
       journeyId: journey.id,
       videoId: activeVideo.id,
-      eventType: "video_active",
+      eventType: "video_started",
       viewerId,
       activeIndex: active
     });
