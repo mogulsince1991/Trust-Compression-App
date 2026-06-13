@@ -1,5 +1,5 @@
-import { TrustAppFunctional } from "@/components/trust-app-functional";
+import { TrustAppIngestion } from "@/components/trust-app-ingestion";
 
 export default function HomePage() {
-  return <TrustAppFunctional />;
+  return <TrustAppIngestion />;
 }
