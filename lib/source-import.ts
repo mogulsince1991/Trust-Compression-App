@@ -115,7 +115,11 @@ export async function importYouTubeSource(source: ParsedSource, apiKey?: string)
   }
 
   if (!apiKey) {
-    throw new Error("Add YOUTUBE_API_KEY in Vercel to import YouTube channels and playlists.");
+    if (source.kind === "youtube_channel") {
+      return importYouTubeChannelWithRss(source);
+    }
+
+    throw new Error("Add YOUTUBE_API_KEY in Vercel to import YouTube playlists. Public channel URLs can import recent uploads without a key.");
   }
 
   if (source.kind === "youtube_video") {
@@ -165,6 +169,76 @@ async function importYouTubeVideoWithOEmbed(videoId: string, canonicalUrl: strin
       importMode: "oembed"
     }
   };
+}
+
+async function importYouTubeChannelWithRss(source: Extract<ParsedSource, { kind: "youtube_channel" }>) {
+  const channelId = source.channelId ?? (source.handle ? await resolveChannelIdFromHandle(source.handle, source.canonicalUrl) : null);
+  if (!channelId) {
+    throw new Error("Could not resolve that YouTube channel. Try a /channel/UC... URL or add YOUTUBE_API_KEY for handle import.");
+  }
+
+  const response = await fetch(`https://www.youtube.com/feeds/videos.xml?channel_id=${encodeURIComponent(channelId)}`, {
+    next: { revalidate: 300 }
+  });
+
+  if (!response.ok) {
+    throw new Error("YouTube RSS could not return recent public uploads for that channel.");
+  }
+
+  const xml = await response.text();
+  const channelTitle = decodeXml(firstMatch(xml, /<title>([\s\S]*?)<\/title>/));
+  const entries = Array.from(xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)).slice(0, 15);
+
+  const videos = entries
+    .map((entry) => rssEntryToVideo(entry[1], channelTitle, channelId))
+    .filter(Boolean) as ImportedVideo[];
+
+  if (!videos.length) {
+    throw new Error("No recent public uploads were found for that YouTube channel.");
+  }
+
+  return videos;
+}
+
+function rssEntryToVideo(entry: string, channelTitle: string | null, channelId: string): ImportedVideo | null {
+  const videoId = firstMatch(entry, /<yt:videoId>([\s\S]*?)<\/yt:videoId>/);
+  if (!videoId) return null;
+
+  const title = decodeXml(firstMatch(entry, /<title>([\s\S]*?)<\/title>/)) ?? "Untitled YouTube video";
+  const publishedAt = firstMatch(entry, /<published>([\s\S]*?)<\/published>/);
+  const description = decodeXml(firstMatch(entry, /<media:description>([\s\S]*?)<\/media:description>/));
+  const thumbnailUrl = firstMatch(entry, /<media:thumbnail[^>]+url="([^"]+)"/);
+
+  return {
+    externalId: videoId,
+    title,
+    description,
+    thumbnailUrl: thumbnailUrl ?? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+    durationSeconds: null,
+    publishedAt,
+    sourceUrl: `https://www.youtube.com/watch?v=${videoId}`,
+    embedUrl: `https://www.youtube.com/embed/${videoId}`,
+    channelTitle,
+    metadata: {
+      channelId,
+      captionAvailable: null,
+      importMode: "youtube_rss",
+      rssFallback: true
+    }
+  };
+}
+
+async function resolveChannelIdFromHandle(handle: string, canonicalUrl: string) {
+  const response = await fetch(canonicalUrl, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 TrustCompressionBot/1.0"
+    },
+    next: { revalidate: 3600 }
+  });
+
+  if (!response.ok) return null;
+  const html = await response.text();
+  return firstMatch(html, /"channelId":"(UC[^"]+)"/) ?? firstMatch(html, /<meta itemprop="channelId" content="(UC[^"]+)"/);
 }
 
 async function resolveChannelUploadsPlaylist(source: Extract<ParsedSource, { kind: "youtube_channel" }>, apiKey: string) {
@@ -287,6 +361,22 @@ async function fetchYouTube<T>(url: string): Promise<T> {
   }
 
   return data as T;
+}
+
+function firstMatch(input: string, pattern: RegExp) {
+  return input.match(pattern)?.[1] ?? null;
+}
+
+function decodeXml(value: string | null) {
+  if (!value) return null;
+  return value
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .trim();
 }
 
 function parseYouTubeDuration(duration?: string) {
