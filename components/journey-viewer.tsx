@@ -16,6 +16,7 @@ type JourneyVideo = {
 };
 
 export type PublicJourney = {
+  id: string;
   title: string;
   heading: string | null;
   description: string | null;
@@ -30,6 +31,7 @@ export function JourneyViewer({ journey }: { journey: PublicJourney }) {
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const activeVideo = journey.videos[active];
   const listRef = useRef<HTMLDivElement>(null);
+  const trackedVideos = useRef<Set<string>>(new Set());
   const isYouTube = activeVideo?.embed_url?.includes("youtube.com/embed");
 
   const embedUrl = useMemo(() => {
@@ -49,6 +51,26 @@ export function JourneyViewer({ journey }: { journey: PublicJourney }) {
     const item = node.querySelector<HTMLElement>(`[data-index="${active}"]`);
     item?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
   }, [active]);
+
+  useEffect(() => {
+    if (!activeVideo?.id) return;
+    const key = `${journey.id}:${activeVideo.id}`;
+    if (trackedVideos.current.has(key)) return;
+    trackedVideos.current.add(key);
+
+    const viewerId = getViewerId();
+    void fetch("/api/journey-events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        journeyId: journey.id,
+        videoId: activeVideo.id,
+        eventType: "video_active",
+        viewerId,
+        activeIndex: active
+      })
+    }).catch(() => undefined);
+  }, [active, activeVideo?.id, journey.id]);
 
   useEffect(() => {
     if (!started || !activeVideo?.duration_seconds) return;
@@ -157,4 +179,13 @@ export function JourneyViewer({ journey }: { journey: PublicJourney }) {
       )}
     </main>
   );
+}
+
+function getViewerId() {
+  const key = "trust_viewer_id";
+  const existing = window.localStorage.getItem(key);
+  if (existing) return existing;
+  const next = crypto.randomUUID();
+  window.localStorage.setItem(key, next);
+  return next;
 }
