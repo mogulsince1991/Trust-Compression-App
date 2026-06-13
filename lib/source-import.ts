@@ -16,7 +16,7 @@ export type ImportedVideo = {
 export type ParsedSource =
   | { platform: "youtube"; kind: "youtube_video"; videoId: string; canonicalUrl: string }
   | { platform: "youtube"; kind: "youtube_playlist"; playlistId: string; canonicalUrl: string }
-  | { platform: "youtube"; kind: "youtube_channel"; channelId?: string; handle?: string; canonicalUrl: string };
+  | { platform: "youtube"; kind: "youtube_channel"; channelId?: string; handle?: string; legacyUsername?: string; canonicalUrl: string };
 
 export function parseSourceUrl(rawUrl: string): ParsedSource {
   let url: URL;
@@ -84,6 +84,24 @@ export function parseSourceUrl(rawUrl: string): ParsedSource {
     };
   }
 
+  if (parts[0] === "user" && parts[1]) {
+    return {
+      platform: "youtube",
+      kind: "youtube_channel",
+      legacyUsername: parts[1],
+      canonicalUrl: `https://www.youtube.com/user/${parts[1]}`
+    };
+  }
+
+  if (parts[0] === "c" && parts[1]) {
+    return {
+      platform: "youtube",
+      kind: "youtube_channel",
+      handle: parts[1],
+      canonicalUrl: `https://www.youtube.com/c/${parts[1]}`
+    };
+  }
+
   if (parts[0]?.startsWith("@")) {
     return {
       platform: "youtube",
@@ -102,7 +120,7 @@ export function parseSourceUrl(rawUrl: string): ParsedSource {
     };
   }
 
-  throw new Error("Use a YouTube video, shorts, playlist, channel, or @handle URL.");
+  throw new Error("Use a YouTube video, shorts, playlist, channel, /user, /c, or @handle URL.");
 }
 
 export async function importYouTubeSource(source: ParsedSource, apiKey?: string): Promise<ImportedVideo[]> {
@@ -172,21 +190,51 @@ async function importYouTubeVideoWithOEmbed(videoId: string, canonicalUrl: strin
 }
 
 async function importYouTubeChannelWithRss(source: Extract<ParsedSource, { kind: "youtube_channel" }>) {
-  const channelId = source.channelId ?? (source.handle ? await resolveChannelIdFromHandle(source.handle, source.canonicalUrl) : null);
-  if (!channelId) {
-    throw new Error("Could not resolve that YouTube channel. Try a /channel/UC... URL or add YOUTUBE_API_KEY for handle import.");
+  if (source.channelId) {
+    return fetchYouTubeRssByChannelId(source.channelId);
   }
 
-  const response = await fetch(`https://www.youtube.com/feeds/videos.xml?channel_id=${encodeURIComponent(channelId)}`, {
+  if (source.legacyUsername) {
+    const videos = await fetchYouTubeRssByUser(source.legacyUsername);
+    if (videos.length) return videos;
+  }
+
+  const maybeChannelId = source.handle && looksLikeChannelId(source.handle) ? source.handle : null;
+  const channelId = maybeChannelId ?? (source.handle ? await resolveChannelIdFromPage(source.canonicalUrl) : null);
+
+  if (channelId) {
+    return fetchYouTubeRssByChannelId(channelId);
+  }
+
+  if (source.handle) {
+    const videos = await fetchYouTubeRssByUser(source.handle);
+    if (videos.length) return videos;
+  }
+
+  throw new Error("Could not resolve that YouTube channel for RSS. Try a /channel/UC... URL, or add YOUTUBE_API_KEY for richer handle imports.");
+}
+
+async function fetchYouTubeRssByChannelId(channelId: string) {
+  return fetchYouTubeRss(`https://www.youtube.com/feeds/videos.xml?channel_id=${encodeURIComponent(channelId)}`, channelId);
+}
+
+async function fetchYouTubeRssByUser(username: string) {
+  return fetchYouTubeRss(`https://www.youtube.com/feeds/videos.xml?user=${encodeURIComponent(username)}`, null);
+}
+
+async function fetchYouTubeRss(url: string, knownChannelId: string | null) {
+  const response = await fetch(url, {
+    headers: { "User-Agent": "Mozilla/5.0 TrustCompressionBot/1.0" },
     next: { revalidate: 300 }
   });
 
   if (!response.ok) {
-    throw new Error("YouTube RSS could not return recent public uploads for that channel.");
+    return [];
   }
 
   const xml = await response.text();
   const channelTitle = decodeXml(firstMatch(xml, /<title>([\s\S]*?)<\/title>/));
+  const channelId = knownChannelId ?? firstMatch(xml, /<yt:channelId>([\s\S]*?)<\/yt:channelId>/);
   const entries = Array.from(xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)).slice(0, 15);
 
   const videos = entries
@@ -200,7 +248,7 @@ async function importYouTubeChannelWithRss(source: Extract<ParsedSource, { kind:
   return videos;
 }
 
-function rssEntryToVideo(entry: string, channelTitle: string | null, channelId: string): ImportedVideo | null {
+function rssEntryToVideo(entry: string, channelTitle: string | null, channelId: string | null): ImportedVideo | null {
   const videoId = firstMatch(entry, /<yt:videoId>([\s\S]*?)<\/yt:videoId>/);
   if (!videoId) return null;
 
@@ -228,7 +276,7 @@ function rssEntryToVideo(entry: string, channelTitle: string | null, channelId: 
   };
 }
 
-async function resolveChannelIdFromHandle(handle: string, canonicalUrl: string) {
+async function resolveChannelIdFromPage(canonicalUrl: string) {
   const response = await fetch(canonicalUrl, {
     headers: {
       "User-Agent": "Mozilla/5.0 TrustCompressionBot/1.0"
@@ -238,7 +286,15 @@ async function resolveChannelIdFromHandle(handle: string, canonicalUrl: string) 
 
   if (!response.ok) return null;
   const html = await response.text();
-  return firstMatch(html, /"channelId":"(UC[^"]+)"/) ?? firstMatch(html, /<meta itemprop="channelId" content="(UC[^"]+)"/);
+  const decoded = html.replace(/\\u0026/g, "&").replace(/\\\"/g, '"');
+
+  return (
+    firstMatch(decoded, /"channelId":"(UC[^"]+)"/) ??
+    firstMatch(decoded, /"browseId":"(UC[^"]+)"/) ??
+    firstMatch(decoded, /"externalId":"(UC[^"]+)"/) ??
+    firstMatch(decoded, /<meta itemprop="channelId" content="(UC[^"]+)"/) ??
+    firstMatch(decoded, /youtube\.com\/channel\/(UC[\w-]+)/)
+  );
 }
 
 async function resolveChannelUploadsPlaylist(source: Extract<ParsedSource, { kind: "youtube_channel" }>, apiKey: string) {
@@ -252,6 +308,8 @@ async function resolveChannelUploadsPlaylist(source: Extract<ParsedSource, { kin
     params.set("id", source.channelId);
   } else if (source.handle) {
     params.set("forHandle", source.handle);
+  } else if (source.legacyUsername) {
+    params.set("forUsername", source.legacyUsername);
   }
 
   const data = await fetchYouTube<{ items?: Array<{ contentDetails?: { relatedPlaylists?: { uploads?: string } } }> }>(
@@ -387,4 +445,8 @@ function parseYouTubeDuration(duration?: string) {
   const minutes = Number(match[2] ?? 0);
   const seconds = Number(match[3] ?? 0);
   return hours * 3600 + minutes * 60 + seconds;
+}
+
+function looksLikeChannelId(value: string) {
+  return /^UC[\w-]{20,}$/.test(value);
 }
