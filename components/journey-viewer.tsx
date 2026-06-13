@@ -130,8 +130,6 @@ export function JourneyViewer({ journey }: { journey: PublicJourney }) {
             <span>
               {active + 1} / {journey.videos.length}
             </span>
-            <h2>{activeVideo.title}</h2>
-            {activeVideo.summary && <p>{activeVideo.summary}</p>}
           </div>
         </article>
         <button className="reel-nav next" onClick={next} disabled={active === journey.videos.length - 1} aria-label="Next video">
