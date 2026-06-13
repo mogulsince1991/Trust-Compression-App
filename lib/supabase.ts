@@ -13,6 +13,18 @@ export function createBrowserSupabaseClient() {
   return createClient(supabaseUrl, supabaseAnonKey);
 }
 
+export function createPublicSupabaseClient() {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return null;
+  }
+
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: false
+    }
+  });
+}
+
 export function createServiceSupabaseClient() {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
