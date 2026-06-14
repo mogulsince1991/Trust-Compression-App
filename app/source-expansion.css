@@ -1,0 +1,290 @@
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 0 2px;
+}
+
+.filter-select {
+  display: grid;
+  gap: 6px;
+  min-width: 150px;
+}
+
+.filter-select span,
+.source-card span,
+.metric-row span,
+.saved-journey small,
+.contact-share span {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+}
+
+.filter-select select,
+.contact-share select {
+  height: 36px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.045);
+  padding: 0 10px;
+}
+
+.inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.text-button.danger {
+  color: #ffd4d4;
+}
+
+.sources-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.72fr) minmax(320px, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.source-panel,
+.source-list,
+.source-card,
+.saved-journeys,
+.saved-journey,
+.metric-list,
+.metric-row,
+.contact-share {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.source-panel,
+.source-list,
+.saved-journeys,
+.contact-share {
+  padding: 14px;
+}
+
+.source-list,
+.saved-journeys,
+.metric-list {
+  display: grid;
+  gap: 10px;
+}
+
+.source-card,
+.saved-journey,
+.metric-row {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.source-card header,
+.saved-journey header,
+.metric-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.source-card strong,
+.saved-journey strong,
+.metric-row strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-card p,
+.saved-journey p,
+.metric-row p {
+  color: rgba(246, 243, 238, 0.62);
+  font-size: 13px;
+}
+
+.journey-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+  gap: 12px;
+}
+
+.contact-share {
+  display: grid;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.contact-share label {
+  display: grid;
+  gap: 7px;
+}
+
+.context-form input[list]::-webkit-calendar-picker-indicator,
+.journey-tray input[list]::-webkit-calendar-picker-indicator {
+  opacity: 0.65;
+  filter: invert(1);
+}
+
+.sequence-item,
+.tray-item {
+  min-width: 0;
+}
+
+.sequence-item > div,
+.tray-item strong,
+.saved-journey header,
+.source-card header {
+  min-width: 0;
+}
+
+.sequence-item strong,
+.sequence-item small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.journey-tray input,
+.journey-tray textarea,
+.context-form input,
+.context-form textarea,
+.brief-grid input,
+.brief-grid textarea {
+  min-width: 0;
+}
+
+.reel-caption {
+  display: none;
+}
+
+.queue-card strong {
+  display: -webkit-box;
+  white-space: normal;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+@media (max-width: 1180px) {
+  .sources-grid,
+  .journey-workspace {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .filter-bar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .filter-select {
+    min-width: 0;
+  }
+
+  .sources-grid {
+    gap: 10px;
+  }
+
+  .journey-viewer {
+    height: 100svh;
+    min-height: 100svh;
+    grid-template-rows: minmax(56px, auto) minmax(0, 1fr) 84px;
+    gap: 10px;
+    padding: 10px;
+    overflow: hidden;
+  }
+
+  .journey-copy {
+    max-height: 16svh;
+    overflow: hidden;
+  }
+
+  .journey-copy h1 {
+    display: -webkit-box;
+    margin-top: 8px;
+    overflow: hidden;
+    font-size: clamp(24px, 8vw, 40px);
+    line-height: 0.98;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  .journey-copy p {
+    display: none;
+  }
+
+  .reel-shell {
+    min-height: 0;
+    align-self: stretch;
+  }
+
+  .reel-video {
+    height: min(54svh, 520px);
+    min-height: 0;
+  }
+
+  .reel-queue {
+    min-height: 78px;
+    max-height: 84px;
+    overflow-y: hidden;
+    padding-bottom: 0;
+  }
+
+  .queue-card {
+    width: 62vw;
+    min-width: 62vw;
+    grid-template-columns: 86px minmax(0, 1fr);
+    padding: 6px;
+  }
+
+  .queue-card span {
+    min-height: 48px;
+  }
+
+  .scroll-cue {
+    display: none;
+  }
+
+  .share-cta.floating {
+    bottom: 8px;
+    min-height: 38px;
+  }
+}
+
+@media (max-width: 420px) {
+  .filter-bar {
+    grid-template-columns: 1fr;
+  }
+
+  .queue-card {
+    width: 72vw;
+    min-width: 72vw;
+  }
+}
+
+@media (max-width: 920px) and (orientation: landscape) {
+  .journey-viewer {
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .reel-video {
+    height: calc(100svh - 86px);
+  }
+
+  .reel-queue {
+    max-height: 78px;
+  }
+}
