@@ -1,0 +1,102 @@
+import { NextResponse } from "next/server";
+import { createUserSupabaseClient } from "@/lib/supabase";
+
+type RouteContext = {
+  params: { id: string };
+};
+
+type VideoPatchRequest = {
+  workspaceId?: string;
+  suggestedUse?: string;
+  salesCategory?: string;
+  funnelStage?: string;
+  proofType?: string;
+  buyingStage?: string;
+  tags?: string[];
+  customContext?: {
+    notes?: string;
+    targetBuyer?: string;
+    objections?: string;
+    offer?: string;
+    audience?: string;
+  };
+};
+
+export async function PATCH(request: Request, { params }: RouteContext) {
+  try {
+    const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+    if (!token) return NextResponse.json({ error: "Sign in before updating videos." }, { status: 401 });
+
+    const body = (await request.json()) as VideoPatchRequest;
+    const workspaceId = body.workspaceId?.trim();
+    if (!workspaceId) return NextResponse.json({ error: "Workspace is required." }, { status: 400 });
+
+    const supabase = createUserSupabaseClient(token);
+    const {
+      data: { user },
+      error: userError
+    } = await supabase.auth.getUser();
+    if (userError || !user) return NextResponse.json({ error: "Your session expired. Sign in again." }, { status: 401 });
+
+    const { data: current, error: currentError } = await supabase.from("videos").select("id,metadata,tags").eq("id", params.id).eq("workspace_id", workspaceId).single();
+    if (currentError || !current) return NextResponse.json({ error: currentError?.message ?? "Video was not found." }, { status: 404 });
+
+    const nextMetadata = {
+      ...((current.metadata as Record<string, unknown> | null) ?? {}),
+      customContext: {
+        ...(typeof current.metadata?.customContext === "object" ? current.metadata.customContext : {}),
+        ...(body.customContext ?? {}),
+        updatedAt: new Date().toISOString()
+      }
+    };
+
+    const nextTags = Array.from(new Set([...(Array.isArray(current.tags) ? current.tags : []), ...(body.tags ?? [])].map((tag) => tag.trim()).filter(Boolean)));
+
+    const payload = {
+      suggested_use: body.suggestedUse?.trim() || null,
+      sales_category: body.salesCategory?.trim() || null,
+      funnel_stage: body.funnelStage?.trim() || null,
+      proof_type: body.proofType?.trim() || body.salesCategory?.trim() || null,
+      buying_stage: body.buyingStage?.trim() || body.funnelStage?.trim() || null,
+      tags: nextTags,
+      metadata: nextMetadata,
+      updated_at: new Date().toISOString()
+    };
+
+    const { data, error } = await supabase.from("videos").update(payload).eq("id", params.id).eq("workspace_id", workspaceId).select("*").single();
+    if (error || !data) return NextResponse.json({ error: error?.message ?? "Could not update video." }, { status: 500 });
+
+    return NextResponse.json({ video: data });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Video update failed." }, { status: 400 });
+  }
+}
+
+export async function DELETE(request: Request, { params }: RouteContext) {
+  try {
+    const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+    if (!token) return NextResponse.json({ error: "Sign in before deleting videos." }, { status: 401 });
+
+    const url = new URL(request.url);
+    const workspaceId = url.searchParams.get("workspaceId")?.trim();
+    if (!workspaceId) return NextResponse.json({ error: "Workspace is required." }, { status: 400 });
+
+    const supabase = createUserSupabaseClient(token);
+    const {
+      data: { user },
+      error: userError
+    } = await supabase.auth.getUser();
+    if (userError || !user) return NextResponse.json({ error: "Your session expired. Sign in again." }, { status: 401 });
+
+    const { error } = await supabase
+      .from("videos")
+      .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq("id", params.id)
+      .eq("workspace_id", workspaceId);
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Video archive failed." }, { status: 400 });
+  }
+}
