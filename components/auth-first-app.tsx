@@ -46,9 +46,8 @@ export function AuthFirstApp() {
     if (!session) return;
     const timer = window.setTimeout(() => {
       const cards = Array.from(document.querySelectorAll<HTMLButtonElement>(".role-card"));
-      const ownerCard = cards.find((card) => card.textContent?.includes("Owner"));
       const libraryCard = cards.find((card) => card.textContent?.includes("Library Manager"));
-      (ownerCard ?? libraryCard ?? cards[0])?.click();
+      (libraryCard ?? cards[0])?.click();
     }, 60);
 
     return () => window.clearTimeout(timer);
