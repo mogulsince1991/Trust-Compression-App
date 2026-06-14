@@ -18,6 +18,31 @@
   font-size: 15px;
 }
 
+select,
+select option,
+.filter-select select,
+.contact-share select,
+.client-link-form select {
+  color: var(--ink) !important;
+  background: #111 !important;
+}
+
+select option {
+  color: #f6f3ee !important;
+  background-color: #111 !important;
+}
+
+input,
+textarea,
+select {
+  color: var(--ink);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: rgba(246, 243, 238, 0.42);
+}
+
 .filter-bar {
   display: flex;
   gap: 8px;
@@ -88,6 +113,107 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.archive-page {
+  min-height: 100vh;
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 24px clamp(18px, 3vw, 40px) 110px !important;
+  background: var(--bg) !important;
+}
+
+.archive-header {
+  margin-bottom: 28px !important;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.archive-header h1 {
+  max-width: 760px;
+  font-size: clamp(36px, 4.6vw, 72px) !important;
+  line-height: 0.96 !important;
+}
+
+.archive-section-head {
+  align-items: end !important;
+  padding-bottom: 12px !important;
+}
+
+.archive-section-head h2 {
+  font-size: clamp(24px, 2.6vw, 38px) !important;
+}
+
+.archive-grid {
+  grid-template-columns: repeat(auto-fit, minmax(360px, 520px)) !important;
+  align-items: start;
+}
+
+.archive-journey-card {
+  gap: 18px !important;
+  min-width: 0;
+  overflow: hidden;
+  padding: 18px !important;
+}
+
+.archive-journey-card h3 {
+  font-size: 22px !important;
+}
+
+.archive-card-actions {
+  justify-content: flex-start !important;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.archive-card-actions a,
+.archive-card-actions button {
+  min-height: 34px !important;
+  border-radius: 999px !important;
+  font-size: 13px !important;
+}
+
+.archive-thumbs {
+  max-width: 100%;
+}
+
+.archive-thumbs img,
+.archive-video-card img,
+.archive-thumb-fallback,
+.archive-no-video,
+.archive-more {
+  width: 64px !important;
+  height: 44px !important;
+}
+
+.client-link-panel {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.client-send-list a {
+  grid-template-columns: minmax(0, 1fr) auto;
+  max-width: 100%;
+}
+
+.client-link-form {
+  grid-template-columns: minmax(120px, 1fr) minmax(120px, 1fr) !important;
+  align-items: stretch;
+}
+
+.client-link-form select,
+.client-link-form input,
+.client-link-form button {
+  height: 42px;
+  min-width: 0;
+  font-size: 14px;
+}
+
+.client-link-form button {
+  grid-column: 1 / -1;
+  width: fit-content;
+  justify-self: start;
+  padding-inline: 18px;
 }
 
 .archive-modal-backdrop {
@@ -182,7 +308,7 @@
   border: 1px solid var(--line);
   border-radius: 6px;
   outline: 0;
-  color: var(--ink);
+  color: var(--ink) !important;
   background: rgba(255, 255, 255, 0.045);
   padding: 10px;
 }
@@ -224,7 +350,6 @@
 
 .client-send-list a {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
   gap: 4px 10px;
   align-items: center;
   color: var(--ink);
@@ -249,24 +374,12 @@
   font-size: 12px;
 }
 
-.client-link-form {
-  display: grid;
-  grid-template-columns: minmax(120px, 0.9fr) repeat(3, minmax(100px, 1fr)) auto;
-  gap: 8px;
-}
-
 .client-link-form button:disabled {
   opacity: 0.5;
 }
 
-@media (max-width: 900px) {
-  .client-link-form {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .client-link-form button {
-    grid-column: 1 / -1;
-  }
+[aria-label="Library utilities"] {
+  bottom: 18px !important;
 }
 
 @media (max-width: 760px) {
@@ -292,9 +405,47 @@
     padding: 0 12px 10px;
   }
 
+  .archive-page {
+    padding: 18px 12px 124px !important;
+  }
+
+  .archive-header {
+    gap: 14px !important;
+    margin-bottom: 18px !important;
+  }
+
+  .archive-header h1 {
+    font-size: clamp(34px, 13vw, 54px) !important;
+  }
+
+  .archive-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .archive-journey-card {
+    padding: 14px !important;
+  }
+
+  .archive-card-actions {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .archive-card-actions a,
+  .archive-card-actions button {
+    width: 100%;
+    min-width: 0;
+    padding-inline: 8px !important;
+  }
+
   .archive-edit-grid,
   .client-link-form {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr !important;
+  }
+
+  .client-link-form button {
+    width: 100%;
   }
 
   .archive-modal-backdrop {
@@ -304,5 +455,15 @@
 
   .archive-modal {
     max-height: 92vh;
+  }
+
+  [aria-label="Library utilities"] {
+    bottom: 78px !important;
+    z-index: 45 !important;
+  }
+
+  .journey-tray {
+    bottom: 138px !important;
+    z-index: 44 !important;
   }
 }
