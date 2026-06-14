@@ -18,7 +18,7 @@ export async function GET(request: Request) {
 
     if (userError || !user) return NextResponse.json({ error: "Your session expired. Sign in again." }, { status: 401 });
 
-    const [archivedVideosResult, archivedJourneysResult, activeJourneysResult, foldersResult] = await Promise.all([
+    const [archivedVideosResult, archivedJourneysResult, activeJourneysResult, foldersResult, contactsResult] = await Promise.all([
       supabase
         .from("videos")
         .select("id,title,source_platform,source_url,embed_url,thumbnail_url,duration_seconds,summary,sales_category,funnel_stage,proof_type,published_at,created_at,deleted_at")
@@ -40,12 +40,14 @@ export async function GET(request: Request) {
         .is("deleted_at", null)
         .order("created_at", { ascending: false })
         .limit(80),
-      supabase.from("journey_folders").select("id,name,parent_id").eq("workspace_id", workspaceId).order("name", { ascending: true })
+      supabase.from("journey_folders").select("id,name,parent_id").eq("workspace_id", workspaceId).order("name", { ascending: true }),
+      supabase.from("contacts").select("id,name,email,company,phone").eq("workspace_id", workspaceId).order("updated_at", { ascending: false }).limit(200)
     ]);
 
     if (archivedVideosResult.error) return NextResponse.json({ error: archivedVideosResult.error.message }, { status: 500 });
     if (archivedJourneysResult.error) return NextResponse.json({ error: archivedJourneysResult.error.message }, { status: 500 });
     if (activeJourneysResult.error) return NextResponse.json({ error: activeJourneysResult.error.message }, { status: 500 });
+    if (contactsResult.error) return NextResponse.json({ error: contactsResult.error.message }, { status: 500 });
 
     const origin = url.origin;
 
@@ -53,7 +55,8 @@ export async function GET(request: Request) {
       archivedVideos: (archivedVideosResult.data ?? []).map(mapVideo),
       archivedJourneys: (archivedJourneysResult.data ?? []).map((journey: any) => mapJourney(journey, origin)),
       activeJourneys: (activeJourneysResult.data ?? []).map((journey: any) => mapJourney(journey, origin)),
-      folders: foldersResult.data ?? []
+      folders: foldersResult.data ?? [],
+      contacts: contactsResult.data ?? []
     });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load archive." }, { status: 400 });
