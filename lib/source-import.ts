@@ -18,7 +18,8 @@ export type ParsedSource =
   | { platform: "youtube"; kind: "youtube_video"; videoId: string; canonicalUrl: string }
   | { platform: "youtube"; kind: "youtube_playlist"; playlistId: string; canonicalUrl: string }
   | { platform: "youtube"; kind: "youtube_channel"; channelId?: string; handle?: string; legacyUsername?: string; canonicalUrl: string }
-  | { platform: "google_drive"; kind: "drive_folder"; folderId: string; canonicalUrl: string };
+  | { platform: "google_drive"; kind: "drive_folder"; folderId: string; canonicalUrl: string }
+  | { platform: "google_drive"; kind: "drive_file"; fileId: string; canonicalUrl: string };
 
 export function parseSourceUrl(rawUrl: string): ParsedSource {
   let url: URL;
@@ -33,13 +34,26 @@ export function parseSourceUrl(rawUrl: string): ParsedSource {
 
   if (host === "drive.google.com" || host === "docs.google.com") {
     const folderId = parseDriveFolderId(url);
-    if (!folderId) throw new Error("Paste a public Google Drive folder URL.");
-    return {
-      platform: "google_drive",
-      kind: "drive_folder",
-      folderId,
-      canonicalUrl: `https://drive.google.com/drive/folders/${folderId}`
-    };
+    if (folderId) {
+      return {
+        platform: "google_drive",
+        kind: "drive_folder",
+        folderId,
+        canonicalUrl: `https://drive.google.com/drive/folders/${folderId}`
+      };
+    }
+
+    const fileId = parseDriveFileId(url);
+    if (fileId) {
+      return {
+        platform: "google_drive",
+        kind: "drive_file",
+        fileId,
+        canonicalUrl: `https://drive.google.com/file/d/${fileId}/view`
+      };
+    }
+
+    throw new Error("Paste a public Google Drive folder URL or a public Drive video file URL.");
   }
 
   if (host === "youtu.be") {
@@ -54,7 +68,7 @@ export function parseSourceUrl(rawUrl: string): ParsedSource {
   }
 
   if (!["youtube.com", "m.youtube.com", "music.youtube.com"].includes(host)) {
-    throw new Error("This importer supports YouTube links and public Google Drive folder links.");
+    throw new Error("This importer supports YouTube links and public Google Drive links.");
   }
 
   const parts = url.pathname.split("/").filter(Boolean);
@@ -110,7 +124,7 @@ export function parseSourceUrl(rawUrl: string): ParsedSource {
     return {
       platform: "youtube",
       kind: "youtube_channel",
-      handle: parts[1],
+      handle: parts[1].replace(/^@/, ""),
       canonicalUrl: `https://www.youtube.com/c/${parts[1]}`
     };
   }
@@ -133,11 +147,11 @@ export function parseSourceUrl(rawUrl: string): ParsedSource {
     };
   }
 
-  throw new Error("Use a YouTube video, shorts, playlist, channel, /user, /c, @handle URL, or a public Drive folder URL.");
+  throw new Error("Use a YouTube video, shorts, playlist, channel, /user, /c, @handle URL, or a public Drive folder/file URL.");
 }
 
 export async function importSourceVideos(source: ParsedSource, options: { youtubeApiKey?: string; driveApiKey?: string } = {}): Promise<ImportedVideo[]> {
-  if (source.platform === "google_drive") return importDriveFolder(source, options.driveApiKey);
+  if (source.platform === "google_drive") return importDriveSource(source, options.driveApiKey);
   return importYouTubeSource(source, options.youtubeApiKey);
 }
 
@@ -151,26 +165,41 @@ export async function importYouTubeSource(source: Extract<ParsedSource, { platfo
       return importYouTubeChannelWithRss(source);
     }
 
-    throw new Error("Add YOUTUBE_API_KEY in Vercel to import YouTube playlists. Public channel URLs can import recent uploads without a key.");
+    throw new Error("Add YOUTUBE_API_KEY in Vercel to import YouTube playlists. Single videos and recent public channel uploads work without a key.");
   }
 
   if (source.kind === "youtube_video") {
-    return fetchYouTubeVideoDetails([source.videoId], apiKey);
+    const videos = await fetchYouTubeVideoDetails([source.videoId], apiKey);
+    if (!videos.length) throw new Error("That YouTube video is not public or is not embeddable through the YouTube API.");
+    return videos;
   }
 
   if (source.kind === "youtube_playlist") {
     const ids = await fetchPlaylistVideoIds(source.playlistId, apiKey);
+    if (!ids.length) throw new Error("No public videos were found in that YouTube playlist.");
     return fetchYouTubeVideoDetails(ids, apiKey);
   }
 
-  const playlistId = await resolveChannelUploadsPlaylist(source, apiKey);
-  const ids = await fetchPlaylistVideoIds(playlistId, apiKey);
-  return fetchYouTubeVideoDetails(ids, apiKey);
+  try {
+    const playlistId = await resolveChannelUploadsPlaylist(source, apiKey);
+    const ids = await fetchPlaylistVideoIds(playlistId, apiKey);
+    if (!ids.length) throw new Error("No public uploads were found for that YouTube channel.");
+    return fetchYouTubeVideoDetails(ids, apiKey);
+  } catch (error) {
+    const rssVideos = await importYouTubeChannelWithRss(source).catch(() => []);
+    if (rssVideos.length) return rssVideos;
+    throw error;
+  }
 }
 
-async function importDriveFolder(source: Extract<ParsedSource, { platform: "google_drive" }>, apiKey?: string): Promise<ImportedVideo[]> {
+async function importDriveSource(source: Extract<ParsedSource, { platform: "google_drive" }>, apiKey?: string): Promise<ImportedVideo[]> {
+  if (source.kind === "drive_file") return [driveFileToVideo(source.fileId, null, source.canonicalUrl, "drive_public_file")];
+  return importDriveFolder(source, apiKey);
+}
+
+async function importDriveFolder(source: Extract<ParsedSource, { kind: "drive_folder" }>, apiKey?: string): Promise<ImportedVideo[]> {
   if (!apiKey) {
-    throw new Error("Add GOOGLE_DRIVE_API_KEY in Vercel to import public Google Drive folders. OAuth is only needed later for private folders.");
+    throw new Error("Add GOOGLE_DRIVE_API_KEY or GOOGLE_API_KEY in Vercel to import public Google Drive folders. Single public Drive file links can be added without a key.");
   }
 
   const params = new URLSearchParams({
@@ -185,46 +214,53 @@ async function importDriveFolder(source: Extract<ParsedSource, { platform: "goog
   const response = await fetch(`https://www.googleapis.com/drive/v3/files?${params.toString()}`, { next: { revalidate: 300 } });
   const data = (await response.json()) as {
     error?: { message?: string };
-    files?: Array<{
-      id: string;
-      name?: string;
-      mimeType?: string;
-      description?: string;
-      thumbnailLink?: string;
-      webViewLink?: string;
-      webContentLink?: string;
-      createdTime?: string;
-      modifiedTime?: string;
-      size?: string;
-      videoMediaMetadata?: { durationMillis?: string; width?: number; height?: number };
-    }>;
+    files?: Array<DriveFile>;
   };
 
   if (!response.ok) throw new Error(data.error?.message ?? "Google Drive import failed.");
   const files = data.files ?? [];
-  if (!files.length) throw new Error("No public video files were found in that Google Drive folder.");
+  if (!files.length) throw new Error("No public video files were found in that Google Drive folder, or the folder is not shared publicly.");
 
-  return files.map((file) => ({
-    externalId: file.id,
-    title: file.name ?? "Untitled Drive video",
-    description: file.description ?? null,
-    thumbnailUrl: file.thumbnailLink ?? null,
-    durationSeconds: file.videoMediaMetadata?.durationMillis ? Math.round(Number(file.videoMediaMetadata.durationMillis) / 1000) : null,
-    publishedAt: file.createdTime ?? file.modifiedTime ?? null,
-    sourceUrl: file.webViewLink ?? `https://drive.google.com/file/d/${file.id}/view`,
-    embedUrl: `https://drive.google.com/file/d/${file.id}/preview`,
+  return files.map((file) => driveFileToVideo(file.id, file, file.webViewLink ?? `https://drive.google.com/file/d/${file.id}/view`, "drive_public_folder", source.folderId));
+}
+
+type DriveFile = {
+  id: string;
+  name?: string;
+  mimeType?: string;
+  description?: string;
+  thumbnailLink?: string;
+  webViewLink?: string;
+  webContentLink?: string;
+  createdTime?: string;
+  modifiedTime?: string;
+  size?: string;
+  videoMediaMetadata?: { durationMillis?: string; width?: number; height?: number };
+};
+
+function driveFileToVideo(fileId: string, file: DriveFile | null, sourceUrl: string, importMode: string, folderId?: string): ImportedVideo {
+  return {
+    externalId: fileId,
+    title: file?.name ?? "Google Drive video",
+    description: file?.description ?? null,
+    thumbnailUrl: file?.thumbnailLink ?? null,
+    durationSeconds: file?.videoMediaMetadata?.durationMillis ? Math.round(Number(file.videoMediaMetadata.durationMillis) / 1000) : null,
+    publishedAt: file?.createdTime ?? file?.modifiedTime ?? null,
+    sourceUrl,
+    embedUrl: `https://drive.google.com/file/d/${fileId}/preview`,
     channelTitle: "Google Drive",
     metadata: {
-      importMode: "drive_public_folder",
-      folderId: source.folderId,
-      mimeType: file.mimeType ?? null,
-      size: file.size ?? null,
-      width: file.videoMediaMetadata?.width ?? null,
-      height: file.videoMediaMetadata?.height ?? null,
-      modifiedTime: file.modifiedTime ?? null,
-      captionAvailable: false
+      importMode,
+      folderId: folderId ?? null,
+      mimeType: file?.mimeType ?? "video/unknown",
+      size: file?.size ?? null,
+      width: file?.videoMediaMetadata?.width ?? null,
+      height: file?.videoMediaMetadata?.height ?? null,
+      modifiedTime: file?.modifiedTime ?? null,
+      captionAvailable: false,
+      publicFileFallback: !file
     }
-  }));
+  };
 }
 
 async function importYouTubeVideoWithOEmbed(videoId: string, canonicalUrl: string): Promise<ImportedVideo> {
@@ -420,7 +456,16 @@ function parseDriveFolderId(url: URL) {
   const parts = url.pathname.split("/").filter(Boolean);
   const folderIndex = parts.indexOf("folders");
   if (folderIndex >= 0 && parts[folderIndex + 1]) return parts[folderIndex + 1];
-  return url.searchParams.get("id");
+  return url.searchParams.get("folderId");
+}
+
+function parseDriveFileId(url: URL) {
+  const parts = url.pathname.split("/").filter(Boolean);
+  const fileIndex = parts.indexOf("d");
+  if (fileIndex >= 0 && parts[fileIndex + 1]) return parts[fileIndex + 1];
+  const openId = url.pathname.includes("/open") ? url.searchParams.get("id") : null;
+  const ucId = url.pathname.includes("/uc") ? url.searchParams.get("id") : null;
+  return openId ?? ucId ?? null;
 }
 
 function firstMatch(input: string, pattern: RegExp) {
