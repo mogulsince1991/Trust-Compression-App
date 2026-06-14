@@ -9,6 +9,10 @@ import { TrustAppIngestion } from "@/components/trust-app-ingestion";
 
 const noMagicLinkEmails = new Set(["admin@unmarked.media"]);
 
+function getAuthRedirectUrl() {
+  return `${window.location.origin}/auth/callback?next=/`;
+}
+
 export function AuthFirstApp() {
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const [session, setSession] = useState<Session | null>(null);
@@ -70,7 +74,10 @@ export function AuthFirstApp() {
       return;
     }
 
-    const { error: otpError } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin } });
+    const { error: otpError } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: getAuthRedirectUrl() }
+    });
     setWorking(false);
     if (otpError) setError(otpError.message);
     else setMessage("Check your email. The sign-in link has been sent.");
@@ -88,7 +95,7 @@ export function AuthFirstApp() {
     const { error: signUpError } = await supabase.auth.signUp({
       email,
       password,
-      options: { emailRedirectTo: window.location.origin }
+      options: { emailRedirectTo: getAuthRedirectUrl() }
     });
     setWorking(false);
 
@@ -103,7 +110,7 @@ export function AuthFirstApp() {
     setError("");
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: window.location.origin }
+      options: { redirectTo: getAuthRedirectUrl() }
     });
     setWorking(false);
     if (oauthError) setError(oauthError.message);
