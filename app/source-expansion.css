@@ -39,6 +39,51 @@
   padding: 0 10px;
 }
 
+.auth-card {
+  max-width: 560px;
+}
+
+.auth-google {
+  margin: 0;
+}
+
+.auth-divider {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 12px;
+  align-items: center;
+  margin: 14px 0;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  height: 1px;
+  background: var(--line);
+}
+
+.auth-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.auth-actions .wide-action,
+.auth-actions .seed-button {
+  margin: 0;
+}
+
+.auth-hint {
+  margin-top: 12px;
+  color: rgba(246, 243, 238, 0.56);
+  font-size: 12px;
+}
+
 .inline-actions {
   display: flex;
   flex-wrap: wrap;
@@ -307,6 +352,10 @@
 
   .filter-select {
     min-width: 138px;
+  }
+
+  .auth-actions {
+    grid-template-columns: 1fr;
   }
 
   .sources-grid {
