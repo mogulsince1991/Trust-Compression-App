@@ -119,7 +119,7 @@ export function SavedJourneysDock() {
         </button>
         <a style={buttonStyle} href="/archive">
           <Archive size={16} />
-          Archive
+          Journeys
         </a>
       </div>
     </aside>
