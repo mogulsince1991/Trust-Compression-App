@@ -18,7 +18,7 @@ export async function GET(request: Request) {
 
     if (userError || !user) return NextResponse.json({ error: "Your session expired. Sign in again." }, { status: 401 });
 
-    const [archivedVideosResult, archivedJourneysResult, activeJourneysResult, foldersResult, contactsResult] = await Promise.all([
+    const [archivedVideosResult, archivedJourneysResult, activeJourneysResult, foldersResult, contactsResult, sendsResult] = await Promise.all([
       supabase
         .from("videos")
         .select("id,title,source_platform,source_url,embed_url,thumbnail_url,duration_seconds,summary,sales_category,funnel_stage,proof_type,published_at,created_at,deleted_at")
@@ -41,13 +41,20 @@ export async function GET(request: Request) {
         .order("created_at", { ascending: false })
         .limit(80),
       supabase.from("journey_folders").select("id,name,parent_id").eq("workspace_id", workspaceId).order("name", { ascending: true }),
-      supabase.from("contacts").select("id,name,email,company,phone").eq("workspace_id", workspaceId).order("updated_at", { ascending: false }).limit(200)
+      supabase.from("contacts").select("id,name,email,company,phone").eq("workspace_id", workspaceId).order("updated_at", { ascending: false }).limit(200),
+      supabase
+        .from("journey_sends")
+        .select("id,journey_id,contact_id,share_token,created_at,contacts(id,name,email,company)")
+        .eq("workspace_id", workspaceId)
+        .order("created_at", { ascending: false })
+        .limit(300)
     ]);
 
     if (archivedVideosResult.error) return NextResponse.json({ error: archivedVideosResult.error.message }, { status: 500 });
     if (archivedJourneysResult.error) return NextResponse.json({ error: archivedJourneysResult.error.message }, { status: 500 });
     if (activeJourneysResult.error) return NextResponse.json({ error: activeJourneysResult.error.message }, { status: 500 });
     if (contactsResult.error) return NextResponse.json({ error: contactsResult.error.message }, { status: 500 });
+    if (sendsResult.error) return NextResponse.json({ error: sendsResult.error.message }, { status: 500 });
 
     const origin = url.origin;
 
@@ -56,7 +63,23 @@ export async function GET(request: Request) {
       archivedJourneys: (archivedJourneysResult.data ?? []).map((journey: any) => mapJourney(journey, origin)),
       activeJourneys: (activeJourneysResult.data ?? []).map((journey: any) => mapJourney(journey, origin)),
       folders: foldersResult.data ?? [],
-      contacts: contactsResult.data ?? []
+      contacts: contactsResult.data ?? [],
+      sends: (sendsResult.data ?? []).map((send: any) => ({
+        id: send.id,
+        journeyId: send.journey_id,
+        contactId: send.contact_id,
+        shareToken: send.share_token,
+        shareUrl: `${origin}/share/${send.share_token}`,
+        createdAt: send.created_at,
+        contact: send.contacts
+          ? {
+              id: send.contacts.id,
+              name: send.contacts.name,
+              email: send.contacts.email,
+              company: send.contacts.company
+            }
+          : null
+      }))
     });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load archive." }, { status: 400 });
