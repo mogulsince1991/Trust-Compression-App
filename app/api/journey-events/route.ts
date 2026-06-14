@@ -10,7 +10,7 @@ type JourneyEventRequest = {
   metadata?: Record<string, unknown>;
 };
 
-const allowedEvents = new Set(["opened", "video_started", "video_completed", "cta_clicked"]);
+const allowedEvents = new Set(["opened", "video_started", "video_completed", "video_progress", "cta_clicked"]);
 
 export async function POST(request: Request) {
   try {
