@@ -22,6 +22,13 @@ export type RunSourceImportResult = {
   total: number;
 };
 
+type ExistingVideo = {
+  id: string;
+  title: string | null;
+  thumbnail_url: string | null;
+  metadata: Record<string, unknown> | null;
+};
+
 export async function runSourceImport({ supabase, workspaceId, sourceUrl, userId, sourceId }: RunSourceImportInput): Promise<RunSourceImportResult> {
   const parsed = parseSourceUrl(sourceUrl);
   const youtubeApiKey = getFirstEnv("YOUTUBE_API_KEY", "GOOGLE_YOUTUBE_API_KEY");
@@ -147,17 +154,21 @@ async function persistImportedVideo({ supabase, workspaceId, sourceId, sourceUrl
   const existingByLink = await findExistingBySourceLink(supabase, workspaceId, parsed.platform, video.externalId);
   const existingByLegacy = existingByLink ? null : await findExistingByLegacyKey(supabase, workspaceId, parsed.platform, video.externalId);
   const existingId = existingByLink?.video_id ?? existingByLegacy?.id ?? null;
+  const existingVideo = existingId ? await findExistingVideo(supabase, workspaceId, existingId) : null;
   const smart = classifyVideo({ title: video.title, summary: video.description, tags: Array.isArray(video.metadata.tags) ? (video.metadata.tags as string[]) : [] });
   const platformTag = parsed.platform === "google_drive" ? "Google Drive" : "YouTube";
+  const existingMetadata = existingVideo?.metadata ?? {};
+  const localTitleOverride = Boolean(existingMetadata.localTitleOverride);
+  const localThumbnailOverride = Boolean(existingMetadata.localThumbnailOverride);
   const payload = {
     workspace_id: workspaceId,
     source_id: sourceId,
     external_id: video.externalId,
-    title: video.title,
+    title: localTitleOverride ? existingVideo?.title ?? video.title : video.title,
     source_platform: parsed.platform,
     source_url: video.sourceUrl,
     embed_url: video.embedUrl,
-    thumbnail_url: video.thumbnailUrl,
+    thumbnail_url: localThumbnailOverride ? existingVideo?.thumbnail_url ?? video.thumbnailUrl : video.thumbnailUrl,
     duration_seconds: video.durationSeconds,
     summary: video.description?.slice(0, 500) ?? null,
     proof_type: smart.category,
@@ -169,10 +180,17 @@ async function persistImportedVideo({ supabase, workspaceId, sourceId, sourceUrl
     published_at: video.publishedAt,
     deleted_at: null,
     metadata: {
+      ...existingMetadata,
       ...video.metadata,
       channelTitle: video.channelTitle,
       sourceUrl,
       canonicalSourceUrl: parsed.canonicalUrl,
+      importedTitle: video.title,
+      importedThumbnailUrl: video.thumbnailUrl,
+      originalTitle: existingMetadata.originalTitle ?? video.title,
+      originalThumbnailUrl: existingMetadata.originalThumbnailUrl ?? video.thumbnailUrl,
+      localTitleOverride,
+      localThumbnailOverride,
       normalizedTitle: normalizeTitle(video.title),
       salesCategory: smart.category,
       funnelStage: smart.stage
@@ -222,6 +240,11 @@ async function findExistingBySourceLink(supabase: SupabaseClient, workspaceId: s
 async function findExistingByLegacyKey(supabase: SupabaseClient, workspaceId: string, platform: string, externalId: string) {
   const { data } = await supabase.from("videos").select("id").eq("workspace_id", workspaceId).eq("source_platform", platform).eq("external_id", externalId).maybeSingle();
   return data as { id: string } | null;
+}
+
+async function findExistingVideo(supabase: SupabaseClient, workspaceId: string, videoId: string) {
+  const { data } = await supabase.from("videos").select("id,title,thumbnail_url,metadata").eq("workspace_id", workspaceId).eq("id", videoId).maybeSingle();
+  return data as ExistingVideo | null;
 }
 
 async function findLikelyDuplicate(supabase: SupabaseClient, workspaceId: string, video: ImportedVideo) {
