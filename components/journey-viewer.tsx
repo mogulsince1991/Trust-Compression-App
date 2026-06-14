@@ -23,6 +23,9 @@ export type PublicJourney = {
   description: string | null;
   cta_label: string | null;
   cta_url: string | null;
+  send_id?: string | null;
+  contact_id?: string | null;
+  share_token?: string | null;
   videos: JourneyVideo[];
 };
 
@@ -33,6 +36,7 @@ export function JourneyViewer({ journey }: { journey: PublicJourney }) {
   const activeVideo = journey.videos[active];
   const listRef = useRef<HTMLDivElement>(null);
   const trackedVideos = useRef<Set<string>>(new Set());
+  const trackedOpen = useRef(false);
   const isYouTube = activeVideo?.embed_url?.includes("youtube.com/embed");
 
   const embedUrl = useMemo(() => {
@@ -54,20 +58,31 @@ export function JourneyViewer({ journey }: { journey: PublicJourney }) {
   }, [active]);
 
   useEffect(() => {
+    if (trackedOpen.current) return;
+    trackedOpen.current = true;
+    void trackJourneyEvent({
+      journey,
+      videoId: null,
+      eventType: "opened",
+      viewerId: getViewerId(),
+      activeIndex: active
+    });
+  }, [active, journey]);
+
+  useEffect(() => {
     if (!activeVideo?.id) return;
     const key = `${journey.id}:${activeVideo.id}`;
     if (trackedVideos.current.has(key)) return;
     trackedVideos.current.add(key);
 
-    const viewerId = getViewerId();
     void trackJourneyEvent({
-      journeyId: journey.id,
+      journey,
       videoId: activeVideo.id,
       eventType: "video_started",
-      viewerId,
+      viewerId: getViewerId(),
       activeIndex: active
     });
-  }, [active, activeVideo?.id, journey.id]);
+  }, [active, activeVideo?.id, journey]);
 
   useEffect(() => {
     if (!started || !activeVideo?.duration_seconds) return;
@@ -120,6 +135,16 @@ export function JourneyViewer({ journey }: { journey: PublicJourney }) {
     setActive((current) => Math.max(current - 1, 0));
   }
 
+  function trackCtaClick() {
+    void trackJourneyEvent({
+      journey,
+      videoId: activeVideo?.id ?? null,
+      eventType: "cta_clicked",
+      viewerId: getViewerId(),
+      activeIndex: active
+    });
+  }
+
   return (
     <main className="journey-viewer" onWheel={onWheel} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       <section className="journey-copy">
@@ -170,7 +195,7 @@ export function JourneyViewer({ journey }: { journey: PublicJourney }) {
       </button>
 
       {journey.cta_url && (
-        <a className="share-cta floating" href={journey.cta_url}>
+        <a className="share-cta floating" href={journey.cta_url} onClick={trackCtaClick}>
           {journey.cta_label || "Continue"} <ArrowRight size={18} />
         </a>
       )}
@@ -188,27 +213,31 @@ function getViewerId() {
 }
 
 type JourneyEventPayload = {
-  journeyId: string;
-  videoId: string;
-  eventType: string;
+  journey: PublicJourney;
+  videoId: string | null;
+  eventType: "opened" | "video_started" | "video_completed" | "cta_clicked";
   viewerId: string;
   activeIndex: number;
 };
 
 async function trackJourneyEvent(payload: JourneyEventPayload) {
   const supabase = createBrowserSupabaseClient();
+  const metadata = {
+    viewerId: payload.viewerId,
+    activeIndex: payload.activeIndex,
+    sendId: payload.journey.send_id ?? null,
+    contactId: payload.journey.contact_id ?? null,
+    shareToken: payload.journey.share_token ?? null,
+    userAgent: window.navigator.userAgent.slice(0, 240)
+  };
 
   if (supabase) {
     const { error } = await supabase.from("journey_views").insert({
-      journey_id: payload.journeyId,
+      journey_id: payload.journey.id,
       video_id: payload.videoId,
       event_type: payload.eventType,
       viewer_label: payload.viewerId.slice(0, 80),
-      metadata: {
-        viewerId: payload.viewerId,
-        activeIndex: payload.activeIndex,
-        userAgent: window.navigator.userAgent.slice(0, 240)
-      }
+      metadata
     });
 
     if (!error) return;
@@ -217,6 +246,13 @@ async function trackJourneyEvent(payload: JourneyEventPayload) {
   await fetch("/api/journey-events", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
+    body: JSON.stringify({
+      journeyId: payload.journey.id,
+      videoId: payload.videoId,
+      eventType: payload.eventType,
+      viewerId: payload.viewerId,
+      activeIndex: payload.activeIndex,
+      metadata
+    })
   }).catch(() => undefined);
 }
