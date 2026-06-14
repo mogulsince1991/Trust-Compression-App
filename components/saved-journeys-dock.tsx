@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink, Link2, Loader2, X } from "lucide-react";
+import { Archive, ExternalLink, Link2, Loader2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
@@ -84,8 +84,8 @@ export function SavedJourneysDock() {
   if (!session) return null;
 
   return (
-    <aside style={dockStyle} aria-label="Saved journey links">
-      {open ? (
+    <aside style={dockStyle} aria-label="Library utilities">
+      {open && (
         <section style={panelStyle}>
           <div style={headStyle}>
             <span style={eyebrowStyle}>Saved links</span>
@@ -110,41 +110,65 @@ export function SavedJourneysDock() {
             ))}
           </div>
         </section>
-      ) : (
-        <button style={buttonStyle} onClick={() => setOpen(true)}>
+      )}
+      <div style={buttonRowStyle}>
+        <button style={buttonStyle} onClick={() => setOpen((current) => !current)}>
           <Link2 size={16} />
           Links
           {journeys.length > 0 && <span style={countStyle}>{journeys.length}</span>}
         </button>
-      )}
+        <a style={buttonStyle} href="/archive">
+          <Archive size={16} />
+          Archive
+        </a>
+      </div>
     </aside>
   );
 }
 
 const dockStyle = {
   position: "fixed" as const,
-  right: 18,
-  bottom: 18,
+  left: "50%",
+  bottom: 14,
+  transform: "translateX(-50%)",
   zIndex: 60,
-  maxWidth: "calc(100vw - 36px)"
+  width: "max-content",
+  maxWidth: "calc(100vw - 24px)",
+  display: "grid",
+  gap: 8,
+  justifyItems: "center"
+};
+
+const buttonRowStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  padding: 4,
+  border: "1px solid rgba(255,255,255,.1)",
+  borderRadius: 999,
+  background: "rgba(7,7,7,.7)",
+  backdropFilter: "blur(18px)",
+  boxShadow: "0 16px 54px rgba(0,0,0,.34)"
 };
 
 const buttonStyle = {
-  height: 40,
+  height: 38,
   display: "inline-flex",
   alignItems: "center",
   gap: 8,
   padding: "0 12px",
-  border: "1px solid rgba(255,255,255,.14)",
+  border: "1px solid rgba(255,255,255,.1)",
   borderRadius: 999,
   color: "#f6f3ee",
-  background: "rgba(10,10,10,.82)",
-  backdropFilter: "blur(18px)"
+  background: "rgba(255,255,255,.055)",
+  textDecoration: "none",
+  fontSize: 14
 };
 
 const panelStyle = {
-  width: 320,
-  maxHeight: "min(520px, calc(100vh - 36px))",
+  width: 360,
+  maxWidth: "calc(100vw - 24px)",
+  maxHeight: "min(520px, calc(100vh - 90px))",
   overflow: "auto",
   padding: 14,
   border: "1px solid rgba(255,255,255,.12)",
