@@ -3,9 +3,7 @@ import { JourneyViewer, type PublicJourney } from "@/components/journey-viewer";
 import { createPublicSupabaseClient } from "@/lib/supabase";
 
 type SharePageProps = {
-  params: {
-    token: string;
-  };
+  params: { token: string };
 };
 
 type JourneyRow = {
@@ -22,16 +20,25 @@ type JourneyVideoRow = {
   position: number;
 };
 
+type JourneySendRow = {
+  id: string;
+  journey_id: string;
+  contact_id: string | null;
+  share_token: string;
+};
+
 export default async function SharePage({ params }: SharePageProps) {
   const supabase = createPublicSupabaseClient();
   if (!supabase) notFound();
 
-  const { data: journey, error: journeyError } = await supabase
-    .from("journeys")
-    .select("id,title,heading,description,cta_label,cta_url")
-    .eq("share_token", params.token)
-    .eq("is_public", true)
-    .maybeSingle();
+  let send: JourneySendRow | null = null;
+  const { data: sendRow } = await supabase.from("journey_sends").select("id,journey_id,contact_id,share_token").eq("share_token", params.token).maybeSingle();
+  send = (sendRow as JourneySendRow | null) ?? null;
+
+  const journeyQuery = supabase.from("journeys").select("id,title,heading,description,cta_label,cta_url").eq("is_public", true);
+  const { data: journey, error: journeyError } = send
+    ? await journeyQuery.eq("id", send.journey_id).maybeSingle()
+    : await journeyQuery.eq("share_token", params.token).maybeSingle();
 
   if (journeyError || !journey) notFound();
 
@@ -67,6 +74,9 @@ export default async function SharePage({ params }: SharePageProps) {
         description: row.description,
         cta_label: row.cta_label,
         cta_url: row.cta_url,
+        send_id: send?.id ?? null,
+        contact_id: send?.contact_id ?? null,
+        share_token: params.token,
         videos: orderedVideos
       }}
     />
