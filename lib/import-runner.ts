@@ -24,10 +24,9 @@ export type RunSourceImportResult = {
 
 export async function runSourceImport({ supabase, workspaceId, sourceUrl, userId, sourceId }: RunSourceImportInput): Promise<RunSourceImportResult> {
   const parsed = parseSourceUrl(sourceUrl);
-  const videos = await importSourceVideos(parsed, {
-    youtubeApiKey: process.env.YOUTUBE_API_KEY,
-    driveApiKey: process.env.GOOGLE_DRIVE_API_KEY
-  });
+  const youtubeApiKey = getFirstEnv("YOUTUBE_API_KEY", "GOOGLE_YOUTUBE_API_KEY");
+  const driveApiKey = getFirstEnv("GOOGLE_DRIVE_API_KEY", "GOOGLE_API_KEY");
+  const videos = await importSourceVideos(parsed, { youtubeApiKey, driveApiKey });
   const importMode = String(videos[0]?.metadata.importMode ?? "unknown");
 
   const source = sourceId ? await updateExistingSource(supabase, sourceId, workspaceId, parsed, sourceUrl, importMode) : await createSource(supabase, workspaceId, parsed, sourceUrl, importMode);
@@ -104,7 +103,7 @@ async function createSource(supabase: SupabaseClient, workspaceId: string, parse
         canonicalUrl: parsed.canonicalUrl,
         kind: parsed.kind,
         importMode,
-        requiresApiKeyForBulk: parsed.kind === "youtube_playlist" && !process.env.YOUTUBE_API_KEY
+        requiresApiKeyForBulk: (parsed.kind === "youtube_playlist" && !getFirstEnv("YOUTUBE_API_KEY", "GOOGLE_YOUTUBE_API_KEY")) || (parsed.kind === "drive_folder" && !getFirstEnv("GOOGLE_DRIVE_API_KEY", "GOOGLE_API_KEY"))
       }
     })
     .select("id,metadata")
@@ -115,12 +114,14 @@ async function createSource(supabase: SupabaseClient, workspaceId: string, parse
 }
 
 async function updateExistingSource(supabase: SupabaseClient, sourceId: string, workspaceId: string, parsed: ParsedSource, sourceUrl: string, importMode: string) {
+  const { data: existing } = await supabase.from("sources").select("metadata").eq("id", sourceId).eq("workspace_id", workspaceId).maybeSingle();
   const { data, error } = await supabase
     .from("sources")
     .update({
       status: "syncing",
       error: null,
       metadata: {
+        ...(existing?.metadata ?? {}),
         sourceUrl,
         canonicalUrl: parsed.canonicalUrl,
         kind: parsed.kind,
@@ -265,9 +266,18 @@ async function upsertSourceLink(supabase: SupabaseClient, workspaceId: string, v
 
 function sourceLabel(parsed: ParsedSource) {
   if (parsed.kind === "drive_folder") return "Google Drive folder";
+  if (parsed.kind === "drive_file") return "Google Drive video";
   if (parsed.kind === "youtube_video") return "YouTube video";
   if (parsed.kind === "youtube_playlist") return "YouTube playlist";
   return parsed.handle ? `YouTube @${parsed.handle}` : "YouTube channel";
+}
+
+function getFirstEnv(...keys: string[]) {
+  for (const key of keys) {
+    const value = process.env[key]?.trim();
+    if (value) return value;
+  }
+  return undefined;
 }
 
 function normalizeTitle(value: string) {
