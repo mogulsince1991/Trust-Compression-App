@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { Archive, ArrowLeft, ExternalLink, FolderTree, Loader2, RotateCcw, Trash2, Video } from "lucide-react";
+import { Archive, ArrowLeft, Edit3, ExternalLink, FolderTree, Link2, Loader2, RotateCcw, Send, Trash2, Video, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 
@@ -25,6 +26,8 @@ type ManagedJourney = {
   title: string;
   heading: string | null;
   description: string | null;
+  ctaLabel: string | null;
+  ctaUrl: string | null;
   folderId: string | null;
   shareUrl: string;
   createdAt: string;
@@ -43,15 +46,43 @@ type ArchivedVideo = {
   archivedAt: string | null;
 };
 
+type ContactRow = {
+  id: string;
+  name: string | null;
+  email: string | null;
+  company: string | null;
+  phone: string | null;
+};
+
+type JourneySend = {
+  id: string;
+  journeyId: string;
+  contactId: string | null;
+  shareToken: string;
+  shareUrl: string;
+  createdAt: string;
+  contact: Pick<ContactRow, "id" | "name" | "email" | "company"> | null;
+};
+
 type ArchivePayload = {
   activeJourneys?: ManagedJourney[];
   archivedJourneys?: ManagedJourney[];
   archivedVideos?: ArchivedVideo[];
   folders?: FolderRow[];
+  contacts?: ContactRow[];
+  sends?: JourneySend[];
   error?: string;
 };
 
 type ViewMode = "journeys" | "archive";
+
+type JourneyEditDraft = {
+  title: string;
+  heading: string;
+  description: string;
+  ctaLabel: string;
+  ctaUrl: string;
+};
 
 export default function ArchivePage() {
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
@@ -63,6 +94,8 @@ export default function ArchivePage() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [payload, setPayload] = useState<ArchivePayload>({});
+  const [editing, setEditing] = useState<ManagedJourney | null>(null);
+  const [editDraft, setEditDraft] = useState<JourneyEditDraft>({ title: "", heading: "", description: "", ctaLabel: "", ctaUrl: "" });
 
   useEffect(() => {
     if (!supabase) {
@@ -154,6 +187,70 @@ export default function ArchivePage() {
     setWorkingId("");
   }
 
+  function openEdit(journey: ManagedJourney) {
+    setEditing(journey);
+    setEditDraft({
+      title: journey.title ?? "",
+      heading: journey.heading ?? "",
+      description: journey.description ?? "",
+      ctaLabel: journey.ctaLabel ?? "Continue the conversation",
+      ctaUrl: journey.ctaUrl ?? ""
+    });
+  }
+
+  async function saveJourneyEdit() {
+    if (!editing || !session || !workspaceId) return;
+    setWorkingId(editing.id);
+    setNotice("");
+    setError("");
+
+    const response = await fetch(`/api/journeys/${editing.id}`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ workspaceId, ...editDraft, videoIds: editing.videos.map((video) => video.id), publish: true })
+    });
+    const result = (await response.json().catch(() => ({}))) as { error?: string };
+
+    if (!response.ok) {
+      setError(result.error ?? "Could not update journey.");
+    } else {
+      setNotice("Journey updated.");
+      setEditing(null);
+      await loadArchive();
+    }
+    setWorkingId("");
+  }
+
+  async function createClientLink(journeyId: string, contact: { contactId?: string; name?: string; email?: string; company?: string }) {
+    if (!session || !workspaceId) return;
+    setWorkingId(`${journeyId}:send`);
+    setNotice("");
+    setError("");
+
+    const response = await fetch(`/api/journeys/${journeyId}/send`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ workspaceId, contactId: contact.contactId, contact: contact.contactId ? undefined : { name: contact.name, email: contact.email, company: contact.company } })
+    });
+    const result = (await response.json().catch(() => ({}))) as { shareUrl?: string; error?: string };
+
+    if (!response.ok || !result.shareUrl) {
+      setError(result.error ?? "Could not create client journey link.");
+    } else {
+      const absolute = new URL(result.shareUrl, window.location.origin).toString();
+      await navigator.clipboard?.writeText(absolute).catch(() => undefined);
+      setNotice("Client-specific journey link created and copied.");
+      await loadArchive();
+    }
+    setWorkingId("");
+  }
+
   const folderPath = useMemo(() => makeFolderPath(payload.folders ?? []), [payload.folders]);
 
   if (!session && !loading) {
@@ -178,8 +275,8 @@ export default function ArchivePage() {
           <Link className="archive-back" href="/">
             <ArrowLeft size={16} /> Library
           </Link>
-          <p className="archive-kicker">Workspace management</p>
-          <h1>Archive and journeys</h1>
+          <p className="archive-kicker">Journey manager</p>
+          <h1>Journeys and archive</h1>
         </div>
         <nav className="archive-tabs" aria-label="Archive views">
           <button className={mode === "journeys" ? "active" : ""} onClick={() => setMode("journeys")}>Active journeys</button>
@@ -211,7 +308,11 @@ export default function ArchivePage() {
                 key={journey.id}
                 journey={journey}
                 folderName={journey.folderId ? folderPath[journey.folderId] : "Unfiled"}
-                busy={workingId === journey.id}
+                busy={workingId === journey.id || workingId === `${journey.id}:send`}
+                contacts={payload.contacts ?? []}
+                sends={(payload.sends ?? []).filter((send) => send.journeyId === journey.id)}
+                onEdit={() => openEdit(journey)}
+                onCreateClientLink={(contact) => createClientLink(journey.id, contact)}
                 primaryAction={{ label: "Archive", icon: <Archive size={15} />, onClick: () => runAction("Journey archived.", journey.id, `/api/journeys/${journey.id}/archive`, "POST") }}
               />
             ))}
@@ -237,6 +338,8 @@ export default function ArchivePage() {
                   journey={journey}
                   folderName={journey.folderId ? folderPath[journey.folderId] : "Unfiled"}
                   busy={workingId === journey.id}
+                  contacts={[]}
+                  sends={[]}
                   primaryAction={{ label: "Restore", icon: <RotateCcw size={15} />, onClick: () => runAction("Journey restored.", journey.id, `/api/journeys/${journey.id}/restore`, "POST") }}
                   dangerAction={{ label: "Delete", icon: <Trash2 size={15} />, onClick: () => runAction("Journey permanently deleted.", journey.id, `/api/journeys/${journey.id}/purge`, "DELETE") }}
                 />
@@ -276,6 +379,34 @@ export default function ArchivePage() {
           </div>
         </section>
       )}
+
+      {editing && (
+        <section className="archive-modal-backdrop" role="dialog" aria-modal="true" aria-label="Edit journey">
+          <div className="archive-modal">
+            <div className="archive-modal-head">
+              <div>
+                <p className="archive-kicker">Edit journey</p>
+                <h2>{editing.title || "Untitled journey"}</h2>
+              </div>
+              <button onClick={() => setEditing(null)} aria-label="Close editor"><X size={17} /> Close</button>
+            </div>
+            <div className="archive-edit-grid">
+              <label><span>Title</span><input value={editDraft.title} onChange={(event) => setEditDraft({ ...editDraft, title: event.target.value })} /></label>
+              <label><span>Heading</span><input value={editDraft.heading} onChange={(event) => setEditDraft({ ...editDraft, heading: event.target.value })} /></label>
+              <label className="wide-field"><span>Description</span><textarea value={editDraft.description} onChange={(event) => setEditDraft({ ...editDraft, description: event.target.value })} /></label>
+              <label><span>CTA label</span><input value={editDraft.ctaLabel} onChange={(event) => setEditDraft({ ...editDraft, ctaLabel: event.target.value })} /></label>
+              <label><span>CTA URL</span><input value={editDraft.ctaUrl} onChange={(event) => setEditDraft({ ...editDraft, ctaUrl: event.target.value })} placeholder="https://..." /></label>
+            </div>
+            <div className="archive-modal-videos">
+              {editing.videos.map((video, index) => <MediaThumb key={`${video.id}-${index}`} title={video.title} thumbnailUrl={video.thumbnailUrl} />)}
+            </div>
+            <div className="archive-modal-actions">
+              <button onClick={() => setEditing(null)}>Cancel</button>
+              <button className="primary" disabled={workingId === editing.id} onClick={saveJourneyEdit}>{workingId === editing.id ? <Loader2 className="spin" size={15} /> : <Edit3 size={15} />} Save journey</button>
+            </div>
+          </div>
+        </section>
+      )}
     </main>
   );
 }
@@ -284,15 +415,27 @@ function JourneyCard({
   journey,
   folderName,
   busy,
+  contacts,
+  sends,
+  onEdit,
+  onCreateClientLink,
   primaryAction,
   dangerAction
 }: {
   journey: ManagedJourney;
   folderName: string;
   busy: boolean;
-  primaryAction: { label: string; icon: React.ReactNode; onClick: () => void };
-  dangerAction?: { label: string; icon: React.ReactNode; onClick: () => void };
+  contacts: ContactRow[];
+  sends: JourneySend[];
+  onEdit?: () => void;
+  onCreateClientLink?: (contact: { contactId?: string; name?: string; email?: string; company?: string }) => void;
+  primaryAction: { label: string; icon: ReactNode; onClick: () => void };
+  dangerAction?: { label: string; icon: ReactNode; onClick: () => void };
 }) {
+  const [contactId, setContactId] = useState("");
+  const [contact, setContact] = useState({ name: "", email: "", company: "" });
+  const canCreateLink = Boolean(onCreateClientLink) && (Boolean(contactId) || Boolean(contact.email.trim()) || Boolean(contact.name.trim()));
+
   return (
     <article className="archive-journey-card">
       <div className="archive-journey-body">
@@ -310,6 +453,7 @@ function JourneyCard({
         </div>
       </div>
       <div className="archive-card-actions">
+        {onEdit && <button disabled={busy} onClick={onEdit}><Edit3 size={14} /> Edit</button>}
         {journey.shareUrl && (
           <a href={journey.shareUrl} target="_blank" rel="noreferrer">
             <ExternalLink size={14} /> Open
@@ -324,6 +468,36 @@ function JourneyCard({
           </button>
         )}
       </div>
+
+      {onCreateClientLink && (
+        <section className="client-link-panel">
+          <div className="client-link-head"><Link2 size={14} /><span>Client-specific links</span></div>
+          {sends.length > 0 && (
+            <div className="client-send-list">
+              {sends.slice(0, 4).map((send) => (
+                <a href={send.shareUrl} key={send.id} target="_blank" rel="noreferrer">
+                  <strong>{send.contact?.name || send.contact?.email || "Unassigned contact"}</strong>
+                  <small>{send.contact?.company || new Date(send.createdAt).toLocaleDateString()}</small>
+                </a>
+              ))}
+            </div>
+          )}
+          <div className="client-link-form">
+            <select value={contactId} onChange={(event) => setContactId(event.target.value)}>
+              <option value="">New contact</option>
+              {contacts.map((item) => <option value={item.id} key={item.id}>{item.name || item.email || "Unnamed contact"}</option>)}
+            </select>
+            {!contactId && (
+              <>
+                <input value={contact.name} onChange={(event) => setContact({ ...contact, name: event.target.value })} placeholder="Name" />
+                <input value={contact.email} onChange={(event) => setContact({ ...contact, email: event.target.value })} placeholder="email@company.com" />
+                <input value={contact.company} onChange={(event) => setContact({ ...contact, company: event.target.value })} placeholder="Company" />
+              </>
+            )}
+            <button disabled={busy || !canCreateLink} onClick={() => onCreateClientLink(contactId ? { contactId } : contact)}><Send size={14} /> Create link</button>
+          </div>
+        </section>
+      )}
     </article>
   );
 }
