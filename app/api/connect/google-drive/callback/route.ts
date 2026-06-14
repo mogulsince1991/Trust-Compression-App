@@ -24,11 +24,11 @@ export async function GET(request: Request) {
   const state = url.searchParams.get("state");
   const error = url.searchParams.get("error");
 
-  if (error) return redirectWithMessage(url, `/sources?connect_error=${encodeURIComponent(error)}`);
-  if (!code || !state) return redirectWithMessage(url, "/sources?connect_error=missing_google_oauth_code");
+  if (error) return redirectWithMessage(url, `/?connect_error=${encodeURIComponent(error)}`);
+  if (!code || !state) return redirectWithMessage(url, "/?connect_error=missing_google_oauth_code");
 
   const supabase = createServiceSupabaseClient();
-  if (!supabase) return redirectWithMessage(url, "/sources?connect_error=supabase_service_role_missing");
+  if (!supabase) return redirectWithMessage(url, "/?connect_error=supabase_service_role_missing");
 
   const { data: oauthState, error: stateError } = await supabase
     .from("connector_oauth_states")
@@ -37,12 +37,12 @@ export async function GET(request: Request) {
     .eq("provider", "google_drive")
     .maybeSingle();
 
-  if (stateError || !oauthState) return redirectWithMessage(url, "/sources?connect_error=invalid_oauth_state");
-  if (new Date(oauthState.expires_at).getTime() < Date.now()) return redirectWithMessage(url, "/sources?connect_error=expired_oauth_state");
+  if (stateError || !oauthState) return redirectWithMessage(url, "/?connect_error=invalid_oauth_state");
+  if (new Date(oauthState.expires_at).getTime() < Date.now()) return redirectWithMessage(url, "/?connect_error=expired_oauth_state");
 
   const clientId = getGoogleClientId();
   const clientSecret = getGoogleClientSecret();
-  if (!clientId || !clientSecret) return redirectWithMessage(url, "/sources?connect_error=google_oauth_env_missing");
+  if (!clientId || !clientSecret) return redirectWithMessage(url, "/?connect_error=google_oauth_env_missing");
 
   const origin = url.origin;
   const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
@@ -60,7 +60,7 @@ export async function GET(request: Request) {
 
   if (!tokenResponse.ok || !tokenData.access_token) {
     const message = tokenData.error_description || tokenData.error || "google_token_exchange_failed";
-    return redirectWithMessage(url, `/sources?connect_error=${encodeURIComponent(message)}`);
+    return redirectWithMessage(url, `/?connect_error=${encodeURIComponent(message)}`);
   }
 
   const profile = await fetchGoogleProfile(tokenData.access_token);
@@ -93,7 +93,7 @@ export async function GET(request: Request) {
 
   await supabase.from("connector_oauth_states").delete().eq("id", oauthState.id);
 
-  if (upsertError) return redirectWithMessage(url, `/sources?connect_error=${encodeURIComponent(upsertError.message)}`);
+  if (upsertError) return redirectWithMessage(url, `/?connect_error=${encodeURIComponent(upsertError.message)}`);
   return redirectWithMessage(url, `${oauthState.redirect_to || "/"}?connect_success=google_drive`);
 }
 
