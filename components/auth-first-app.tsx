@@ -76,22 +76,61 @@ export function AuthFirstApp() {
     else setMessage("Check your email. The sign-in link has been sent.");
   }
 
+  async function createAccount() {
+    if (!supabase || !email || password.length < 6) {
+      setError("Enter an email and a password with at least 6 characters to create an account.");
+      return;
+    }
+
+    setWorking(true);
+    setMessage("");
+    setError("");
+    const { error: signUpError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: window.location.origin }
+    });
+    setWorking(false);
+
+    if (signUpError) setError(signUpError.message);
+    else setMessage("Account created. If email confirmation is enabled, check your inbox before signing in.");
+  }
+
+  async function signInWithGoogle() {
+    if (!supabase) return;
+    setWorking(true);
+    setMessage("");
+    setError("");
+    const { error: oauthError } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: window.location.origin }
+    });
+    setWorking(false);
+    if (oauthError) setError(oauthError.message);
+  }
+
   if (loading) return <main className="role-gate"><Loader2 className="spin" /><h1>Opening workspace.</h1></main>;
   if (session) return <TrustAppIngestion />;
 
   return (
     <main className="role-gate auth-first-screen">
       <section className="gate-intro">
-        <span>Trust Library</span>
+        <span>Trust Compression</span>
         <h1>Sign in to your company library.</h1>
-        <p>Your role and permissions should come from the workspace, not from choosing a persona before you log in.</p>
+        <p>Your workspace controls your role and permissions. Create an account, use Google, or sign in with email.</p>
       </section>
-      <form className="prospect-brief" onSubmit={signIn}>
+      <form className="prospect-brief auth-card" onSubmit={signIn}>
+        <button className="wide-action auth-google" type="button" disabled={working} onClick={signInWithGoogle}>{working ? <Loader2 className="spin" /> : <ArrowUpRight />}Continue with Google</button>
+        <div className="auth-divider"><span>or</span></div>
         <div className="brief-grid">
           <label className="wide-field"><span>Email</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@company.com" required /></label>
           <label className="wide-field"><span>Password</span><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Password or leave blank for magic link" /></label>
         </div>
-        <button className="wide-action" disabled={working}>{working ? <Loader2 className="spin" /> : <ArrowUpRight />}Continue</button>
+        <div className="auth-actions">
+          <button className="wide-action" disabled={working} type="submit">{working ? <Loader2 className="spin" /> : <ArrowUpRight />}Sign in</button>
+          <button className="seed-button" disabled={working} type="button" onClick={createAccount}>Create account</button>
+        </div>
+        <p className="auth-hint">Leave password blank to receive a magic link. Use a password to create an account or sign in directly.</p>
         {(message || error) && <p className={error ? "status-line is-error" : "status-line"}>{error || message}</p>}
       </form>
     </main>
