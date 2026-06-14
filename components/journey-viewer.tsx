@@ -85,6 +85,31 @@ export function JourneyViewer({ journey }: { journey: PublicJourney }) {
   }, [active, activeVideo?.id, journey]);
 
   useEffect(() => {
+    if (!started || !activeVideo?.id) return;
+    let secondsWatched = 0;
+    const duration = activeVideo.duration_seconds ?? null;
+    const timer = window.setInterval(() => {
+      secondsWatched += 10;
+      const percentWatched = duration ? Math.min(100, Math.round((secondsWatched / duration) * 100)) : null;
+      void trackJourneyEvent({
+        journey,
+        videoId: activeVideo.id,
+        eventType: "video_progress",
+        viewerId: getViewerId(),
+        activeIndex: active,
+        metadata: {
+          secondsWatched,
+          durationSeconds: duration,
+          percentWatched,
+          source: "client_timer"
+        }
+      });
+    }, 10000);
+
+    return () => window.clearInterval(timer);
+  }, [active, activeVideo?.id, activeVideo?.duration_seconds, journey, started]);
+
+  useEffect(() => {
     if (!started || !activeVideo?.duration_seconds) return;
     const timer = window.setTimeout(() => next(), Math.max(8, activeVideo.duration_seconds) * 1000);
     return () => window.clearTimeout(timer);
@@ -215,14 +240,16 @@ function getViewerId() {
 type JourneyEventPayload = {
   journey: PublicJourney;
   videoId: string | null;
-  eventType: "opened" | "video_started" | "video_completed" | "cta_clicked";
+  eventType: "opened" | "video_started" | "video_completed" | "video_progress" | "cta_clicked";
   viewerId: string;
   activeIndex: number;
+  metadata?: Record<string, unknown>;
 };
 
 async function trackJourneyEvent(payload: JourneyEventPayload) {
   const supabase = createBrowserSupabaseClient();
   const metadata = {
+    ...(payload.metadata ?? {}),
     viewerId: payload.viewerId,
     activeIndex: payload.activeIndex,
     sendId: payload.journey.send_id ?? null,
