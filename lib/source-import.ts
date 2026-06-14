@@ -1,3 +1,4 @@
+export type SourcePlatform = "youtube" | "google_drive";
 export type YouTubeImportKind = "youtube_video" | "youtube_playlist" | "youtube_channel";
 
 export type ImportedVideo = {
@@ -16,7 +17,8 @@ export type ImportedVideo = {
 export type ParsedSource =
   | { platform: "youtube"; kind: "youtube_video"; videoId: string; canonicalUrl: string }
   | { platform: "youtube"; kind: "youtube_playlist"; playlistId: string; canonicalUrl: string }
-  | { platform: "youtube"; kind: "youtube_channel"; channelId?: string; handle?: string; legacyUsername?: string; canonicalUrl: string };
+  | { platform: "youtube"; kind: "youtube_channel"; channelId?: string; handle?: string; legacyUsername?: string; canonicalUrl: string }
+  | { platform: "google_drive"; kind: "drive_folder"; folderId: string; canonicalUrl: string };
 
 export function parseSourceUrl(rawUrl: string): ParsedSource {
   let url: URL;
@@ -24,10 +26,21 @@ export function parseSourceUrl(rawUrl: string): ParsedSource {
   try {
     url = new URL(rawUrl.trim());
   } catch {
-    throw new Error("Paste a valid public YouTube URL.");
+    throw new Error("Paste a valid public YouTube or Google Drive URL.");
   }
 
   const host = url.hostname.replace(/^www\./, "").toLowerCase();
+
+  if (host === "drive.google.com" || host === "docs.google.com") {
+    const folderId = parseDriveFolderId(url);
+    if (!folderId) throw new Error("Paste a public Google Drive folder URL.");
+    return {
+      platform: "google_drive",
+      kind: "drive_folder",
+      folderId,
+      canonicalUrl: `https://drive.google.com/drive/folders/${folderId}`
+    };
+  }
 
   if (host === "youtu.be") {
     const videoId = url.pathname.split("/").filter(Boolean)[0];
@@ -41,7 +54,7 @@ export function parseSourceUrl(rawUrl: string): ParsedSource {
   }
 
   if (!["youtube.com", "m.youtube.com", "music.youtube.com"].includes(host)) {
-    throw new Error("This first importer supports YouTube links. Drive and Meta sources come next.");
+    throw new Error("This importer supports YouTube links and public Google Drive folder links.");
   }
 
   const parts = url.pathname.split("/").filter(Boolean);
@@ -120,14 +133,15 @@ export function parseSourceUrl(rawUrl: string): ParsedSource {
     };
   }
 
-  throw new Error("Use a YouTube video, shorts, playlist, channel, /user, /c, or @handle URL.");
+  throw new Error("Use a YouTube video, shorts, playlist, channel, /user, /c, @handle URL, or a public Drive folder URL.");
 }
 
-export async function importYouTubeSource(source: ParsedSource, apiKey?: string): Promise<ImportedVideo[]> {
-  if (source.platform !== "youtube") {
-    throw new Error("Unsupported source.");
-  }
+export async function importSourceVideos(source: ParsedSource, options: { youtubeApiKey?: string; driveApiKey?: string } = {}): Promise<ImportedVideo[]> {
+  if (source.platform === "google_drive") return importDriveFolder(source, options.driveApiKey);
+  return importYouTubeSource(source, options.youtubeApiKey);
+}
 
+export async function importYouTubeSource(source: Extract<ParsedSource, { platform: "youtube" }>, apiKey?: string): Promise<ImportedVideo[]> {
   if (source.kind === "youtube_video" && !apiKey) {
     return [await importYouTubeVideoWithOEmbed(source.videoId, source.canonicalUrl)];
   }
@@ -154,14 +168,71 @@ export async function importYouTubeSource(source: ParsedSource, apiKey?: string)
   return fetchYouTubeVideoDetails(ids, apiKey);
 }
 
+async function importDriveFolder(source: Extract<ParsedSource, { platform: "google_drive" }>, apiKey?: string): Promise<ImportedVideo[]> {
+  if (!apiKey) {
+    throw new Error("Add GOOGLE_DRIVE_API_KEY in Vercel to import public Google Drive folders. OAuth is only needed later for private folders.");
+  }
+
+  const params = new URLSearchParams({
+    key: apiKey,
+    q: `'${source.folderId}' in parents and trashed = false and mimeType contains 'video/'`,
+    fields: "files(id,name,mimeType,description,thumbnailLink,webViewLink,webContentLink,createdTime,modifiedTime,size,videoMediaMetadata)",
+    pageSize: "100",
+    supportsAllDrives: "true",
+    includeItemsFromAllDrives: "true"
+  });
+
+  const response = await fetch(`https://www.googleapis.com/drive/v3/files?${params.toString()}`, { next: { revalidate: 300 } });
+  const data = (await response.json()) as {
+    error?: { message?: string };
+    files?: Array<{
+      id: string;
+      name?: string;
+      mimeType?: string;
+      description?: string;
+      thumbnailLink?: string;
+      webViewLink?: string;
+      webContentLink?: string;
+      createdTime?: string;
+      modifiedTime?: string;
+      size?: string;
+      videoMediaMetadata?: { durationMillis?: string; width?: number; height?: number };
+    }>;
+  };
+
+  if (!response.ok) throw new Error(data.error?.message ?? "Google Drive import failed.");
+  const files = data.files ?? [];
+  if (!files.length) throw new Error("No public video files were found in that Google Drive folder.");
+
+  return files.map((file) => ({
+    externalId: file.id,
+    title: file.name ?? "Untitled Drive video",
+    description: file.description ?? null,
+    thumbnailUrl: file.thumbnailLink ?? null,
+    durationSeconds: file.videoMediaMetadata?.durationMillis ? Math.round(Number(file.videoMediaMetadata.durationMillis) / 1000) : null,
+    publishedAt: file.createdTime ?? file.modifiedTime ?? null,
+    sourceUrl: file.webViewLink ?? `https://drive.google.com/file/d/${file.id}/view`,
+    embedUrl: `https://drive.google.com/file/d/${file.id}/preview`,
+    channelTitle: "Google Drive",
+    metadata: {
+      importMode: "drive_public_folder",
+      folderId: source.folderId,
+      mimeType: file.mimeType ?? null,
+      size: file.size ?? null,
+      width: file.videoMediaMetadata?.width ?? null,
+      height: file.videoMediaMetadata?.height ?? null,
+      modifiedTime: file.modifiedTime ?? null,
+      captionAvailable: false
+    }
+  }));
+}
+
 async function importYouTubeVideoWithOEmbed(videoId: string, canonicalUrl: string): Promise<ImportedVideo> {
   const response = await fetch(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(canonicalUrl)}`, {
     next: { revalidate: 3600 }
   });
 
-  if (!response.ok) {
-    throw new Error("YouTube could not return public embed data for that video.");
-  }
+  if (!response.ok) throw new Error("YouTube could not return public embed data for that video.");
 
   const data = (await response.json()) as {
     title?: string;
@@ -181,18 +252,12 @@ async function importYouTubeVideoWithOEmbed(videoId: string, canonicalUrl: strin
     sourceUrl: canonicalUrl,
     embedUrl: `https://www.youtube.com/embed/${videoId}`,
     channelTitle: data.author_name ?? null,
-    metadata: {
-      provider: data.provider_name ?? "YouTube",
-      authorUrl: data.author_url ?? null,
-      importMode: "oembed"
-    }
+    metadata: { provider: data.provider_name ?? "YouTube", authorUrl: data.author_url ?? null, importMode: "oembed" }
   };
 }
 
 async function importYouTubeChannelWithRss(source: Extract<ParsedSource, { kind: "youtube_channel" }>) {
-  if (source.channelId) {
-    return fetchYouTubeRssByChannelId(source.channelId);
-  }
+  if (source.channelId) return fetchYouTubeRssByChannelId(source.channelId);
 
   if (source.legacyUsername) {
     const videos = await fetchYouTubeRssByUser(source.legacyUsername);
@@ -201,10 +266,7 @@ async function importYouTubeChannelWithRss(source: Extract<ParsedSource, { kind:
 
   const maybeChannelId = source.handle && looksLikeChannelId(source.handle) ? source.handle : null;
   const channelId = maybeChannelId ?? (source.handle ? await resolveChannelIdFromPage(source.canonicalUrl) : null);
-
-  if (channelId) {
-    return fetchYouTubeRssByChannelId(channelId);
-  }
+  if (channelId) return fetchYouTubeRssByChannelId(channelId);
 
   if (source.handle) {
     const videos = await fetchYouTubeRssByUser(source.handle);
@@ -223,28 +285,16 @@ async function fetchYouTubeRssByUser(username: string) {
 }
 
 async function fetchYouTubeRss(url: string, knownChannelId: string | null) {
-  const response = await fetch(url, {
-    headers: { "User-Agent": "Mozilla/5.0 TrustCompressionBot/1.0" },
-    next: { revalidate: 300 }
-  });
-
-  if (!response.ok) {
-    return [];
-  }
+  const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 TrustCompressionBot/1.0" }, next: { revalidate: 300 } });
+  if (!response.ok) return [];
 
   const xml = await response.text();
   const channelTitle = decodeXml(firstMatch(xml, /<title>([\s\S]*?)<\/title>/));
   const channelId = knownChannelId ?? firstMatch(xml, /<yt:channelId>([\s\S]*?)<\/yt:channelId>/);
   const entries = Array.from(xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)).slice(0, 15);
+  const videos = entries.map((entry) => rssEntryToVideo(entry[1], channelTitle, channelId)).filter(Boolean) as ImportedVideo[];
 
-  const videos = entries
-    .map((entry) => rssEntryToVideo(entry[1], channelTitle, channelId))
-    .filter(Boolean) as ImportedVideo[];
-
-  if (!videos.length) {
-    throw new Error("No recent public uploads were found for that YouTube channel.");
-  }
-
+  if (!videos.length) throw new Error("No recent public uploads were found for that YouTube channel.");
   return videos;
 }
 
@@ -267,23 +317,12 @@ function rssEntryToVideo(entry: string, channelTitle: string | null, channelId: 
     sourceUrl: `https://www.youtube.com/watch?v=${videoId}`,
     embedUrl: `https://www.youtube.com/embed/${videoId}`,
     channelTitle,
-    metadata: {
-      channelId,
-      captionAvailable: null,
-      importMode: "youtube_rss",
-      rssFallback: true
-    }
+    metadata: { channelId, captionAvailable: null, importMode: "youtube_rss", rssFallback: true }
   };
 }
 
 async function resolveChannelIdFromPage(canonicalUrl: string) {
-  const response = await fetch(canonicalUrl, {
-    headers: {
-      "User-Agent": "Mozilla/5.0 TrustCompressionBot/1.0"
-    },
-    next: { revalidate: 3600 }
-  });
-
+  const response = await fetch(canonicalUrl, { headers: { "User-Agent": "Mozilla/5.0 TrustCompressionBot/1.0" }, next: { revalidate: 3600 } });
   if (!response.ok) return null;
   const html = await response.text();
   const decoded = html.replace(/\\u0026/g, "&").replace(/\\\"/g, '"');
@@ -298,24 +337,12 @@ async function resolveChannelIdFromPage(canonicalUrl: string) {
 }
 
 async function resolveChannelUploadsPlaylist(source: Extract<ParsedSource, { kind: "youtube_channel" }>, apiKey: string) {
-  const params = new URLSearchParams({
-    part: "contentDetails,snippet",
-    key: apiKey,
-    maxResults: "1"
-  });
+  const params = new URLSearchParams({ part: "contentDetails,snippet", key: apiKey, maxResults: "1" });
+  if (source.channelId) params.set("id", source.channelId);
+  else if (source.handle) params.set("forHandle", source.handle);
+  else if (source.legacyUsername) params.set("forUsername", source.legacyUsername);
 
-  if (source.channelId) {
-    params.set("id", source.channelId);
-  } else if (source.handle) {
-    params.set("forHandle", source.handle);
-  } else if (source.legacyUsername) {
-    params.set("forUsername", source.legacyUsername);
-  }
-
-  const data = await fetchYouTube<{ items?: Array<{ contentDetails?: { relatedPlaylists?: { uploads?: string } } }> }>(
-    `https://www.googleapis.com/youtube/v3/channels?${params.toString()}`
-  );
-
+  const data = await fetchYouTube<{ items?: Array<{ contentDetails?: { relatedPlaylists?: { uploads?: string } } }> }>(`https://www.googleapis.com/youtube/v3/channels?${params.toString()}`);
   const uploads = data.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
   if (!uploads) throw new Error("Could not find the public uploads playlist for that YouTube channel.");
   return uploads;
@@ -326,19 +353,11 @@ async function fetchPlaylistVideoIds(playlistId: string, apiKey: string) {
   let pageToken = "";
 
   while (ids.length < 50) {
-    const params = new URLSearchParams({
-      part: "contentDetails",
-      key: apiKey,
-      playlistId,
-      maxResults: "50"
-    });
+    const params = new URLSearchParams({ part: "contentDetails", key: apiKey, playlistId, maxResults: "50" });
     if (pageToken) params.set("pageToken", pageToken);
 
-    const data = await fetchYouTube<{ nextPageToken?: string; items?: Array<{ contentDetails?: { videoId?: string } }> }>(
-      `https://www.googleapis.com/youtube/v3/playlistItems?${params.toString()}`
-    );
-
-    ids.push(...(data.items ?? []).map((item) => item.contentDetails?.videoId).filter(Boolean) as string[]);
+    const data = await fetchYouTube<{ nextPageToken?: string; items?: Array<{ contentDetails?: { videoId?: string } }> }>(`https://www.googleapis.com/youtube/v3/playlistItems?${params.toString()}`);
+    ids.push(...((data.items ?? []).map((item) => item.contentDetails?.videoId).filter(Boolean) as string[]));
     pageToken = data.nextPageToken ?? "";
     if (!pageToken) break;
   }
@@ -352,28 +371,13 @@ async function fetchYouTubeVideoDetails(videoIds: string[], apiKey: string) {
 
   for (let index = 0; index < videoIds.length; index += 50) {
     const batch = videoIds.slice(index, index + 50);
-    const params = new URLSearchParams({
-      part: "snippet,contentDetails,player,status",
-      key: apiKey,
-      id: batch.join(","),
-      maxResults: "50"
-    });
-
+    const params = new URLSearchParams({ part: "snippet,contentDetails,player,status", key: apiKey, id: batch.join(","), maxResults: "50" });
     const data = await fetchYouTube<{
       items?: Array<{
         id: string;
-        snippet?: {
-          title?: string;
-          description?: string;
-          publishedAt?: string;
-          channelTitle?: string;
-          channelId?: string;
-          thumbnails?: Record<string, { url?: string }>;
-          tags?: string[];
-        };
+        snippet?: { title?: string; description?: string; publishedAt?: string; channelTitle?: string; channelId?: string; thumbnails?: Record<string, { url?: string }>; tags?: string[] };
         contentDetails?: { duration?: string; caption?: string; definition?: string };
         status?: { embeddable?: boolean; privacyStatus?: string };
-        player?: { embedHtml?: string };
       }>;
     }>(`https://www.googleapis.com/youtube/v3/videos?${params.toString()}`);
 
@@ -384,11 +388,7 @@ async function fetchYouTubeVideoDetails(videoIds: string[], apiKey: string) {
           externalId: item.id,
           title: item.snippet?.title ?? "Untitled YouTube video",
           description: item.snippet?.description ?? null,
-          thumbnailUrl:
-            item.snippet?.thumbnails?.maxres?.url ??
-            item.snippet?.thumbnails?.standard?.url ??
-            item.snippet?.thumbnails?.high?.url ??
-            `https://i.ytimg.com/vi/${item.id}/hqdefault.jpg`,
+          thumbnailUrl: item.snippet?.thumbnails?.maxres?.url ?? item.snippet?.thumbnails?.standard?.url ?? item.snippet?.thumbnails?.high?.url ?? `https://i.ytimg.com/vi/${item.id}/hqdefault.jpg`,
           durationSeconds: parseYouTubeDuration(item.contentDetails?.duration),
           publishedAt: item.snippet?.publishedAt ?? null,
           sourceUrl: `https://www.youtube.com/watch?v=${item.id}`,
@@ -412,13 +412,15 @@ async function fetchYouTubeVideoDetails(videoIds: string[], apiKey: string) {
 async function fetchYouTube<T>(url: string): Promise<T> {
   const response = await fetch(url, { next: { revalidate: 300 } });
   const data = await response.json();
-
-  if (!response.ok) {
-    const message = data?.error?.message ?? "YouTube import failed.";
-    throw new Error(message);
-  }
-
+  if (!response.ok) throw new Error(data?.error?.message ?? "YouTube import failed.");
   return data as T;
+}
+
+function parseDriveFolderId(url: URL) {
+  const parts = url.pathname.split("/").filter(Boolean);
+  const folderIndex = parts.indexOf("folders");
+  if (folderIndex >= 0 && parts[folderIndex + 1]) return parts[folderIndex + 1];
+  return url.searchParams.get("id");
 }
 
 function firstMatch(input: string, pattern: RegExp) {
@@ -441,10 +443,7 @@ function parseYouTubeDuration(duration?: string) {
   if (!duration) return null;
   const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
   if (!match) return null;
-  const hours = Number(match[1] ?? 0);
-  const minutes = Number(match[2] ?? 0);
-  const seconds = Number(match[3] ?? 0);
-  return hours * 3600 + minutes * 60 + seconds;
+  return Number(match[1] ?? 0) * 3600 + Number(match[2] ?? 0) * 60 + Number(match[3] ?? 0);
 }
 
 function looksLikeChannelId(value: string) {
