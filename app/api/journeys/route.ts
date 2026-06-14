@@ -19,6 +19,7 @@ export async function GET(request: Request) {
 
     const url = new URL(request.url);
     const workspaceId = url.searchParams.get("workspaceId")?.trim();
+    const archived = url.searchParams.get("archived") === "true";
     if (!workspaceId) return NextResponse.json({ error: "Workspace is required." }, { status: 400 });
 
     const supabase = createUserSupabaseClient(token);
@@ -29,12 +30,16 @@ export async function GET(request: Request) {
 
     if (userError || !user) return NextResponse.json({ error: "Your session expired. Sign in again." }, { status: 401 });
 
-    const { data, error } = await supabase
+    let query = supabase
       .from("journeys")
-      .select("id,title,heading,description,cta_label,cta_url,share_token,folder_id,created_at,published_at,is_public,journey_videos(video_id,position)")
+      .select("id,title,heading,description,cta_label,cta_url,share_token,folder_id,created_at,published_at,is_public,deleted_at,journey_videos(video_id,position)")
       .eq("workspace_id", workspaceId)
-      .order("created_at", { ascending: false })
+      .order(archived ? "deleted_at" : "created_at", { ascending: false })
       .limit(80);
+
+    query = archived ? query.not("deleted_at", "is", null) : query.is("deleted_at", null);
+
+    const { data, error } = await query;
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -52,6 +57,7 @@ export async function GET(request: Request) {
       shareUrl: `${origin}/share/${journey.share_token}`,
       createdAt: journey.created_at,
       publishedAt: journey.published_at,
+      archivedAt: journey.deleted_at ?? null,
       isPublic: journey.is_public,
       videoIds: [...(journey.journey_videos ?? [])].sort((a, b) => a.position - b.position).map((item) => item.video_id)
     }));
