@@ -21,6 +21,9 @@ export type ParsedSource =
   | { platform: "google_drive"; kind: "drive_folder"; folderId: string; canonicalUrl: string }
   | { platform: "google_drive"; kind: "drive_file"; fileId: string; canonicalUrl: string };
 
+const DEFAULT_YOUTUBE_IMPORT_LIMIT = 250;
+const MAX_YOUTUBE_IMPORT_LIMIT = 500;
+
 export function parseSourceUrl(rawUrl: string): ParsedSource {
   let url: URL;
 
@@ -387,8 +390,9 @@ async function resolveChannelUploadsPlaylist(source: Extract<ParsedSource, { kin
 async function fetchPlaylistVideoIds(playlistId: string, apiKey: string) {
   const ids: string[] = [];
   let pageToken = "";
+  const limit = getYouTubeImportLimit();
 
-  while (ids.length < 50) {
+  while (ids.length < limit) {
     const params = new URLSearchParams({ part: "contentDetails", key: apiKey, playlistId, maxResults: "50" });
     if (pageToken) params.set("pageToken", pageToken);
 
@@ -398,7 +402,7 @@ async function fetchPlaylistVideoIds(playlistId: string, apiKey: string) {
     if (!pageToken) break;
   }
 
-  return ids.slice(0, 50);
+  return ids.slice(0, limit);
 }
 
 async function fetchYouTubeVideoDetails(videoIds: string[], apiKey: string) {
@@ -493,4 +497,10 @@ function parseYouTubeDuration(duration?: string) {
 
 function looksLikeChannelId(value: string) {
   return /^UC[\w-]{20,}$/.test(value);
+}
+
+function getYouTubeImportLimit() {
+  const parsed = Number(process.env.YOUTUBE_IMPORT_LIMIT ?? DEFAULT_YOUTUBE_IMPORT_LIMIT);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_YOUTUBE_IMPORT_LIMIT;
+  return Math.min(Math.floor(parsed), MAX_YOUTUBE_IMPORT_LIMIT);
 }
