@@ -27,22 +27,45 @@ export default function AuthCallbackPage() {
         return;
       }
 
+      // Give supabase-js first pass. It can persist sessions from OAuth URL hash
+      // returns without us accidentally exchanging a provider-owned Google code.
+      await new Promise((resolve) => window.setTimeout(resolve, 250));
+      const { data: initialSession } = await supabase.auth.getSession();
+
+      if (initialSession.session) {
+        if (!cancelled) window.location.replace(next);
+        return;
+      }
+
       const code = params.get("code");
-      if (code) {
+      const isExternalGoogleCode = code?.startsWith("4/") || code?.startsWith("4%2F");
+
+      if (code && !isExternalGoogleCode) {
         const { error } = await supabase.auth.exchangeCodeForSession(code);
         if (error) {
           setMessage(error.message);
           return;
         }
-      } else {
-        const { data } = await supabase.auth.getSession();
-        if (!data.session && !hashParams.get("access_token")) {
-          setMessage("No sign-in session was returned. Try signing in again.");
+
+        if (!cancelled) window.location.replace(next);
+        return;
+      }
+
+      if (hashParams.get("access_token")) {
+        await new Promise((resolve) => window.setTimeout(resolve, 500));
+        const { data: hashSession } = await supabase.auth.getSession();
+        if (hashSession.session) {
+          if (!cancelled) window.location.replace(next);
           return;
         }
       }
 
-      if (!cancelled) window.location.replace(next);
+      if (isExternalGoogleCode) {
+        setMessage("Google returned to the app before Supabase completed the login. Check the Google OAuth redirect URI and make sure Supabase uses its own callback URL.");
+        return;
+      }
+
+      setMessage("No sign-in session was returned. Try signing in again.");
     }
 
     finishAuth();
