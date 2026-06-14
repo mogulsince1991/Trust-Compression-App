@@ -1,0 +1,97 @@
+/* Targeted product polish while the library shell is being consolidated. */
+.app .role-context,
+.app .brand-line span,
+.app .connect-button {
+  display: none !important;
+}
+
+.app .command-bar {
+  grid-template-columns: minmax(180px, 1fr) auto;
+}
+
+.app .brand-line {
+  display: block;
+}
+
+.app .brand-line strong {
+  cursor: pointer;
+  font-size: 15px;
+}
+
+.filter-bar {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  white-space: nowrap;
+  padding: 0 0 10px;
+  scrollbar-width: thin;
+}
+
+.filter-select {
+  flex: 0 0 auto;
+}
+
+.filter-select select {
+  min-width: 132px;
+}
+
+.library-player-dock {
+  max-height: 42vh;
+  grid-template-columns: minmax(220px, 0.82fr) minmax(0, 1.18fr);
+  overflow: hidden;
+}
+
+.bottom-video {
+  max-height: 40vh;
+}
+
+.bottom-context {
+  min-height: 0;
+  overflow: auto;
+}
+
+.bottom-context h2 {
+  font-size: clamp(18px, 2vw, 26px);
+  line-height: 1.08;
+}
+
+.context-form textarea {
+  min-height: 72px;
+}
+
+.journey-tray .mini-head {
+  align-items: center;
+}
+
+.tray-item strong,
+.sequence-item strong,
+.smart-video strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .app .command-bar {
+    grid-template-columns: 1fr;
+  }
+
+  .app .brand-line {
+    display: none;
+  }
+
+  .library-player-dock {
+    max-height: none;
+    grid-template-columns: 1fr;
+  }
+
+  .bottom-video {
+    max-height: 28vh;
+  }
+
+  .filter-bar {
+    margin: 0 -12px 10px;
+    padding: 0 12px 10px;
+  }
+}
