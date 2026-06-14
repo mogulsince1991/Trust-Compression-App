@@ -10,7 +10,7 @@ import { TrustAppIngestion } from "@/components/trust-app-ingestion";
 const noMagicLinkEmails = new Set(["admin@unmarked.media"]);
 
 function getAuthRedirectUrl() {
-  return `${window.location.origin}/auth/callback?next=/`;
+  return `${window.location.origin}/auth/callback`;
 }
 
 export function AuthFirstApp() {
