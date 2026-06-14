@@ -3,11 +3,14 @@ import { createPublicSupabaseClient, createServiceSupabaseClient } from "@/lib/s
 
 type JourneyEventRequest = {
   journeyId?: string;
-  videoId?: string;
+  videoId?: string | null;
   eventType?: string;
   viewerId?: string;
   activeIndex?: number;
+  metadata?: Record<string, unknown>;
 };
+
+const allowedEvents = new Set(["opened", "video_started", "video_completed", "cta_clicked"]);
 
 export async function POST(request: Request) {
   try {
@@ -16,11 +19,11 @@ export async function POST(request: Request) {
 
     const body = (await request.json()) as JourneyEventRequest;
     const journeyId = body.journeyId?.trim();
-    const videoId = body.videoId?.trim();
-    const eventType = body.eventType?.trim() || "video_active";
+    const videoId = typeof body.videoId === "string" ? body.videoId.trim() : null;
+    const eventType = allowedEvents.has(body.eventType ?? "") ? body.eventType : "opened";
 
     if (!journeyId) return NextResponse.json({ error: "Journey is required." }, { status: 400 });
-    if (!videoId) return NextResponse.json({ error: "Video is required." }, { status: 400 });
+    if (eventType !== "opened" && eventType !== "cta_clicked" && !videoId) return NextResponse.json({ error: "Video is required." }, { status: 400 });
 
     const { error } = await supabase.from("journey_views").insert({
       journey_id: journeyId,
@@ -28,9 +31,10 @@ export async function POST(request: Request) {
       event_type: eventType,
       viewer_label: body.viewerId?.slice(0, 80) ?? null,
       metadata: {
-        viewerId: body.viewerId ?? null,
-        activeIndex: body.activeIndex ?? null,
-        userAgent: request.headers.get("user-agent")?.slice(0, 240) ?? null
+        ...(body.metadata ?? {}),
+        viewerId: body.viewerId ?? body.metadata?.viewerId ?? null,
+        activeIndex: body.activeIndex ?? body.metadata?.activeIndex ?? null,
+        userAgent: request.headers.get("user-agent")?.slice(0, 240) ?? body.metadata?.userAgent ?? null
       }
     });
 
