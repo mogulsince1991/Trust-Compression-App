@@ -1,18 +1,101 @@
 @media (max-width: 760px) {
+  .journey-viewer {
+    min-height: 100svh !important;
+    display: grid !important;
+    grid-template-rows: auto minmax(0, 34svh) auto auto !important;
+    gap: 10px !important;
+    overflow: hidden !important;
+  }
+
+  .journey-viewer .journey-copy {
+    min-height: 0 !important;
+    padding-bottom: 0 !important;
+  }
+
+  .journey-viewer .journey-copy h1 {
+    display: -webkit-box !important;
+    overflow: hidden !important;
+    -webkit-box-orient: vertical !important;
+    -webkit-line-clamp: 2 !important;
+  }
+
+  .journey-viewer .reel-shell,
+  .journey-viewer.is-embed .reel-shell {
+    width: 100% !important;
+    min-height: 0 !important;
+    height: 34svh !important;
+    max-height: 34svh !important;
+    display: grid !important;
+    grid-template-columns: 34px minmax(0, 1fr) 34px !important;
+    align-items: center !important;
+    overflow: hidden !important;
+  }
+
+  .journey-viewer .reel-video {
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100% !important;
+    max-height: 34svh !important;
+    aspect-ratio: auto !important;
+    display: grid !important;
+    place-items: center !important;
+    overflow: hidden !important;
+    background: #050505 !important;
+  }
+
+  .journey-viewer .reel-video iframe,
+  .journey-viewer .reel-poster {
+    width: 100% !important;
+    height: auto !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    aspect-ratio: 16 / 9 !important;
+    background-color: #050505 !important;
+    background-size: contain !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+    border: 0 !important;
+  }
+
+  .journey-viewer .reel-caption {
+    bottom: 8px !important;
+  }
+
+  .journey-viewer .reel-queue {
+    min-height: 74px !important;
+    max-height: 82px !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    padding-bottom: 4px !important;
+  }
+
   .journey-viewer .reel-queue .queue-card {
-    grid-template-columns: 64px minmax(0, 1fr) !important;
-    width: min(76vw, 260px) !important;
-    min-width: min(76vw, 260px) !important;
+    grid-template-columns: 96px minmax(0, 1fr) !important;
+    width: min(82vw, 310px) !important;
+    min-width: min(82vw, 310px) !important;
+    height: 70px !important;
+    align-items: center !important;
   }
 
   .journey-viewer .reel-queue .queue-card span,
-  .journey-viewer .queue-card span,
+  .journey-viewer .queue-card span {
+    aspect-ratio: 16 / 9 !important;
+    width: 96px !important;
+    height: 54px !important;
+    min-width: 96px !important;
+    border-radius: 6px !important;
+    background-color: #050505 !important;
+    background-size: contain !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+  }
+
   .library-strip .strip-thumb,
   .smart-strip .smart-video > span {
-    aspect-ratio: 1 / 1 !important;
-    width: 58px !important;
-    height: 58px !important;
-    min-width: 58px !important;
+    aspect-ratio: 16 / 9 !important;
+    width: 96px !important;
+    height: 54px !important;
+    min-width: 96px !important;
     border-radius: 6px !important;
     background-color: #050505 !important;
     background-size: contain !important;
@@ -46,8 +129,8 @@
 }
 
 .video-override-thumb {
-  aspect-ratio: 1 / 1;
-  width: 104px;
+  aspect-ratio: 16 / 9;
+  width: 128px;
   border-radius: 6px;
   background-color: #050505;
   background-size: contain;
@@ -106,11 +189,11 @@
 
 @media (max-width: 760px) {
   .video-override-card {
-    grid-template-columns: 74px minmax(0, 1fr);
+    grid-template-columns: 96px minmax(0, 1fr);
   }
 
   .video-override-thumb {
-    width: 74px;
+    width: 96px;
   }
 
   .video-override-save {
