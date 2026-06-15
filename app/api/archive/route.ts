@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createUserSupabaseClient } from "@/lib/supabase";
+import { createServiceSupabaseClient, createUserSupabaseClient } from "@/lib/supabase";
 
 export async function GET(request: Request) {
   try {
@@ -10,39 +10,54 @@ export async function GET(request: Request) {
     const workspaceId = url.searchParams.get("workspaceId")?.trim();
     if (!workspaceId) return NextResponse.json({ error: "Workspace is required." }, { status: 400 });
 
-    const supabase = createUserSupabaseClient(token);
+    const userSupabase = createUserSupabaseClient(token);
     const {
       data: { user },
       error: userError
-    } = await supabase.auth.getUser();
+    } = await userSupabase.auth.getUser();
 
     if (userError || !user) return NextResponse.json({ error: "Your session expired. Sign in again." }, { status: 401 });
 
+    const serviceSupabase = createServiceSupabaseClient();
+    const dataSupabase = serviceSupabase ?? userSupabase;
+
+    if (serviceSupabase) {
+      const { data: membership, error: membershipError } = await serviceSupabase
+        .from("workspace_members")
+        .select("workspace_id")
+        .eq("workspace_id", workspaceId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (membershipError) return NextResponse.json({ error: membershipError.message }, { status: 500 });
+      if (!membership) return NextResponse.json({ error: "You do not have access to this workspace." }, { status: 403 });
+    }
+
     const [archivedVideosResult, archivedJourneysResult, activeJourneysResult, foldersResult, contactsResult, sendsResult] = await Promise.all([
-      supabase
+      dataSupabase
         .from("videos")
         .select("id,title,source_platform,source_url,embed_url,thumbnail_url,duration_seconds,summary,sales_category,funnel_stage,proof_type,published_at,created_at,deleted_at")
         .eq("workspace_id", workspaceId)
         .not("deleted_at", "is", null)
         .order("deleted_at", { ascending: false })
         .limit(80),
-      supabase
+      dataSupabase
         .from("journeys")
         .select("id,title,heading,description,cta_label,cta_url,share_token,folder_id,created_at,published_at,is_public,deleted_at,journey_videos(video_id,position,videos(id,title,thumbnail_url,source_platform,duration_seconds))")
         .eq("workspace_id", workspaceId)
         .not("deleted_at", "is", null)
         .order("deleted_at", { ascending: false })
         .limit(80),
-      supabase
+      dataSupabase
         .from("journeys")
-        .select("id,title,heading,description,cta_label,cta_url,share_token,folder_id,created_at,published_at,is_public,journey_videos(video_id,position,videos(id,title,thumbnail_url,source_platform,duration_seconds))")
+        .select("id,title,heading,description,cta_label,cta_url,share_token,folder_id,created_at,published_at,is_public,deleted_at,journey_videos(video_id,position,videos(id,title,thumbnail_url,source_platform,duration_seconds))")
         .eq("workspace_id", workspaceId)
         .is("deleted_at", null)
         .order("created_at", { ascending: false })
         .limit(80),
-      supabase.from("journey_folders").select("id,name,parent_id").eq("workspace_id", workspaceId).order("name", { ascending: true }),
-      supabase.from("contacts").select("id,name,email,company,phone").eq("workspace_id", workspaceId).order("updated_at", { ascending: false }).limit(200),
-      supabase
+      dataSupabase.from("journey_folders").select("id,name,parent_id").eq("workspace_id", workspaceId).order("name", { ascending: true }),
+      dataSupabase.from("contacts").select("id,name,email,company,phone").eq("workspace_id", workspaceId).order("updated_at", { ascending: false }).limit(200),
+      dataSupabase
         .from("journey_sends")
         .select("id,journey_id,contact_id,share_token,created_at,contacts(id,name,email,company)")
         .eq("workspace_id", workspaceId)
@@ -53,8 +68,6 @@ export async function GET(request: Request) {
     if (archivedVideosResult.error) return NextResponse.json({ error: archivedVideosResult.error.message }, { status: 500 });
     if (archivedJourneysResult.error) return NextResponse.json({ error: archivedJourneysResult.error.message }, { status: 500 });
     if (activeJourneysResult.error) return NextResponse.json({ error: activeJourneysResult.error.message }, { status: 500 });
-    if (contactsResult.error) return NextResponse.json({ error: contactsResult.error.message }, { status: 500 });
-    if (sendsResult.error) return NextResponse.json({ error: sendsResult.error.message }, { status: 500 });
 
     const origin = url.origin;
 
@@ -62,24 +75,26 @@ export async function GET(request: Request) {
       archivedVideos: (archivedVideosResult.data ?? []).map(mapVideo),
       archivedJourneys: (archivedJourneysResult.data ?? []).map((journey: any) => mapJourney(journey, origin)),
       activeJourneys: (activeJourneysResult.data ?? []).map((journey: any) => mapJourney(journey, origin)),
-      folders: foldersResult.data ?? [],
-      contacts: contactsResult.data ?? [],
-      sends: (sendsResult.data ?? []).map((send: any) => ({
-        id: send.id,
-        journeyId: send.journey_id,
-        contactId: send.contact_id,
-        shareToken: send.share_token,
-        shareUrl: `${origin}/share/${send.share_token}`,
-        createdAt: send.created_at,
-        contact: send.contacts
-          ? {
-              id: send.contacts.id,
-              name: send.contacts.name,
-              email: send.contacts.email,
-              company: send.contacts.company
-            }
-          : null
-      }))
+      folders: foldersResult.error ? [] : foldersResult.data ?? [],
+      contacts: contactsResult.error ? [] : contactsResult.data ?? [],
+      sends: sendsResult.error
+        ? []
+        : (sendsResult.data ?? []).map((send: any) => ({
+            id: send.id,
+            journeyId: send.journey_id,
+            contactId: send.contact_id,
+            shareToken: send.share_token,
+            shareUrl: `${origin}/share/${send.share_token}`,
+            createdAt: send.created_at,
+            contact: send.contacts
+              ? {
+                  id: send.contacts.id,
+                  name: send.contacts.name,
+                  email: send.contacts.email,
+                  company: send.contacts.company
+                }
+              : null
+          }))
     });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load archive." }, { status: 400 });
