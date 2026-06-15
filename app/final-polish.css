@@ -1,0 +1,30 @@
+@media (max-width: 760px) {
+  .journey-viewer .reel-queue .queue-card {
+    grid-template-columns: 64px minmax(0, 1fr) !important;
+    width: min(76vw, 260px) !important;
+    min-width: min(76vw, 260px) !important;
+  }
+
+  .journey-viewer .reel-queue .queue-card span,
+  .journey-viewer .queue-card span,
+  .library-strip .strip-thumb,
+  .smart-strip .smart-video > span {
+    aspect-ratio: 1 / 1 !important;
+    width: 58px !important;
+    height: 58px !important;
+    min-width: 58px !important;
+    border-radius: 6px !important;
+    background-color: #050505 !important;
+    background-size: contain !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+  }
+
+  .journey-viewer .reel-queue .queue-card strong {
+    display: -webkit-box !important;
+    overflow: hidden !important;
+    -webkit-box-orient: vertical !important;
+    -webkit-line-clamp: 2 !important;
+    white-space: normal !important;
+  }
+}
