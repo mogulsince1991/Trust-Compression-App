@@ -1,0 +1,171 @@
+.journey-viewer .reel-video {
+  display: grid;
+  place-items: center;
+  background: #000;
+}
+
+.journey-viewer .reel-video iframe,
+.journey-viewer .reel-poster {
+  border: 0;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+}
+
+.journey-viewer.is-wide .reel-video iframe,
+.journey-viewer.is-wide .reel-poster {
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  height: auto;
+  max-height: 100%;
+}
+
+.journey-viewer.is-portrait .reel-video iframe,
+.journey-viewer.is-portrait .reel-poster {
+  aspect-ratio: 9 / 16;
+  width: auto;
+  height: 100%;
+  max-width: 100%;
+}
+
+@media (max-width: 760px) and (orientation: portrait) {
+  .journey-viewer {
+    height: 100svh !important;
+    min-height: 100svh !important;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: auto 34svh 82px auto !important;
+    gap: 10px !important;
+    padding: 12px !important;
+    overflow: hidden !important;
+  }
+
+  .journey-viewer.is-portrait {
+    grid-template-rows: auto 58svh 82px auto !important;
+  }
+
+  .journey-copy {
+    max-height: 92px !important;
+    overflow: hidden !important;
+  }
+
+  .journey-copy span,
+  .journey-copy p {
+    display: none !important;
+  }
+
+  .journey-copy h1 {
+    margin-top: 0 !important;
+    font-size: clamp(24px, 7vw, 34px) !important;
+    line-height: 1.04 !important;
+  }
+
+  .reel-shell {
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    display: block !important;
+    position: relative !important;
+  }
+
+  .reel-video {
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    max-height: 100% !important;
+    overflow: hidden !important;
+  }
+
+  .journey-viewer.is-wide .reel-video iframe,
+  .journey-viewer.is-wide .reel-poster {
+    width: 100% !important;
+    height: auto !important;
+    max-height: 100% !important;
+  }
+
+  .journey-viewer.is-portrait .reel-video iframe,
+  .journey-viewer.is-portrait .reel-poster {
+    width: auto !important;
+    height: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .reel-caption {
+    padding: 10px 12px !important;
+    pointer-events: none !important;
+  }
+
+  .reel-caption h2,
+  .reel-caption p {
+    display: none !important;
+  }
+
+  .reel-nav {
+    display: none !important;
+  }
+
+  .reel-queue {
+    min-height: 74px !important;
+    display: flex !important;
+    gap: 8px !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    padding-bottom: 2px !important;
+    scroll-snap-type: x mandatory !important;
+  }
+
+  .queue-card {
+    width: min(74vw, 360px) !important;
+    min-width: min(74vw, 360px) !important;
+    display: grid !important;
+    grid-template-columns: 92px minmax(0, 1fr) !important;
+    gap: 10px !important;
+    align-items: center !important;
+    padding: 6px !important;
+    scroll-snap-align: center !important;
+  }
+
+  .queue-card span {
+    aspect-ratio: 16 / 9 !important;
+    background-color: #050505 !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+    background-size: contain !important;
+  }
+
+  .queue-card strong {
+    min-width: 0 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  .scroll-cue {
+    position: static !important;
+    align-self: center !important;
+    justify-self: center !important;
+    display: grid !important;
+    transform: none !important;
+  }
+
+  .share-cta.floating {
+    left: 12px !important;
+    right: 12px !important;
+    bottom: 12px !important;
+    width: auto !important;
+    justify-content: center !important;
+  }
+}
+
+@media (max-width: 920px) and (orientation: landscape) {
+  .journey-viewer {
+    height: 100svh !important;
+    min-height: 100svh !important;
+  }
+
+  .reel-video {
+    height: calc(100svh - 90px) !important;
+    min-height: 0 !important;
+  }
+}
