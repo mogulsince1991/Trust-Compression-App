@@ -6,7 +6,9 @@
 
 .journey-viewer .reel-video iframe,
 .journey-viewer .reel-poster {
+  display: block;
   border: 0;
+  background-color: #000;
   background-position: center;
   background-repeat: no-repeat;
   background-size: contain;
@@ -30,23 +32,22 @@
 
 @media (max-width: 760px) and (orientation: portrait) {
   .journey-viewer {
+    position: relative !important;
     height: 100svh !important;
     min-height: 100svh !important;
-    display: grid !important;
-    grid-template-columns: minmax(0, 1fr) !important;
-    grid-template-rows: auto minmax(0, 1fr) !important;
+    display: flex !important;
+    flex-direction: column !important;
     gap: 14px !important;
-    padding: 18px 16px 118px !important;
+    padding: max(18px, env(safe-area-inset-top)) 16px calc(110px + env(safe-area-inset-bottom)) !important;
     overflow: hidden !important;
-  }
-
-  .journey-viewer.is-portrait {
-    padding-bottom: 118px !important;
+    background: #000 !important;
   }
 
   .journey-copy {
-    max-height: 132px !important;
+    flex: 0 0 auto !important;
+    max-height: 23svh !important;
     overflow: hidden !important;
+    padding-top: 2px !important;
   }
 
   .journey-copy span {
@@ -54,10 +55,11 @@
   }
 
   .journey-copy h1 {
-    margin-top: 0 !important;
-    max-width: 22rem !important;
-    font-size: clamp(27px, 7.4vw, 38px) !important;
-    line-height: 0.98 !important;
+    margin: 0 !important;
+    max-width: 23rem !important;
+    color: #f6f3ee !important;
+    font-size: clamp(26px, 7vw, 36px) !important;
+    line-height: 1.03 !important;
     font-weight: 520 !important;
     letter-spacing: 0 !important;
   }
@@ -65,57 +67,82 @@
   .journey-copy p {
     display: block !important;
     max-width: 21rem !important;
-    margin-top: 8px !important;
+    margin: 8px 0 0 !important;
     color: rgba(246, 243, 238, 0.62) !important;
     font-size: 14px !important;
     line-height: 1.34 !important;
   }
 
   .reel-shell {
+    flex: 1 1 auto !important;
     width: 100% !important;
     min-width: 0 !important;
     min-height: 0 !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
+    display: grid !important;
+    place-items: center !important;
     position: relative !important;
+    padding: 4px 0 18px !important;
   }
 
   .reel-video {
     width: 100% !important;
-    height: 34svh !important;
+    height: min(34svh, 320px) !important;
     min-width: 0 !important;
     min-height: 0 !important;
     max-height: 100% !important;
     overflow: hidden !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    background: #000 !important;
   }
 
   .journey-viewer.is-portrait .reel-video {
-    height: min(58svh, 520px) !important;
+    width: min(74vw, 360px) !important;
+    height: min(58svh, calc(100svh - 220px)) !important;
   }
 
-  .journey-viewer.is-wide .reel-video iframe,
+  .journey-viewer.is-wide .reel-video iframe {
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+  }
+
   .journey-viewer.is-wide .reel-poster {
     width: 100% !important;
-    height: auto !important;
+    height: 100% !important;
+    max-width: 100% !important;
     max-height: 100% !important;
+    background-size: contain !important;
   }
 
   .journey-viewer.is-portrait .reel-video iframe,
   .journey-viewer.is-portrait .reel-poster {
-    width: auto !important;
+    width: 100% !important;
     height: 100% !important;
     max-width: 100% !important;
+    max-height: 100% !important;
   }
 
   .reel-caption {
-    padding: 10px 12px !important;
+    top: 8px !important;
+    right: 8px !important;
+    bottom: auto !important;
+    left: auto !important;
+    width: auto !important;
+    padding: 4px 8px !important;
+    border-radius: 999px !important;
+    background: rgba(0, 0, 0, 0.45) !important;
     pointer-events: none !important;
   }
 
   .reel-caption h2,
   .reel-caption p {
     display: none !important;
+  }
+
+  .reel-caption span {
+    color: rgba(246, 243, 238, 0.76) !important;
+    font-size: 11px !important;
   }
 
   .reel-nav {
@@ -128,29 +155,33 @@
     right: 16px !important;
     bottom: max(12px, env(safe-area-inset-bottom)) !important;
     z-index: 24 !important;
-    height: 78px !important;
-    min-height: 78px !important;
+    height: 82px !important;
+    min-height: 82px !important;
     display: flex !important;
+    align-items: stretch !important;
     gap: 8px !important;
     overflow-x: auto !important;
     overflow-y: hidden !important;
-    padding: 0 0 2px !important;
+    padding: 0 0 3px !important;
     scroll-snap-type: x mandatory !important;
     -webkit-overflow-scrolling: touch !important;
   }
 
   .queue-card {
-    width: min(74vw, 360px) !important;
-    min-width: min(74vw, 360px) !important;
+    width: min(76vw, 370px) !important;
+    min-width: min(76vw, 370px) !important;
+    height: 76px !important;
     display: grid !important;
-    grid-template-columns: 92px minmax(0, 1fr) !important;
+    grid-template-columns: 96px minmax(0, 1fr) !important;
     gap: 10px !important;
     align-items: center !important;
     padding: 6px !important;
     scroll-snap-align: center !important;
+    overflow: hidden !important;
   }
 
   .queue-card span {
+    width: 96px !important;
     aspect-ratio: 16 / 9 !important;
     background-color: #050505 !important;
     background-position: center !important;
@@ -161,14 +192,17 @@
   .queue-card strong {
     min-width: 0 !important;
     overflow: hidden !important;
-    text-overflow: ellipsis !important;
-    white-space: nowrap !important;
+    display: -webkit-box !important;
+    -webkit-line-clamp: 2 !important;
+    -webkit-box-orient: vertical !important;
+    white-space: normal !important;
+    line-height: 1.15 !important;
   }
 
   .scroll-cue {
     position: fixed !important;
     left: 50% !important;
-    bottom: calc(98px + env(safe-area-inset-bottom)) !important;
+    bottom: calc(104px + env(safe-area-inset-bottom)) !important;
     z-index: 23 !important;
     align-self: auto !important;
     justify-self: center !important;
@@ -185,12 +219,13 @@
     position: fixed !important;
     left: 50% !important;
     right: auto !important;
-    bottom: calc(98px + env(safe-area-inset-bottom)) !important;
+    bottom: calc(104px + env(safe-area-inset-bottom)) !important;
     z-index: 25 !important;
     width: fit-content !important;
     max-width: calc(100vw - 32px) !important;
     justify-content: center !important;
     transform: translateX(-50%) !important;
+    white-space: nowrap !important;
   }
 
   .journey-viewer:has(.share-cta.floating) .scroll-cue {
