@@ -1,41 +1,67 @@
 @media (max-width: 760px) {
   .journey-viewer {
     min-height: 100svh !important;
+    height: 100svh !important;
     display: grid !important;
-    grid-template-rows: auto minmax(0, 34svh) auto auto !important;
     gap: 10px !important;
     overflow: hidden !important;
+    padding: max(12px, env(safe-area-inset-top)) 12px max(10px, env(safe-area-inset-bottom)) !important;
+  }
+
+  .journey-viewer.is-wide {
+    grid-template-rows: auto minmax(0, 34svh) 82px 1fr !important;
+  }
+
+  .journey-viewer.is-portrait {
+    grid-template-rows: auto minmax(0, 66svh) 82px 1fr !important;
   }
 
   .journey-viewer .journey-copy {
     min-height: 0 !important;
-    padding-bottom: 0 !important;
+    padding: 0 !important;
+  }
+
+  .journey-viewer .journey-copy span {
+    display: none !important;
   }
 
   .journey-viewer .journey-copy h1 {
     display: -webkit-box !important;
     overflow: hidden !important;
+    margin: 0 !important;
+    font-size: clamp(17px, 5vw, 22px) !important;
+    line-height: 1.15 !important;
     -webkit-box-orient: vertical !important;
     -webkit-line-clamp: 2 !important;
+  }
+
+  .journey-viewer .journey-copy p {
+    display: none !important;
   }
 
   .journey-viewer .reel-shell,
   .journey-viewer.is-embed .reel-shell {
     width: 100% !important;
     min-height: 0 !important;
-    height: 34svh !important;
-    max-height: 34svh !important;
+    height: 100% !important;
+    max-height: none !important;
     display: grid !important;
-    grid-template-columns: 34px minmax(0, 1fr) 34px !important;
+    grid-template-columns: 28px minmax(0, 1fr) 28px !important;
     align-items: center !important;
     overflow: hidden !important;
+  }
+
+  .journey-viewer .reel-nav {
+    width: 28px !important;
+    height: 44px !important;
+    opacity: 0.58 !important;
   }
 
   .journey-viewer .reel-video {
     width: 100% !important;
     height: 100% !important;
     max-width: 100% !important;
-    max-height: 34svh !important;
+    max-height: 100% !important;
     aspect-ratio: auto !important;
     display: grid !important;
     place-items: center !important;
@@ -43,13 +69,26 @@
     background: #050505 !important;
   }
 
-  .journey-viewer .reel-video iframe,
-  .journey-viewer .reel-poster {
+  .journey-viewer.is-wide .reel-video iframe,
+  .journey-viewer.is-wide .reel-poster {
     width: 100% !important;
     height: auto !important;
     max-width: 100% !important;
     max-height: 100% !important;
     aspect-ratio: 16 / 9 !important;
+  }
+
+  .journey-viewer.is-portrait .reel-video iframe,
+  .journey-viewer.is-portrait .reel-poster {
+    width: auto !important;
+    height: 100% !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    aspect-ratio: 9 / 16 !important;
+  }
+
+  .journey-viewer .reel-video iframe,
+  .journey-viewer .reel-poster {
     background-color: #050505 !important;
     background-size: contain !important;
     background-position: center !important;
@@ -58,6 +97,7 @@
   }
 
   .journey-viewer .reel-caption {
+    right: 8px !important;
     bottom: 8px !important;
   }
 
@@ -66,7 +106,7 @@
     max-height: 82px !important;
     overflow-x: auto !important;
     overflow-y: hidden !important;
-    padding-bottom: 4px !important;
+    padding: 0 0 4px !important;
   }
 
   .journey-viewer .reel-queue .queue-card {
@@ -109,6 +149,11 @@
     -webkit-box-orient: vertical !important;
     -webkit-line-clamp: 2 !important;
     white-space: normal !important;
+  }
+
+  .journey-viewer .share-cta.floating {
+    right: 12px !important;
+    bottom: calc(92px + env(safe-area-inset-bottom)) !important;
   }
 }
 
