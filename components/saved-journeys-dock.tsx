@@ -1,6 +1,6 @@
 "use client";
 
-import { Archive, ExternalLink, Link2, Loader2, X } from "lucide-react";
+import { Archive, ExternalLink, ImageIcon, Link2, Loader2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
@@ -120,6 +120,10 @@ export function SavedJourneysDock() {
         <a style={buttonStyle} href="/archive">
           <Archive size={16} />
           Journeys
+        </a>
+        <a style={buttonStyle} href="/video-overrides">
+          <ImageIcon size={16} />
+          Videos
         </a>
       </div>
     </aside>
