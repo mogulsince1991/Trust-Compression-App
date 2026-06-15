@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Archive, ArrowLeft, Edit3, ExternalLink, FolderTree, Link2, Loader2, RotateCcw, Send, Trash2, Video, X } from "lucide-react";
+import { Archive, ArrowLeft, Code2, Edit3, ExternalLink, FolderTree, Link2, Loader2, RotateCcw, Send, Trash2, Video, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
@@ -313,6 +313,7 @@ export default function ArchivePage() {
                 sends={(payload.sends ?? []).filter((send) => send.journeyId === journey.id)}
                 onEdit={() => openEdit(journey)}
                 onCreateClientLink={(contact) => createClientLink(journey.id, contact)}
+                onEmbedCopied={() => setNotice("Embed code copied.")}
                 primaryAction={{ label: "Archive", icon: <Archive size={15} />, onClick: () => runAction("Journey archived.", journey.id, `/api/journeys/${journey.id}/archive`, "POST") }}
               />
             ))}
@@ -340,6 +341,7 @@ export default function ArchivePage() {
                   busy={workingId === journey.id}
                   contacts={[]}
                   sends={[]}
+                  onEmbedCopied={() => setNotice("Embed code copied.")}
                   primaryAction={{ label: "Restore", icon: <RotateCcw size={15} />, onClick: () => runAction("Journey restored.", journey.id, `/api/journeys/${journey.id}/restore`, "POST") }}
                   dangerAction={{ label: "Delete", icon: <Trash2 size={15} />, onClick: () => runAction("Journey permanently deleted.", journey.id, `/api/journeys/${journey.id}/purge`, "DELETE") }}
                 />
@@ -419,6 +421,7 @@ function JourneyCard({
   sends,
   onEdit,
   onCreateClientLink,
+  onEmbedCopied,
   primaryAction,
   dangerAction
 }: {
@@ -429,12 +432,21 @@ function JourneyCard({
   sends: JourneySend[];
   onEdit?: () => void;
   onCreateClientLink?: (contact: { contactId?: string; name?: string; email?: string; company?: string }) => void;
+  onEmbedCopied?: () => void;
   primaryAction: { label: string; icon: ReactNode; onClick: () => void };
   dangerAction?: { label: string; icon: ReactNode; onClick: () => void };
 }) {
   const [contactId, setContactId] = useState("");
   const [contact, setContact] = useState({ name: "", email: "", company: "" });
   const canCreateLink = Boolean(onCreateClientLink) && (Boolean(contactId) || Boolean(contact.email.trim()) || Boolean(contact.name.trim()));
+
+  async function copyEmbedCode() {
+    const embedUrl = makeEmbedUrl(journey.shareUrl);
+    if (!embedUrl) return;
+    const code = `<iframe src="${embedUrl}" style="width:100%;height:720px;border:0;" allow="autoplay; encrypted-media; picture-in-picture; web-share" allowfullscreen></iframe>`;
+    await navigator.clipboard?.writeText(code).catch(() => undefined);
+    onEmbedCopied?.();
+  }
 
   return (
     <article className="archive-journey-card">
@@ -459,6 +471,7 @@ function JourneyCard({
             <ExternalLink size={14} /> Open
           </a>
         )}
+        {journey.shareUrl && <button disabled={busy} onClick={copyEmbedCode}><Code2 size={14} /> Embed</button>}
         <button disabled={busy} onClick={primaryAction.onClick}>
           {primaryAction.icon} {primaryAction.label}
         </button>
@@ -534,4 +547,16 @@ function makeFolderPath(folders: FolderRow[]) {
   }
 
   return result;
+}
+
+function makeEmbedUrl(shareUrl: string) {
+  if (!shareUrl) return "";
+  try {
+    const url = new URL(shareUrl, window.location.origin);
+    const token = url.pathname.split("/").filter(Boolean).at(-1);
+    if (!token) return "";
+    return `${url.origin}/embed/journey/${token}`;
+  } catch {
+    return "";
+  }
 }
