@@ -4,6 +4,7 @@ import "./journeys.css";
 import "./configurator.css";
 import "./source-expansion.css";
 import "./product-overrides.css";
+import "./final-polish.css";
 
 export const metadata: Metadata = {
   title: "Trust Library",
