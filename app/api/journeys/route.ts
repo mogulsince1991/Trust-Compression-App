@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createUserSupabaseClient } from "@/lib/supabase";
+import { createServiceSupabaseClient, createUserSupabaseClient } from "@/lib/supabase";
 
 type JourneyRequest = {
   workspaceId?: string;
@@ -22,15 +22,30 @@ export async function GET(request: Request) {
     const archived = url.searchParams.get("archived") === "true";
     if (!workspaceId) return NextResponse.json({ error: "Workspace is required." }, { status: 400 });
 
-    const supabase = createUserSupabaseClient(token);
+    const userSupabase = createUserSupabaseClient(token);
     const {
       data: { user },
       error: userError
-    } = await supabase.auth.getUser();
+    } = await userSupabase.auth.getUser();
 
     if (userError || !user) return NextResponse.json({ error: "Your session expired. Sign in again." }, { status: 401 });
 
-    let query = supabase
+    const serviceSupabase = createServiceSupabaseClient();
+    const dataSupabase = serviceSupabase ?? userSupabase;
+
+    if (serviceSupabase) {
+      const { data: membership, error: membershipError } = await serviceSupabase
+        .from("workspace_members")
+        .select("workspace_id")
+        .eq("workspace_id", workspaceId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (membershipError) return NextResponse.json({ error: membershipError.message }, { status: 500 });
+      if (!membership) return NextResponse.json({ error: "You do not have access to this workspace." }, { status: 403 });
+    }
+
+    let query = dataSupabase
       .from("journeys")
       .select("id,title,heading,description,cta_label,cta_url,share_token,folder_id,created_at,published_at,is_public,deleted_at,journey_videos(video_id,position)")
       .eq("workspace_id", workspaceId)
@@ -43,7 +58,7 @@ export async function GET(request: Request) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    const { data: folders } = await supabase.from("journey_folders").select("id,name,parent_id").eq("workspace_id", workspaceId).order("name", { ascending: true });
+    const { data: folders } = await dataSupabase.from("journey_folders").select("id,name,parent_id").eq("workspace_id", workspaceId).order("name", { ascending: true });
     const origin = url.origin;
     const journeys = (data ?? []).map((journey: any) => ({
       id: journey.id,
