@@ -29,15 +29,19 @@ export type PublicJourney = {
   videos: JourneyVideo[];
 };
 
+type VideoOrientation = "wide" | "portrait";
+
 export function JourneyViewer({ journey, variant = "share" }: { journey: PublicJourney; variant?: "share" | "embed" }) {
   const [active, setActive] = useState(0);
   const [started, setStarted] = useState(false);
+  const [orientationByVideo, setOrientationByVideo] = useState<Record<string, VideoOrientation>>({});
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const activeVideo = journey.videos[active];
   const listRef = useRef<HTMLDivElement>(null);
   const trackedVideos = useRef<Set<string>>(new Set());
   const trackedOpen = useRef(false);
   const isYouTube = activeVideo?.embed_url?.includes("youtube.com/embed");
+  const orientation = activeVideo ? orientationByVideo[activeVideo.id] ?? inferOrientation(activeVideo) : "wide";
 
   const embedUrl = useMemo(() => {
     if (!activeVideo?.embed_url) return "";
@@ -49,6 +53,29 @@ export function JourneyViewer({ journey, variant = "share" }: { journey: PublicJ
     }
     return url.toString();
   }, [activeVideo?.embed_url, isYouTube, started]);
+
+  useEffect(() => {
+    setStarted(false);
+  }, [activeVideo?.id]);
+
+  useEffect(() => {
+    if (!activeVideo?.thumbnail_url || orientationByVideo[activeVideo.id]) return;
+    let cancelled = false;
+    const image = new Image();
+    image.onload = () => {
+      if (cancelled || !image.naturalWidth || !image.naturalHeight) return;
+      const nextOrientation: VideoOrientation = image.naturalHeight > image.naturalWidth * 1.12 ? "portrait" : "wide";
+      setOrientationByVideo((current) => ({ ...current, [activeVideo.id]: nextOrientation }));
+    };
+    image.onerror = () => {
+      if (cancelled) return;
+      setOrientationByVideo((current) => ({ ...current, [activeVideo.id]: inferOrientation(activeVideo) }));
+    };
+    image.src = activeVideo.thumbnail_url;
+    return () => {
+      cancelled = true;
+    };
+  }, [activeVideo, orientationByVideo]);
 
   useEffect(() => {
     const node = listRef.current;
@@ -175,7 +202,7 @@ export function JourneyViewer({ journey, variant = "share" }: { journey: PublicJ
   }
 
   return (
-    <main className={variant === "embed" ? "journey-viewer is-embed" : "journey-viewer"} onWheel={onWheel} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+    <main className={`journey-viewer is-${orientation}${variant === "embed" ? " is-embed" : ""}`} onWheel={onWheel} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       <section className="journey-copy">
         <span>{variant === "embed" ? "Video journey" : "Private journey"}</span>
         <h1>{journey.heading || journey.title}</h1>
@@ -230,6 +257,12 @@ export function JourneyViewer({ journey, variant = "share" }: { journey: PublicJ
       )}
     </main>
   );
+}
+
+function inferOrientation(video: JourneyVideo): VideoOrientation {
+  const source = `${video.source_url ?? ""} ${video.embed_url ?? ""} ${video.title ?? ""}`.toLowerCase();
+  if (source.includes("/shorts/") || source.includes("reel") || source.includes("vertical") || source.includes("portrait")) return "portrait";
+  return "wide";
 }
 
 function getViewerId() {
