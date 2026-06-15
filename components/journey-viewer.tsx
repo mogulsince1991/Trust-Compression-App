@@ -29,7 +29,7 @@ export type PublicJourney = {
   videos: JourneyVideo[];
 };
 
-export function JourneyViewer({ journey }: { journey: PublicJourney }) {
+export function JourneyViewer({ journey, variant = "share" }: { journey: PublicJourney; variant?: "share" | "embed" }) {
   const [active, setActive] = useState(0);
   const [started, setStarted] = useState(false);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
@@ -65,9 +65,10 @@ export function JourneyViewer({ journey }: { journey: PublicJourney }) {
       videoId: null,
       eventType: "opened",
       viewerId: getViewerId(),
-      activeIndex: active
+      activeIndex: active,
+      metadata: { surface: variant }
     });
-  }, [active, journey]);
+  }, [active, journey, variant]);
 
   useEffect(() => {
     if (!activeVideo?.id) return;
@@ -80,9 +81,10 @@ export function JourneyViewer({ journey }: { journey: PublicJourney }) {
       videoId: activeVideo.id,
       eventType: "video_started",
       viewerId: getViewerId(),
-      activeIndex: active
+      activeIndex: active,
+      metadata: { surface: variant }
     });
-  }, [active, activeVideo?.id, journey]);
+  }, [active, activeVideo?.id, journey, variant]);
 
   useEffect(() => {
     if (!started || !activeVideo?.id) return;
@@ -101,13 +103,14 @@ export function JourneyViewer({ journey }: { journey: PublicJourney }) {
           secondsWatched,
           durationSeconds: duration,
           percentWatched,
-          source: "client_timer"
+          source: "client_timer",
+          surface: variant
         }
       });
     }, 10000);
 
     return () => window.clearInterval(timer);
-  }, [active, activeVideo?.id, activeVideo?.duration_seconds, journey, started]);
+  }, [active, activeVideo?.id, activeVideo?.duration_seconds, journey, started, variant]);
 
   useEffect(() => {
     if (!started || !activeVideo?.duration_seconds) return;
@@ -166,14 +169,15 @@ export function JourneyViewer({ journey }: { journey: PublicJourney }) {
       videoId: activeVideo?.id ?? null,
       eventType: "cta_clicked",
       viewerId: getViewerId(),
-      activeIndex: active
+      activeIndex: active,
+      metadata: { surface: variant }
     });
   }
 
   return (
-    <main className="journey-viewer" onWheel={onWheel} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+    <main className={variant === "embed" ? "journey-viewer is-embed" : "journey-viewer"} onWheel={onWheel} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       <section className="journey-copy">
-        <span>Private journey</span>
+        <span>{variant === "embed" ? "Video journey" : "Private journey"}</span>
         <h1>{journey.heading || journey.title}</h1>
         {journey.description && <p>{journey.description}</p>}
       </section>
@@ -220,7 +224,7 @@ export function JourneyViewer({ journey }: { journey: PublicJourney }) {
       </button>
 
       {journey.cta_url && (
-        <a className="share-cta floating" href={journey.cta_url} onClick={trackCtaClick}>
+        <a className="share-cta floating" href={journey.cta_url} onClick={trackCtaClick} target={variant === "embed" ? "_blank" : undefined} rel={variant === "embed" ? "noreferrer" : undefined}>
           {journey.cta_label || "Continue"} <ArrowRight size={18} />
         </a>
       )}
