@@ -7,11 +7,14 @@ import {
   ChevronDown,
   ChevronUp,
   Clapperboard,
+  Copy,
   Eye,
   Folder,
   Import,
+  Link2,
   Loader2,
   LogOut,
+  MousePointerClick,
   Plus,
   RefreshCw,
   Route,
@@ -20,7 +23,6 @@ import {
   Send,
   Share2,
   Trash2,
-  Users,
   Wand2
 } from "lucide-react";
 import type { FormEvent } from "react";
@@ -29,8 +31,8 @@ import type { Session } from "@supabase/supabase-js";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 
 type RoleId = "libraryManager" | "salesRep" | "owner" | "prospect";
-type ViewId = "sources" | "library" | "prospects" | "journeys" | "metrics";
-type MetricMode = "overview" | "journeys" | "videos" | "contacts" | "social";
+type ViewId = "sources" | "library" | "tracking" | "journeys" | "metrics";
+type MetricMode = "overview" | "journeys" | "videos" | "contacts" | "social" | "links";
 
 type DbVideo = {
   id: string;
@@ -94,6 +96,39 @@ type MetricsState = {
   views: JourneyViewRow[];
 };
 
+type TrackingLinkRow = {
+  id: string;
+  workspaceId: string;
+  journeyId: string | null;
+  title: string;
+  slug: string;
+  destinationUrl: string;
+  trackingUrl: string;
+  isActive: boolean;
+  metadata: Record<string, any> | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
+type TrackingEventRow = {
+  id: string;
+  trackingLinkId: string;
+  journeyId: string | null;
+  eventType: "redirect" | "page_view" | "cta_click";
+  visitId: string | null;
+  visitorId: string | null;
+  sessionId: string | null;
+  pageUrl: string | null;
+  referrerUrl: string | null;
+  metadata: Record<string, any> | null;
+  createdAt: string | null;
+};
+
+type TrackingState = {
+  links: TrackingLinkRow[];
+  events: TrackingEventRow[];
+};
+
 type JourneyDraft = {
   title: string;
   heading: string;
@@ -101,6 +136,12 @@ type JourneyDraft = {
   ctaLabel: string;
   ctaUrl: string;
   folderName: string;
+};
+
+type TrackingDraft = {
+  title: string;
+  destinationUrl: string;
+  journeyId: string;
 };
 
 type SmartGroup = { key: string; title: string; videos: DbVideo[] };
@@ -147,12 +188,18 @@ const emptyFilters: LibraryFilters = {
   date: "all"
 };
 
+const emptyTrackingDraft: TrackingDraft = {
+  title: "",
+  destinationUrl: "",
+  journeyId: ""
+};
+
 const roles: Record<RoleId, { label: string; title: string; description: string; view: ViewId; placeholder: string }> = {
   libraryManager: {
     label: "Library Manager",
     title: "Connect the content sources.",
     description: "Import public channels, playlists, videos, and folders into a searchable proof library.",
-    view: "sources",
+    view: "library",
     placeholder: "Search imported videos, context, tags..."
   },
   salesRep: {
@@ -182,8 +229,8 @@ const noMagicLinkEmails = new Set(["admin@unmarked.media"]);
 
 export function TrustAppIngestion() {
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
-  const [roleId, setRoleId] = useState<RoleId | null>(null);
-  const [view, setView] = useState<ViewId>("sources");
+  const [roleId, setRoleId] = useState<RoleId | null>("libraryManager");
+  const [view, setView] = useState<ViewId>("library");
   const [session, setSession] = useState<Session | null>(null);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [videos, setVideos] = useState<DbVideo[]>([]);
@@ -191,6 +238,7 @@ export function TrustAppIngestion() {
   const [journeys, setJourneys] = useState<JourneySummary[]>([]);
   const [folders, setFolders] = useState<FolderRow[]>([]);
   const [contacts, setContacts] = useState<ContactRow[]>([]);
+  const [tracking, setTracking] = useState<TrackingState>({ links: [], events: [] });
   const [selected, setSelected] = useState<DbVideo | null>(null);
   const [selectedJourneyId, setSelectedJourneyId] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<MetricsState>({ views: [] });
@@ -200,7 +248,9 @@ export function TrustAppIngestion() {
   const [working, setWorking] = useState(false);
   const [draftVideos, setDraftVideos] = useState<DbVideo[]>([]);
   const [draft, setDraft] = useState<JourneyDraft>(emptyDraft);
+  const [trackingDraft, setTrackingDraft] = useState<TrackingDraft>(emptyTrackingDraft);
   const [journeyWorking, setJourneyWorking] = useState(false);
+  const [trackingWorking, setTrackingWorking] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -265,11 +315,6 @@ export function TrustAppIngestion() {
     };
   }, [isInternal, session, supabase]);
 
-  async function refreshWorkspace(nextWorkspaceId = workspaceId) {
-    await Promise.all([loadVideos(nextWorkspaceId), loadSources(nextWorkspaceId), loadJourneys(nextWorkspaceId), loadContacts(nextWorkspaceId)]);
-    await loadMetrics(nextWorkspaceId);
-  }
-
   async function loadVideos(nextWorkspaceId = workspaceId) {
     if (!supabase || !nextWorkspaceId) return;
     const { data, error: loadError } = await supabase
@@ -277,7 +322,8 @@ export function TrustAppIngestion() {
       .select("id,title,source_platform,source_url,embed_url,thumbnail_url,duration_seconds,summary,suggested_use,proof_type,buying_stage,sales_category,funnel_stage,published_at,created_at,metadata,tags")
       .eq("workspace_id", nextWorkspaceId)
       .is("deleted_at", null)
-      .order("created_at", { ascending: false });
+      .order("published_at", { ascending: true, nullsFirst: false })
+      .order("created_at", { ascending: true });
 
     if (loadError) {
       setError(loadError.message);
@@ -300,8 +346,10 @@ export function TrustAppIngestion() {
     const response = await fetch(`/api/journeys?workspaceId=${encodeURIComponent(nextWorkspaceId)}`, { headers: { Authorization: `Bearer ${session.access_token}` } });
     if (!response.ok) return;
     const result = (await response.json()) as { journeys?: JourneySummary[]; folders?: FolderRow[] };
-    setJourneys(result.journeys ?? []);
+    const nextJourneys = result.journeys ?? [];
+    setJourneys(nextJourneys);
     setFolders(result.folders ?? []);
+    return nextJourneys;
   }
 
   async function loadContacts(nextWorkspaceId = workspaceId) {
@@ -310,15 +358,31 @@ export function TrustAppIngestion() {
     setContacts((data ?? []) as ContactRow[]);
   }
 
-  async function loadMetrics(nextWorkspaceId = workspaceId) {
+  async function loadTracking(nextWorkspaceId = workspaceId) {
+    if (!session || !nextWorkspaceId) return;
+    const response = await fetch(`/api/tracking-links?workspaceId=${encodeURIComponent(nextWorkspaceId)}`, {
+      headers: { Authorization: `Bearer ${session.access_token}` }
+    });
+    if (!response.ok) return;
+    const result = (await response.json()) as { links?: TrackingLinkRow[]; events?: TrackingEventRow[] };
+    setTracking({ links: result.links ?? [], events: result.events ?? [] });
+  }
+
+  async function loadMetrics(nextWorkspaceId = workspaceId, nextJourneys = journeys) {
     if (!supabase || !nextWorkspaceId) return;
-    const journeyIds = journeys.map((journey) => journey.id);
+    const journeyIds = nextJourneys.map((journey) => journey.id);
     if (!journeyIds.length) {
       setMetrics({ views: [] });
       return;
     }
     const { data } = await supabase.from("journey_views").select("id,journey_id,video_id,event_type,viewer_label,metadata,created_at").in("journey_id", journeyIds).order("created_at", { ascending: false });
     setMetrics({ views: (data ?? []) as JourneyViewRow[] });
+  }
+
+  async function refreshWorkspace(nextWorkspaceId = workspaceId) {
+    await Promise.all([loadVideos(nextWorkspaceId), loadSources(nextWorkspaceId), loadContacts(nextWorkspaceId)]);
+    const [nextJourneys] = await Promise.all([loadJourneys(nextWorkspaceId), loadTracking(nextWorkspaceId)]);
+    await loadMetrics(nextWorkspaceId, nextJourneys ?? []);
   }
 
   async function importSource(event: FormEvent<HTMLFormElement>) {
@@ -524,6 +588,42 @@ export function TrustAppIngestion() {
     }
   }
 
+  async function createTrackingLink(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!workspaceId || !session) return;
+
+    setTrackingWorking(true);
+    setNotice("");
+    setError("");
+
+    try {
+      const response = await fetch("/api/tracking-links", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          workspaceId,
+          title: trackingDraft.title,
+          destinationUrl: trackingDraft.destinationUrl,
+          journeyId: trackingDraft.journeyId || null
+        })
+      });
+      const result = (await response.json()) as { link?: TrackingLinkRow; error?: string };
+      if (!response.ok || !result.link) throw new Error(result.error ?? "Could not create the tracking link.");
+
+      setTrackingDraft(emptyTrackingDraft);
+      setNotice(`Tracking link ready: ${result.link.trackingUrl}`);
+      await loadTracking(workspaceId);
+      setView("tracking");
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not create the tracking link.");
+    } finally {
+      setTrackingWorking(false);
+    }
+  }
+
   function chooseRole(nextRole: RoleId) {
     setRoleId(nextRole);
     setView(roles[nextRole].view);
@@ -541,13 +641,13 @@ export function TrustAppIngestion() {
       <aside className="side" aria-label="Workspace">
         <button className="mark" onClick={() => setRoleId(null)} aria-label="Switch role">T</button>
         <nav className="side-nav">
-          <button className={view === "sources" ? "icon-button is-active" : "icon-button"} onClick={() => setView("sources")} aria-label="Sources"><Import /></button>
-          <button className={view === "library" ? "icon-button is-active" : "icon-button"} onClick={() => setView("library")} aria-label="Library"><Clapperboard /></button>
-          <button className={view === "prospects" ? "icon-button is-active" : "icon-button"} onClick={() => setView("prospects")} aria-label="Prospects"><Users /></button>
-          <button className={view === "metrics" ? "icon-button is-active" : "icon-button"} onClick={() => setView("metrics")} aria-label="Sales metrics"><BarChart3 /></button>
-          <button className={view === "journeys" ? "icon-button is-active" : "icon-button"} onClick={newJourney} aria-label="Journeys"><Route /></button>
+          <button className={view === "sources" ? "icon-button is-active" : "icon-button"} onClick={() => setView("sources")} aria-label="Sources" title="Sources"><Import /><span>Sources</span></button>
+          <button className={view === "library" ? "icon-button is-active" : "icon-button"} onClick={() => setView("library")} aria-label="Library" title="Library"><Clapperboard /><span>Library</span></button>
+          <button className={view === "tracking" ? "icon-button is-active" : "icon-button"} onClick={() => setView("tracking")} aria-label="Link tracking" title="Link tracking"><Link2 /><span>Links</span></button>
+          <button className={view === "metrics" ? "icon-button is-active" : "icon-button"} onClick={() => setView("metrics")} aria-label="Sales metrics" title="Metrics"><BarChart3 /><span>Metrics</span></button>
+          <button className={view === "journeys" ? "icon-button is-active" : "icon-button"} onClick={newJourney} aria-label="Journeys" title="Journeys"><Route /><span>Journeys</span></button>
         </nav>
-        {session && <button className="icon-button" onClick={() => supabase?.auth.signOut()} aria-label="Sign out"><LogOut /></button>}
+        {session && <button className="icon-button" onClick={() => supabase?.auth.signOut()} aria-label="Sign out" title="Sign out"><LogOut /><span>Exit</span></button>}
       </aside>
 
       <main className="stage">
@@ -564,8 +664,8 @@ export function TrustAppIngestion() {
 
         {view === "sources" && <SourcesView sources={sources} importing={working} onImport={importSource} onReimport={reimportSource} />}
         {view === "library" && <LibraryConfigurator videos={visibleVideos} selected={selected} saving={working} options={options} onSelect={setSelected} onAdd={addToJourney} onArchive={archiveVideo} onSaveContext={saveVideoContext} />}
-        {view === "prospects" && <SequenceView title="Recommended proof" groups={smartGroups} videos={visibleVideos.slice(0, 6)} onAdd={addToJourney} />}
-        {view === "metrics" && <MetricsView metrics={metrics} videos={videos} sources={sources} journeys={journeys} contacts={contacts} />}
+        {view === "tracking" && <LinkTrackingView draft={trackingDraft} journeys={journeys} tracking={tracking} working={trackingWorking} onDraftChange={setTrackingDraft} onCreate={createTrackingLink} />}
+        {view === "metrics" && <MetricsView metrics={metrics} videos={videos} sources={sources} journeys={journeys} contacts={contacts} tracking={tracking} />}
         {view === "journeys" && <JourneysView journeys={journeys} folders={folders} draftVideos={draftVideos} groups={smartGroups} videos={visibleVideos} shareUrl={shareUrl} onEdit={editJourney} onAdd={addToJourney} />}
       </main>
 
@@ -656,17 +756,33 @@ function JourneysView({ journeys, folders, draftVideos, groups, videos, shareUrl
   return <section className="journey-workspace"><aside className="saved-journeys"><div className="mini-head"><span>Saved journeys</span><strong>{journeys.length}</strong></div>{journeys.map((journey) => <article className="saved-journey" key={journey.id}><div><span>{folders.find((folder) => folder.id === journey.folderId)?.name ?? "Unfoldered"}</span><strong>{journey.title}</strong><small>{journey.videoIds.length} videos / {journey.isPublic ? "Published" : "Draft"}</small></div><button className="text-button compact" onClick={() => onEdit(journey)}>Edit</button></article>)}</aside><SequenceView title={draftVideos.length ? "Current journey" : "Journey draft"} groups={groups} videos={draftVideos.length ? draftVideos : videos.slice(0, 6)} onAdd={onAdd} shareUrl={shareUrl} /></section>;
 }
 
-function MetricsView({ metrics, videos, sources, journeys, contacts }: { metrics: MetricsState; videos: DbVideo[]; sources: SourceRow[]; journeys: JourneySummary[]; contacts: ContactRow[] }) {
+function MetricsView({ metrics, videos, sources, journeys, contacts, tracking }: { metrics: MetricsState; videos: DbVideo[]; sources: SourceRow[]; journeys: JourneySummary[]; contacts: ContactRow[]; tracking: TrackingState }) {
   const [mode, setMode] = useState<MetricMode>("overview");
   const opens = metrics.views.filter((event) => event.event_type === "opened");
   const starts = metrics.views.filter((event) => event.event_type === "video_started");
   const completions = metrics.views.filter((event) => event.event_type === "video_completed");
   const ctas = metrics.views.filter((event) => event.event_type === "cta_clicked");
+  const redirects = tracking.events.filter((event) => event.eventType === "redirect");
+  const linkPageViews = tracking.events.filter((event) => event.eventType === "page_view");
+  const linkCtas = tracking.events.filter((event) => event.eventType === "cta_click");
   const viewers = new Set(metrics.views.map((event) => event.viewer_label || event.metadata?.viewerId).filter(Boolean));
   const journeyRows = journeys.map((journey) => ({ journey, opens: opens.filter((event) => event.journey_id === journey.id).length, starts: starts.filter((event) => event.journey_id === journey.id).length, ctas: ctas.filter((event) => event.journey_id === journey.id).length }));
   const videoRows = videos.map((video) => ({ video, starts: starts.filter((event) => event.video_id === video.id).length, ctas: ctas.filter((event) => event.video_id === video.id).length })).sort((a, b) => b.starts - a.starts).slice(0, 10);
   const contactEvents = metrics.views.filter((event) => event.metadata?.contactId);
-  return <section className="metrics-board"><div className="metric-tabs">{(["overview", "journeys", "videos", "contacts", "social"] as MetricMode[]).map((item) => <button key={item} className={mode === item ? "is-active" : ""} onClick={() => setMode(item)}>{item}</button>)}</div>{mode === "overview" && <div className="metric-grid"><MetricCard label="Journey opens" value={String(opens.length)} detail="Public or contact-specific journey page opens." /><MetricCard label="Video starts" value={String(starts.length)} detail="Videos started inside journeys." /><MetricCard label="CTA clicks" value={String(ctas.length)} detail={`${rate(ctas.length, opens.length)} click-through from opens.`} /><MetricCard label="Known viewers" value={String(viewers.size)} detail="Anonymous viewer IDs plus future contacts." /></div>}{mode === "journeys" && <MetricTable rows={journeyRows.map((row) => [row.journey.title, `${row.opens} opens`, `${row.starts} starts`, `${row.ctas} CTA`])} />}{mode === "videos" && <MetricTable rows={videoRows.map((row) => [row.video.title, `${row.starts} starts`, `${row.ctas} CTA`, row.video.sales_category ?? row.video.source_platform])} />}{mode === "contacts" && <div className="metric-grid"><MetricCard label="Contacts" value={String(contacts.length)} detail="Manual contacts now; GHL import later." /><MetricCard label="Contact events" value={String(contactEvents.length)} detail="Events attached to contact-specific journey links." /><MetricCard label="Sent journeys" value={String(new Set(contactEvents.map((event) => event.metadata?.sendId).filter(Boolean)).size)} detail="Tracked contact-specific links with activity." /><MetricCard label="CTA from contacts" value={String(ctas.filter((event) => event.metadata?.contactId).length)} detail="CTA clicks from known sends." /></div>}{mode === "social" && <div className="metric-grid"><MetricCard label="Sources" value={String(sources.length)} detail="Connected public/imported sources." /><MetricCard label="Videos" value={String(videos.length)} detail="Imported workspace videos." /><MetricCard label="Drive sources" value={String(sources.filter((source) => source.platform === "google_drive").length)} detail="Public Drive folders." /><MetricCard label="YouTube sources" value={String(sources.filter((source) => source.platform === "youtube").length)} detail="Videos, playlists, channels, RSS/API imports." /></div>}</section>;
+  const linkRows = tracking.links.map((link) => ({ link, redirects: redirects.filter((event) => event.trackingLinkId === link.id).length, pageViews: linkPageViews.filter((event) => event.trackingLinkId === link.id).length, ctas: linkCtas.filter((event) => event.trackingLinkId === link.id).length }));
+  return <section className="metrics-board"><div className="metric-tabs">{(["overview", "journeys", "videos", "contacts", "social", "links"] as MetricMode[]).map((item) => <button key={item} className={mode === item ? "is-active" : ""} onClick={() => setMode(item)}>{item}</button>)}</div>{mode === "overview" && <div className="metric-grid"><MetricCard label="Journey opens" value={String(opens.length)} detail="Public or contact-specific journey page opens." /><MetricCard label="Video starts" value={String(starts.length)} detail="Videos started inside journeys." /><MetricCard label="Tracked redirects" value={String(redirects.length)} detail="First-click hits through /t/{slug}." /><MetricCard label="Tracked page views" value={String(linkPageViews.length)} detail="Destination-site page views from tc.js." /><MetricCard label="CTA clicks" value={String(ctas.length + linkCtas.length)} detail={`${rate(ctas.length + linkCtas.length, opens.length + linkPageViews.length)} click-through across journeys and tracked destinations.`} /><MetricCard label="Known viewers" value={String(viewers.size)} detail="Anonymous viewer IDs plus future contacts." /></div>}{mode === "journeys" && <MetricTable rows={journeyRows.map((row) => [row.journey.title, `${row.opens} opens`, `${row.starts} starts`, `${row.ctas} CTA`])} />}{mode === "videos" && <MetricTable rows={videoRows.map((row) => [row.video.title, `${row.starts} starts`, `${row.ctas} CTA`, row.video.sales_category ?? row.video.source_platform])} />}{mode === "contacts" && <div className="metric-grid"><MetricCard label="Contacts" value={String(contacts.length)} detail="Manual contacts now; GHL import later." /><MetricCard label="Contact events" value={String(contactEvents.length)} detail="Events attached to contact-specific journey links." /><MetricCard label="Sent journeys" value={String(new Set(contactEvents.map((event) => event.metadata?.sendId).filter(Boolean)).size)} detail="Tracked contact-specific links with activity." /><MetricCard label="CTA from contacts" value={String(ctas.filter((event) => event.metadata?.contactId).length)} detail="CTA clicks from known sends." /></div>}{mode === "social" && <div className="metric-grid"><MetricCard label="Sources" value={String(sources.length)} detail="Connected public/imported sources." /><MetricCard label="Videos" value={String(videos.length)} detail="Imported workspace videos." /><MetricCard label="Drive sources" value={String(sources.filter((source) => source.platform === "google_drive").length)} detail="Public Drive folders." /><MetricCard label="YouTube sources" value={String(sources.filter((source) => source.platform === "youtube").length)} detail="Videos, playlists, channels, RSS/API imports." /></div>}{mode === "links" && <MetricTable rows={linkRows.map((row) => [row.link.title, `${row.redirects} redirects`, `${row.pageViews} page views`, `${row.ctas} CTA`])} />}</section>;
+}
+
+function LinkTrackingView({ draft, journeys, tracking, working, onDraftChange, onCreate }: { draft: TrackingDraft; journeys: JourneySummary[]; tracking: TrackingState; working: boolean; onDraftChange: (draft: TrackingDraft) => void; onCreate: (event: FormEvent<HTMLFormElement>) => void }) {
+  const summaries = tracking.links.map((link) => ({
+    link,
+    redirects: tracking.events.filter((event) => event.trackingLinkId === link.id && event.eventType === "redirect").length,
+    pageViews: tracking.events.filter((event) => event.trackingLinkId === link.id && event.eventType === "page_view").length,
+    ctas: tracking.events.filter((event) => event.trackingLinkId === link.id && event.eventType === "cta_click").length,
+    lastTouch: tracking.events.find((event) => event.trackingLinkId === link.id)?.createdAt ?? link.createdAt
+  }));
+
+  return <section className="tracking-layout"><section className="prospect-brief tracking-panel"><div className="mini-head"><span>Link tracking</span><strong>{tracking.links.length} links</strong></div><p>Create tracked redirects, connect them to journeys when needed, and use <code>/tc.js</code> on destination pages for first-click attribution plus page-view and CTA signals.</p><form className="brief-grid tracking-form" onSubmit={onCreate}><label><span>Link title</span><input value={draft.title} onChange={(event) => onDraftChange({ ...draft, title: event.target.value })} placeholder="Estimate request CTA" required /></label><label><span>Destination URL</span><input value={draft.destinationUrl} onChange={(event) => onDraftChange({ ...draft, destinationUrl: event.target.value })} placeholder="https://your-site.com/landing-page" required /></label><label className="wide-field"><span>Journey</span><select value={draft.journeyId} onChange={(event) => onDraftChange({ ...draft, journeyId: event.target.value })}><option value="">None</option>{journeys.map((journey) => <option key={journey.id} value={journey.id}>{journey.title}</option>)}</select></label><button className="wide-action" disabled={working}>{working ? <Loader2 className="spin" /> : <MousePointerClick />}Create tracking link</button></form></section><section className="recommendation-board tracking-links-board"><div className="mini-head"><span>Tracked links</span><strong>{tracking.events.length} events</strong></div>{summaries.length ? summaries.map(({ link, redirects, pageViews, ctas, lastTouch }) => <article className="tracking-link-card" key={link.id}><div className="tracking-link-copy"><div><span>{link.slug}</span><h3>{link.title}</h3><p>{link.destinationUrl}</p></div><div className="tracking-link-stats"><strong>{redirects}</strong><small>redirects</small><strong>{pageViews}</strong><small>page views</small><strong>{ctas}</strong><small>cta clicks</small></div></div><div className="tracking-link-actions"><a className="text-link" href={link.trackingUrl} target="_blank" rel="noreferrer">{link.trackingUrl}</a><small>Last activity {lastTouch ? new Date(lastTouch).toLocaleString() : "not yet"}</small><code>{`<script async src="/tc.js" data-link-slug="${link.slug}"></script>`}</code><button className="text-button compact" type="button" onClick={() => navigator.clipboard?.writeText(link.trackingUrl)}><Copy />Copy link</button></div></article>) : <p>No tracked links yet. Start with one CTA destination and route it through <code>/t/{`{slug}`}</code>.</p>}</section></section>;
 }
 
 function MetricTable({ rows }: { rows: string[][] }) {
