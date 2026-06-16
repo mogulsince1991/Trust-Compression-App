@@ -34,7 +34,7 @@ button {
 .app {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 64px minmax(0, 1fr);
+  grid-template-columns: 92px minmax(0, 1fr);
 }
 
 .role-gate {
@@ -177,10 +177,20 @@ button {
 }
 
 .icon-button {
-  width: 40px;
-  height: 40px;
+  width: 72px;
+  min-height: 52px;
   display: grid;
-  place-items: center;
+  justify-items: center;
+  align-content: center;
+  gap: 4px;
+  padding: 6px 4px;
+}
+
+.icon-button span {
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .icon-button svg,
@@ -656,7 +666,8 @@ p {
 }
 
 .brief-grid input,
-.brief-grid textarea {
+.brief-grid textarea,
+.brief-grid select {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -687,6 +698,80 @@ p {
   background: var(--ink);
   border: 0;
   border-radius: 6px;
+}
+
+.tracking-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.85fr) minmax(0, 1.15fr);
+  gap: 12px;
+}
+
+.tracking-panel,
+.tracking-links-board {
+  min-height: 100%;
+}
+
+.tracking-form {
+  margin-top: 18px;
+}
+
+.tracking-link-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.tracking-link-card:last-child {
+  border-bottom: 0;
+}
+
+.tracking-link-copy {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+}
+
+.tracking-link-copy h3 {
+  margin: 6px 0 8px;
+  font-size: 20px;
+}
+
+.tracking-link-copy p,
+.tracking-link-actions small,
+.tracking-link-actions code {
+  color: rgba(246, 243, 238, 0.62);
+}
+
+.tracking-link-stats {
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  gap: 8px 12px;
+  align-content: start;
+  text-align: right;
+}
+
+.tracking-link-stats strong {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.tracking-link-stats small {
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 10px;
+}
+
+.tracking-link-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.text-link {
+  color: var(--ink);
+  text-decoration: none;
+  overflow-wrap: anywhere;
 }
 
 .workflow-steps {
@@ -942,7 +1027,8 @@ p {
   .role-context,
   .library-shell,
   .workflow-shell,
-  .journey-board {
+  .journey-board,
+  .tracking-layout {
     grid-template-columns: 1fr;
   }
 
@@ -994,12 +1080,18 @@ p {
 
   .side-nav {
     width: 100%;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
   }
 
   .icon-button {
     width: 100%;
     height: 42px;
+    min-height: 42px;
+    padding: 0;
+  }
+
+  .icon-button span {
+    display: none;
   }
 
   .stage {
@@ -1043,8 +1135,14 @@ p {
 
   .brief-grid,
   .share-video,
-  .source-row {
+  .source-row,
+  .tracking-link-copy {
     grid-template-columns: 1fr;
+  }
+
+  .tracking-link-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    text-align: left;
   }
 }
 
