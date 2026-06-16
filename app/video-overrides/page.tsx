@@ -68,7 +68,8 @@ export default function VideoOverridesPage() {
         .select("id,title,source_platform,thumbnail_url,metadata,created_at")
         .eq("workspace_id", id)
         .is("deleted_at", null)
-        .order("created_at", { ascending: false });
+        .order("published_at", { ascending: true, nullsFirst: false })
+        .order("created_at", { ascending: true });
 
       if (!active) return;
       if (videosError) {
