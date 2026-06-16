@@ -1,0 +1,280 @@
+.screen {
+  min-height: 100vh;
+  padding: clamp(20px, 5vw, 56px);
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.07), transparent 28%),
+    linear-gradient(180deg, #060606, #0a0a0a 44%, #080808);
+  color: #f6f3ee;
+}
+
+.hero {
+  max-width: 980px;
+  margin-bottom: 28px;
+}
+
+.hero span,
+.panelHead span,
+.metricCard span,
+.steps li::marker {
+  color: #8e8a83;
+  font-size: 11px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+}
+
+.hero h1 {
+  max-width: 880px;
+  margin: 16px 0 14px;
+  font-size: clamp(42px, 7vw, 88px);
+  line-height: 0.92;
+  font-weight: 500;
+}
+
+.hero p,
+.empty,
+.reportRow small {
+  color: rgba(246, 243, 238, 0.68);
+  line-height: 1.5;
+}
+
+.heroActions,
+.actionRow,
+.kpis {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.linkButton,
+.primary,
+.secondary,
+.ghost {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 0 14px;
+  border-radius: 999px;
+  text-decoration: none;
+  font: inherit;
+  cursor: pointer;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background 180ms ease;
+}
+
+.linkButton,
+.ghost {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #f6f3ee;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.primary {
+  border: 0;
+  color: #050505;
+  background: #f6f3ee;
+}
+
+.secondary {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #f6f3ee;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.linkButton:hover,
+.primary:hover,
+.secondary:hover,
+.ghost:hover {
+  transform: translateY(-1px);
+}
+
+.notice,
+.error {
+  margin: 0 0 18px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.notice {
+  color: #e9e2d6;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.error {
+  color: #ffd4d4;
+  background: rgba(255, 80, 80, 0.08);
+  border-color: rgba(255, 80, 80, 0.24);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.panel,
+.payloadPanel {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.035);
+  backdrop-filter: blur(20px);
+}
+
+.panel {
+  padding: 18px;
+}
+
+.panelHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.panelHead svg,
+.primary svg,
+.secondary svg,
+.ghost svg,
+.loadingBox svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.7;
+}
+
+.steps {
+  margin: 0 0 18px;
+  padding-left: 20px;
+  color: rgba(246, 243, 238, 0.86);
+  line-height: 1.6;
+}
+
+.metricCard {
+  min-width: 0;
+  flex: 1 1 150px;
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.metricCard strong {
+  font-size: clamp(22px, 3vw, 34px);
+  line-height: 1;
+  font-weight: 520;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.formGrid label {
+  display: grid;
+  gap: 7px;
+}
+
+.formGrid label span {
+  color: #8e8a83;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+}
+
+.formGrid input,
+.payload {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  outline: 0;
+  color: #f6f3ee;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.formGrid input {
+  min-height: 42px;
+  padding: 0 12px;
+  border-radius: 10px;
+}
+
+.payloadPanel {
+  padding: 18px;
+  margin-bottom: 14px;
+}
+
+.payload {
+  min-height: 420px;
+  padding: 16px;
+  border-radius: 14px;
+  resize: vertical;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.reportSummary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.reportList {
+  display: grid;
+  gap: 10px;
+}
+
+.reportRow {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.reportRow strong,
+.reportRow span {
+  font-weight: 520;
+}
+
+.loadingBox {
+  min-height: 60vh;
+  display: grid;
+  place-items: center;
+  gap: 12px;
+}
+
+.spin {
+  animation: spin 900ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 900px) {
+  .grid,
+  .formGrid,
+  .reportSummary {
+    grid-template-columns: 1fr;
+  }
+
+  .hero h1 {
+    font-size: clamp(34px, 10vw, 56px);
+  }
+
+  .payload {
+    min-height: 320px;
+  }
+}
