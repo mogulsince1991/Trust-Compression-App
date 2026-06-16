@@ -50,7 +50,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
     const currentMetadata = ((current.metadata as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
     const nextTitle = typeof body.title === "string" ? body.title.trim() : undefined;
-    const nextThumbnailUrl = typeof body.thumbnailUrl === "string" ? body.thumbnailUrl.trim() : undefined;
+    const nextThumbnailUrl = typeof body.thumbnailUrl === "string" ? normalizeThumbnailUrl(body.thumbnailUrl.trim()) : undefined;
 
     if (nextThumbnailUrl && !isSafeExternalImageUrl(nextThumbnailUrl)) {
       return NextResponse.json({ error: "Thumbnail must be an https image link or a Google Drive image link." }, { status: 400 });
@@ -133,4 +133,29 @@ function isSafeExternalImageUrl(value: string) {
   } catch {
     return false;
   }
+}
+
+function normalizeThumbnailUrl(value: string) {
+  if (!value) return "";
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase();
+    if (host === "drive.google.com" || host === "docs.google.com") {
+      const id = getGoogleDriveFileId(url);
+      if (id) return `https://drive.google.com/uc?export=view&id=${encodeURIComponent(id)}`;
+    }
+  } catch {
+    return value;
+  }
+  return value;
+}
+
+function getGoogleDriveFileId(url: URL) {
+  const directId = url.searchParams.get("id");
+  if (directId) return directId;
+
+  const match = url.pathname.match(/\/(?:file\/d|open)\/([^/?#]+)/);
+  if (match?.[1]) return match[1];
+
+  return null;
 }
