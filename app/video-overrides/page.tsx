@@ -110,6 +110,13 @@ export default function VideoOverridesPage() {
       setError(result.error ?? "Could not save override.");
     } else {
       setVideos((current) => current.map((item) => (item.id === video.id ? { ...item, ...result.video } : item)));
+      setDrafts((current) => ({
+        ...current,
+        [video.id]: {
+          title: result.video?.title ?? draft.title,
+          thumbnailUrl: result.video?.thumbnail_url ?? draft.thumbnailUrl
+        }
+      }));
       setNotice("Video display title and thumbnail saved.");
     }
     setWorkingId("");
