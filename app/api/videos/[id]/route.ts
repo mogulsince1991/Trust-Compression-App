@@ -142,7 +142,7 @@ function normalizeThumbnailUrl(value: string) {
     const host = url.hostname.toLowerCase();
     if (host === "drive.google.com" || host === "docs.google.com") {
       const id = getGoogleDriveFileId(url);
-      if (id) return `https://drive.google.com/uc?export=view&id=${encodeURIComponent(id)}`;
+      if (id) return `https://drive.google.com/thumbnail?id=${encodeURIComponent(id)}&sz=w1000`;
     }
   } catch {
     return value;
