@@ -715,6 +715,10 @@ p {
   margin-top: 18px;
 }
 
+.tracking-overview {
+  margin-top: 18px;
+}
+
 .tracking-link-card {
   display: grid;
   gap: 14px;
@@ -766,6 +770,32 @@ p {
 .tracking-link-actions {
   display: grid;
   gap: 10px;
+}
+
+.tracking-link-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.tracking-link-detail-grid div {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.tracking-link-detail-grid strong {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.tracking-link-detail-grid small {
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 10px;
 }
 
 .text-link {
@@ -1015,6 +1045,10 @@ p {
   text-decoration: none;
 }
 
+.metric-row-links {
+  grid-template-columns: minmax(180px, 1.4fr) repeat(7, minmax(0, 1fr));
+}
+
 @media (max-width: 1180px) {
   .role-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1136,7 +1170,9 @@ p {
   .brief-grid,
   .share-video,
   .source-row,
-  .tracking-link-copy {
+  .tracking-link-copy,
+  .tracking-link-detail-grid,
+  .metric-row-links {
     grid-template-columns: 1fr;
   }
 
