@@ -129,6 +129,16 @@ type TrackingState = {
   events: TrackingEventRow[];
 };
 
+type TrackingLinkSummary = {
+  link: TrackingLinkRow;
+  redirects: number;
+  pageViews: number;
+  ctas: number;
+  uniqueVisits: number;
+  uniqueVisitors: number;
+  lastTouch: string | null;
+};
+
 type JourneyDraft = {
   title: string;
   heading: string;
@@ -317,7 +327,7 @@ export function TrustAppIngestion() {
     return () => {
       active = false;
     };
-  }, [isInternal, session, supabase, workspaceBooted]);
+  }, [isInternal, session, supabase]);
 
   async function loadVideos(nextWorkspaceId = workspaceId) {
     if (!supabase || !nextWorkspaceId) return;
@@ -676,4 +686,230 @@ export function TrustAppIngestion() {
       {isInternal && <JourneyTray draft={draft} videos={draftVideos} working={journeyWorking} shareUrl={shareUrl} contacts={contacts} selectedJourneyId={selectedJourneyId} options={options} onDraftChange={setDraft} onGenerate={generateJourney} onPublish={publishJourney} onMove={moveDraftVideo} onRemove={removeFromJourney} onCreateContactShare={createContactShare} />}
     </div>
   );
+}
+
+function RoleGate({ onChoose }: { onChoose: (role: RoleId) => void }) {
+  return <main className="role-gate"><section className="gate-intro"><span>Trust Library</span><h1>Choose your workspace.</h1><p>Start with sources, then turn imported videos into proof journeys.</p></section><section className="role-grid">{(Object.keys(roles) as RoleId[]).map((id) => <button className="role-card" key={id} onClick={() => onChoose(id)}><span>{roles[id].label}</span><h2>{roles[id].title}</h2><p>{roles[id].description}</p><i>Open <ArrowUpRight /></i></button>)}</section></main>;
+}
+
+function AuthGate({ role, supabase, onBack }: { role: (typeof roles)[RoleId]; supabase: ReturnType<typeof createBrowserSupabaseClient>; onBack: () => void }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState("");
+  const [isError, setIsError] = useState(false);
+  const [sending, setSending] = useState(false);
+
+  async function sendMagicLink(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!supabase || !email) return;
+    if (noMagicLinkEmails.has(email.trim().toLowerCase())) {
+      setIsError(true);
+      setMessage("Use password login for this admin account. No magic-link email was sent.");
+      return;
+    }
+    setSending(true);
+    setIsError(false);
+    const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin } });
+    setIsError(Boolean(error));
+    setMessage(error ? error.message : "Check your email. The sign-in link has been sent.");
+    setSending(false);
+  }
+
+  async function signInWithPassword() {
+    if (!supabase || !email || !password) return;
+    setSending(true);
+    setIsError(false);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setIsError(Boolean(error));
+    setMessage(error ? error.message : "Signed in. Opening your workspace...");
+    setSending(false);
+  }
+
+  return <main className="role-gate"><button className="text-button" onClick={onBack}>Back</button><section className="gate-intro"><span>{role.label}</span><h1>Sign in.</h1><p>{role.description}</p></section><form className="prospect-brief" onSubmit={sendMagicLink}><div className="brief-grid"><label className="wide-field"><span>Email</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@company.com" required /></label><label className="wide-field"><span>Password</span><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Password login" minLength={6} /></label></div><button className="wide-action" disabled={sending}>{sending ? <Loader2 className="spin" /> : <ArrowUpRight />}Send magic link</button><button className="text-button" type="button" disabled={sending || !email || password.length < 6} onClick={signInWithPassword} style={{ marginTop: 12 }}>Sign in with password</button>{message && <p style={{ border: "1px solid rgba(255,255,255,.16)", color: isError ? "#ffd4d4" : "#e9e2d6", marginTop: 16, padding: "14px 16px" }}>{message}</p>}</form></main>;
+}
+
+function SourcesView({ sources, importing, onImport, onReimport }: { sources: SourceRow[]; importing: boolean; onImport: (event: FormEvent<HTMLFormElement>) => void; onReimport: (source: SourceRow) => void }) {
+  return <section className="sources-grid"><section className="browse"><div className="collection-top"><div><span>Sources</span><h1>Import public video sources</h1></div><p>YouTube works now. Public Drive folders work when GOOGLE_DRIVE_API_KEY is set in Vercel.</p></div><form className="prospect-brief" onSubmit={onImport}><div className="brief-grid"><label className="wide-field"><span>Public source URL</span><input name="sourceUrl" required placeholder="YouTube channel, playlist, video, or public Drive folder URL" /></label></div><button className="wide-action" disabled={importing}>{importing ? <Loader2 className="spin" /> : <Import />}Import source</button></form></section><aside className="source-panel"><div className="mini-head"><span>Connected sources</span><strong>{sources.length}</strong></div><div className="source-list">{sources.map((source) => <article className="source-card" key={source.id}><div><span>{source.platform}</span><strong>{source.account_label ?? source.platform}</strong><small>{source.status ?? "unknown"} {source.last_synced_at ? ` / ${new Date(source.last_synced_at).toLocaleDateString()}` : ""}</small>{source.error && <p>{source.error}</p>}<small>Imported {source.metadata?.imported ?? 0} / Updated {source.metadata?.updated ?? 0} / Flagged {source.metadata?.duplicateCandidates ?? 0}</small></div><button className="icon-mini" disabled={importing} onClick={() => onReimport(source)} aria-label="Reimport source"><RefreshCw /></button></article>)}</div></aside></section>;
+}
+
+function LibraryFiltersBar({ filters, options, onChange }: { filters: LibraryFilters; options: ReturnType<typeof buildOptions>; onChange: (filters: LibraryFilters) => void }) {
+  return <section className="filter-bar"><FilterSelect label="Source" value={filters.platform} options={options.platforms} onChange={(platform) => onChange({ ...filters, platform })} /><FilterSelect label="Date" value={filters.date} options={["last_7", "last_30", "older"]} labels={{ last_7: "Last 7 days", last_30: "Last 30 days", older: "Older" }} onChange={(date) => onChange({ ...filters, date })} /><FilterSelect label="Category" value={filters.category} options={options.categories} onChange={(category) => onChange({ ...filters, category })} /><FilterSelect label="Funnel" value={filters.funnelStage} options={options.funnelStages} onChange={(funnelStage) => onChange({ ...filters, funnelStage })} /><FilterSelect label="Proof" value={filters.proofType} options={options.proofTypes} onChange={(proofType) => onChange({ ...filters, proofType })} /><FilterSelect label="Offer" value={filters.offer} options={options.offers} onChange={(offer) => onChange({ ...filters, offer })} /><FilterSelect label="Buyer" value={filters.buyer} options={options.buyers} onChange={(buyer) => onChange({ ...filters, buyer })} /><button className="text-button compact" onClick={() => onChange(emptyFilters)}>Clear</button></section>;
+}
+
+function FilterSelect({ label, value, options, labels, onChange }: { label: string; value: string; options: string[]; labels?: Record<string, string>; onChange: (value: string) => void }) {
+  return <label className="filter-select"><span>{label}</span><select value={value} onChange={(event) => onChange(event.target.value)}><option value="all">All</option>{options.map((option) => <option key={option} value={option}>{labels?.[option] ?? option}</option>)}</select></label>;
+}
+
+function LibraryConfigurator({ videos, selected, saving, options, onSelect, onAdd, onArchive, onSaveContext }: { videos: DbVideo[]; selected: DbVideo | null; saving: boolean; options: ReturnType<typeof buildOptions>; onSelect: (video: DbVideo) => void; onAdd: (video: DbVideo) => void; onArchive: (video: DbVideo) => void; onSaveContext: (video: DbVideo, context: VideoContext) => void }) {
+  const stripVideos = videos.length > 5 ? [...videos, ...videos] : videos;
+  if (!videos.length) return <section className="prospect-brief"><span>No videos yet</span><h2>Start by importing a public source.</h2><p>Paste a YouTube video or a public Drive folder to build the library.</p></section>;
+  return <section className="library-configurator"><div className="config-topline"><span>{videos.length} videos</span><p>Filter, scroll sideways, select a video, then add searchable context or send it to a journey.</p></div><section className="library-strip" aria-label="Video library selector">{stripVideos.map((video, index) => <button className={selected?.id === video.id ? "strip-card is-selected" : "strip-card"} key={`${video.id}-${index}`} onClick={() => onSelect(video)}><span className="strip-thumb" style={{ backgroundImage: `url(${video.thumbnail_url ?? ""})` }} /><strong>{video.title}</strong><small>{video.sales_category ?? video.source_platform} / {formatDuration(video.duration_seconds)}</small></button>)}</section><BottomPlayer selected={selected} saving={saving} options={options} onAdd={onAdd} onArchive={onArchive} onSaveContext={onSaveContext} /></section>;
+}
+
+function BottomPlayer({ selected, saving, options, onAdd, onArchive, onSaveContext }: { selected: DbVideo | null; saving: boolean; options: ReturnType<typeof buildOptions>; onAdd: (video: DbVideo) => void; onArchive: (video: DbVideo) => void; onSaveContext: (video: DbVideo, context: VideoContext) => void }) {
+  if (!selected) return null;
+  return <section className="library-player-dock"><div className="bottom-video">{selected.embed_url ? <iframe src={selected.embed_url} title={selected.title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen /> : <div style={{ backgroundImage: `url(${selected.thumbnail_url ?? ""})` }} />}</div><section className="bottom-context"><div className="mini-head"><span>{selected.source_platform}</span><div className="inline-actions"><button className="text-button compact" onClick={() => onAdd(selected)}><Plus />Journey</button><button className="text-button compact danger" onClick={() => onArchive(selected)}><Archive />Archive</button></div></div><h2>{selected.title}</h2><ContextEditor key={selected.id} video={selected} saving={saving} options={options} onSave={onSaveContext} /></section></section>;
+}
+
+function ContextEditor({ video, saving, options, onSave }: { video: DbVideo; saving: boolean; options: ReturnType<typeof buildOptions>; onSave: (video: DbVideo, context: VideoContext) => void }) {
+  const context = video.metadata?.customContext ?? {};
+  const [form, setForm] = useState<VideoContext>({ notes: context.notes ?? "", targetBuyer: context.targetBuyer ?? "", objections: context.objections ?? "", offer: context.offer ?? "", suggestedUse: video.suggested_use ?? "", salesCategory: video.sales_category ?? video.proof_type ?? "Education", funnelStage: video.funnel_stage ?? video.buying_stage ?? "consideration", proofType: video.proof_type ?? video.sales_category ?? "", buyingStage: video.buying_stage ?? video.funnel_stage ?? "", tags: (video.tags ?? []).join(", ") });
+  return <form className="context-form" onSubmit={(event) => { event.preventDefault(); onSave(video, form); }}><Datalists options={options} /><label className="wide-field"><span>Search context</span><textarea value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder="What this video proves, when to use it, and what a rep should search to find it." /></label><div className="brief-grid compact-grid"><ContextInput label="Buyer" list="buyers" value={form.targetBuyer} onChange={(targetBuyer) => setForm({ ...form, targetBuyer })} /><ContextInput label="Objections" list="objections" value={form.objections} onChange={(objections) => setForm({ ...form, objections })} /><ContextInput label="Offer" list="offers" value={form.offer} onChange={(offer) => setForm({ ...form, offer })} /><ContextInput label="Use case" list="uses" value={form.suggestedUse} onChange={(suggestedUse) => setForm({ ...form, suggestedUse })} /><ContextInput label="Sales category" list="categories" value={form.salesCategory} onChange={(salesCategory) => setForm({ ...form, salesCategory })} /><ContextInput label="Funnel stage" list="funnelStages" value={form.funnelStage} onChange={(funnelStage) => setForm({ ...form, funnelStage })} /></div><label className="wide-field"><span>Tags</span><input list="tags" value={form.tags} onChange={(event) => setForm({ ...form, tags: event.target.value })} placeholder="comma, separated, tags" /></label><button className="wide-action" disabled={saving}>{saving ? <Loader2 className="spin" /> : <Save />}Save context</button></form>;
+}
+
+function ContextInput({ label, list, value, onChange }: { label: string; list: string; value: string; onChange: (value: string) => void }) {
+  return <label><span>{label}</span><input list={list} value={value} onChange={(event) => onChange(event.target.value)} /></label>;
+}
+
+function Datalists({ options }: { options: ReturnType<typeof buildOptions> }) {
+  const lists: Array<[string, string[]]> = [["buyers", options.buyers], ["objections", options.objections], ["offers", options.offers], ["uses", options.uses], ["categories", options.categories], ["funnelStages", options.funnelStages], ["tags", options.tags], ["folders", options.folderNames]];
+  return <>{lists.map(([id, values]) => <datalist id={id} key={id}>{values.map((value) => <option key={value} value={value} />)}</datalist>)}</>;
+}
+
+function JourneysView({ journeys, folders, draftVideos, groups, videos, shareUrl, onEdit, onAdd }: { journeys: JourneySummary[]; folders: FolderRow[]; draftVideos: DbVideo[]; groups: SmartGroup[]; videos: DbVideo[]; shareUrl?: string; onEdit: (journey: JourneySummary) => void; onAdd: (video: DbVideo) => void }) {
+  return <section className="journey-workspace"><aside className="saved-journeys"><div className="mini-head"><span>Saved journeys</span><strong>{journeys.length}</strong></div>{journeys.map((journey) => <article className="saved-journey" key={journey.id}><div><span>{folders.find((folder) => folder.id === journey.folderId)?.name ?? "Unfoldered"}</span><strong>{journey.title}</strong><small>{journey.videoIds.length} videos / {journey.isPublic ? "Published" : "Draft"}</small></div><button className="text-button compact" onClick={() => onEdit(journey)}>Edit</button></article>)}</aside><SequenceView title={draftVideos.length ? "Current journey" : "Journey draft"} groups={groups} videos={draftVideos.length ? draftVideos : videos.slice(0, 6)} onAdd={onAdd} shareUrl={shareUrl} /></section>;
+}
+
+function MetricsView({ metrics, videos, sources, journeys, contacts, tracking }: { metrics: MetricsState; videos: DbVideo[]; sources: SourceRow[]; journeys: JourneySummary[]; contacts: ContactRow[]; tracking: TrackingState }) {
+  const [mode, setMode] = useState<MetricMode>("overview");
+  const opens = metrics.views.filter((event) => event.event_type === "opened");
+  const starts = metrics.views.filter((event) => event.event_type === "video_started");
+  const completions = metrics.views.filter((event) => event.event_type === "video_completed");
+  const ctas = metrics.views.filter((event) => event.event_type === "cta_clicked");
+  const redirects = tracking.events.filter((event) => event.eventType === "redirect");
+  const linkPageViews = tracking.events.filter((event) => event.eventType === "page_view");
+  const linkCtas = tracking.events.filter((event) => event.eventType === "cta_click");
+  const linkSummaries = buildTrackingLinkSummaries(tracking.links, tracking.events);
+  const viewers = new Set(metrics.views.map((event) => event.viewer_label || event.metadata?.viewerId).filter(Boolean));
+  const journeyRows = journeys.map((journey) => ({ journey, opens: opens.filter((event) => event.journey_id === journey.id).length, starts: starts.filter((event) => event.journey_id === journey.id).length, ctas: ctas.filter((event) => event.journey_id === journey.id).length }));
+  const videoRows = videos.map((video) => ({ video, starts: starts.filter((event) => event.video_id === video.id).length, ctas: ctas.filter((event) => event.video_id === video.id).length })).sort((a, b) => b.starts - a.starts).slice(0, 10);
+  const contactEvents = metrics.views.filter((event) => event.metadata?.contactId);
+  return <section className="metrics-board"><div className="metric-tabs">{(["overview", "journeys", "videos", "contacts", "social", "links"] as MetricMode[]).map((item) => <button key={item} className={mode === item ? "is-active" : ""} onClick={() => setMode(item)}>{item}</button>)}</div>{mode === "overview" && <div className="metric-grid"><MetricCard label="Journey opens" value={String(opens.length)} detail="Public or contact-specific journey page opens." /><MetricCard label="Video starts" value={String(starts.length)} detail="Videos started inside journeys." /><MetricCard label="Tracked redirects" value={String(redirects.length)} detail="First-click hits through /t/{slug}." /><MetricCard label="Tracked page views" value={String(linkPageViews.length)} detail="Destination-site page views from tc.js." /><MetricCard label="CTA clicks" value={String(ctas.length + linkCtas.length)} detail={`${rate(ctas.length + linkCtas.length, opens.length + linkPageViews.length)} click-through across journeys and tracked destinations.`} /><MetricCard label="Known viewers" value={String(viewers.size)} detail="Anonymous viewer IDs plus future contacts." /></div>}{mode === "journeys" && <MetricTable rows={journeyRows.map((row) => [row.journey.title, `${row.opens} opens`, `${row.starts} starts`, `${row.ctas} CTA`])} />}{mode === "videos" && <MetricTable rows={videoRows.map((row) => [row.video.title, `${row.starts} starts`, `${row.ctas} CTA`, row.video.sales_category ?? row.video.source_platform])} />}{mode === "contacts" && <div className="metric-grid"><MetricCard label="Contacts" value={String(contacts.length)} detail="Manual contacts now; GHL import later." /><MetricCard label="Contact events" value={String(contactEvents.length)} detail="Events attached to contact-specific journey links." /><MetricCard label="Sent journeys" value={String(new Set(contactEvents.map((event) => event.metadata?.sendId).filter(Boolean)).size)} detail="Tracked contact-specific links with activity." /><MetricCard label="CTA from contacts" value={String(ctas.filter((event) => event.metadata?.contactId).length)} detail="CTA clicks from known sends." /></div>}{mode === "social" && <div className="metric-grid"><MetricCard label="Sources" value={String(sources.length)} detail="Connected public/imported sources." /><MetricCard label="Videos" value={String(videos.length)} detail="Imported workspace videos." /><MetricCard label="Drive sources" value={String(sources.filter((source) => source.platform === "google_drive").length)} detail="Public Drive folders." /><MetricCard label="YouTube sources" value={String(sources.filter((source) => source.platform === "youtube").length)} detail="Videos, playlists, channels, RSS/API imports." /></div>}{mode === "links" && <LinkMetricsTable summaries={linkSummaries} />}</section>;
+}
+
+function LinkTrackingView({ draft, journeys, tracking, working, onDraftChange, onCreate }: { draft: TrackingDraft; journeys: JourneySummary[]; tracking: TrackingState; working: boolean; onDraftChange: (draft: TrackingDraft) => void; onCreate: (event: FormEvent<HTMLFormElement>) => void }) {
+  const summaries = buildTrackingLinkSummaries(tracking.links, tracking.events);
+  const totalUniqueVisits = new Set(tracking.events.map((event) => event.visitId).filter(Boolean)).size;
+  const totalUniqueVisitors = new Set(tracking.events.map((event) => event.visitorId || event.sessionId).filter(Boolean)).size;
+
+  return <section className="tracking-layout"><section className="prospect-brief tracking-panel"><div className="mini-head"><span>Link tracking</span><strong>{tracking.links.length} links</strong></div><p>Create tracked redirects, connect them to journeys when needed, and use <code>/tc.js</code> on destination pages for first-click attribution plus page-view and CTA signals.</p><div className="metric-grid tracking-overview"><MetricCard label="Tracked links" value={String(tracking.links.length)} detail="Active redirect links in this workspace." /><MetricCard label="Unique visits" value={String(totalUniqueVisits)} detail="Distinct redirect visits across all tracked links." /><MetricCard label="Unique visitors" value={String(totalUniqueVisitors)} detail="Distinct browser identities seen across tracked links." /><MetricCard label="CTA rate" value={rate(tracking.events.filter((event) => event.eventType === "cta_click").length, tracking.events.filter((event) => event.eventType === "page_view").length)} detail="Destination CTA clicks divided by destination page views." /></div><form className="brief-grid tracking-form" onSubmit={onCreate}><label><span>Link title</span><input value={draft.title} onChange={(event) => onDraftChange({ ...draft, title: event.target.value })} placeholder="Estimate request CTA" required /></label><label><span>Destination URL</span><input value={draft.destinationUrl} onChange={(event) => onDraftChange({ ...draft, destinationUrl: event.target.value })} placeholder="https://your-site.com/landing-page" required /></label><label className="wide-field"><span>Journey</span><select value={draft.journeyId} onChange={(event) => onDraftChange({ ...draft, journeyId: event.target.value })}><option value="">None</option>{journeys.map((journey) => <option key={journey.id} value={journey.id}>{journey.title}</option>)}</select></label><button className="wide-action" disabled={working}>{working ? <Loader2 className="spin" /> : <MousePointerClick />}Create tracking link</button></form></section><section className="recommendation-board tracking-links-board"><div className="mini-head"><span>Tracked links</span><strong>{tracking.events.length} events</strong></div>{summaries.length ? summaries.map(({ link, redirects, pageViews, ctas, uniqueVisits, uniqueVisitors, lastTouch }) => <article className="tracking-link-card" key={link.id}><div className="tracking-link-copy"><div><span>{link.slug}</span><h3>{link.title}</h3><p>{link.destinationUrl}</p></div><div className="tracking-link-stats"><strong>{redirects}</strong><small>redirects</small><strong>{pageViews}</strong><small>page views</small><strong>{ctas}</strong><small>cta clicks</small></div></div><div className="tracking-link-detail-grid"><div><strong>{uniqueVisits}</strong><small>unique visits</small></div><div><strong>{uniqueVisitors}</strong><small>unique visitors</small></div><div><strong>{rate(pageViews, redirects)}</strong><small>landing rate</small></div><div><strong>{rate(ctas, pageViews)}</strong><small>cta rate</small></div></div><div className="tracking-link-actions"><a className="text-link" href={link.trackingUrl} target="_blank" rel="noreferrer">{link.trackingUrl}</a><small>Last activity {lastTouch ? new Date(lastTouch).toLocaleString() : "not yet"}</small><code>{`<script async src="/tc.js" data-link-slug="${link.slug}"></script>`}</code><button className="text-button compact" type="button" onClick={() => navigator.clipboard?.writeText(link.trackingUrl)}><Copy />Copy link</button></div></article>) : <p>No tracked links yet. Start with one CTA destination and route it through <code>/t/{`{slug}`}</code>.</p>}</section></section>;
+}
+
+function MetricTable({ rows }: { rows: string[][] }) {
+  return <section className="metric-list">{rows.length ? rows.map((row, index) => <article className="metric-row" key={`${row[0]}-${index}`}>{row.map((cell, cellIndex) => <span key={cellIndex}>{cell}</span>)}</article>) : <p>No metrics yet.</p>}</section>;
+}
+
+function LinkMetricsTable({ summaries }: { summaries: TrackingLinkSummary[] }) {
+  return <section className="metric-list">{summaries.length ? summaries.map(({ link, redirects, pageViews, ctas, uniqueVisits, uniqueVisitors, lastTouch }) => <article className="metric-row metric-row-links" key={link.id}><span>{link.title}</span><span>{redirects} redirects</span><span>{pageViews} views</span><span>{ctas} CTA</span><span>{uniqueVisits} visits</span><span>{uniqueVisitors} visitors</span><span>{rate(ctas, pageViews)} CTA rate</span><span>{lastTouch ? new Date(lastTouch).toLocaleDateString() : "No activity"}</span></article>) : <p>No metrics yet.</p>}</section>;
+}
+
+function MetricCard({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return <article className="metric-card"><span>{label}</span><strong>{value}</strong><p>{detail}</p></article>;
+}
+
+function SequenceView({ title, videos, groups, onAdd, shareUrl }: { title: string; videos: DbVideo[]; groups: SmartGroup[]; onAdd: (video: DbVideo) => void; shareUrl?: string }) {
+  return <section className="recommendation-board"><div className="mini-head"><span>{title}</span>{shareUrl && <a className="text-link" href={shareUrl} target="_blank" rel="noreferrer">Open share link</a>}</div>{groups.length > 0 && <SmartGroups groups={groups.slice(0, 3)} onSelect={() => undefined} onAdd={onAdd} compact />}<div>{videos.map((video, index) => <div className="sequence-item" key={video.id}><span>{index + 1}</span><div><strong>{video.title}</strong><small>{video.sales_category ?? video.source_platform} / {formatDuration(video.duration_seconds)}</small></div><button className="icon-mini" onClick={() => onAdd(video)} aria-label={`Add ${video.title} to journey`}><Plus /></button></div>)}</div></section>;
+}
+
+function SmartGroups({ groups, onSelect, onAdd, compact = false }: { groups: SmartGroup[]; onSelect: (video: DbVideo) => void; onAdd: (video: DbVideo) => void; compact?: boolean }) {
+  return <section className={compact ? "smart-groups is-compact" : "smart-groups"}>{groups.map((group) => <article className="smart-group" key={group.key}><div><span>Recommended path</span><h3>{group.title}</h3></div><div className="smart-strip">{group.videos.slice(0, 4).map((video) => <button className="smart-video" key={video.id} onClick={() => onSelect(video)}><span style={{ backgroundImage: `url(${video.thumbnail_url ?? ""})` }} /><strong>{video.title}</strong><small>{video.funnel_stage ?? video.buying_stage ?? "Library"}</small><i onClick={(event) => { event.stopPropagation(); onAdd(video); }}><Plus /></i></button>)}</div></article>)}</section>;
+}
+
+function JourneyTray({ draft, videos, working, shareUrl, contacts, selectedJourneyId, options, onDraftChange, onGenerate, onPublish, onMove, onRemove, onCreateContactShare }: { draft: JourneyDraft; videos: DbVideo[]; working: boolean; shareUrl: string; contacts: ContactRow[]; selectedJourneyId: string | null; options: ReturnType<typeof buildOptions>; onDraftChange: (draft: JourneyDraft) => void; onGenerate: () => void; onPublish: () => void; onMove: (videoId: string, direction: -1 | 1) => void; onRemove: (videoId: string) => void; onCreateContactShare: (contact: { contactId?: string; name?: string; email?: string; company?: string }) => void }) {
+  const [open, setOpen] = useState(false);
+  const [contactId, setContactId] = useState("");
+  const [contact, setContact] = useState({ name: "", email: "", company: "" });
+  return <aside className={open ? "journey-tray is-open" : "journey-tray"}><button className="tray-tab" onClick={() => setOpen((current) => !current)}><Route /><span>{videos.length} in journey</span></button><div className="tray-body"><Datalists options={options} /><div className="mini-head"><span>{selectedJourneyId ? "Edit journey" : "Draft journey"}</span><button className="icon-mini" onClick={() => setOpen(false)} aria-label="Close journey tray"><ChevronDown /></button></div><label><span>Title</span><input value={draft.title} onChange={(event) => onDraftChange({ ...draft, title: event.target.value })} placeholder="Proof journey" /></label><label><span>Folder</span><input list="folders" value={draft.folderName} onChange={(event) => onDraftChange({ ...draft, folderName: event.target.value })} placeholder="Pricing objections" /></label><label><span>Heading</span><input value={draft.heading} onChange={(event) => onDraftChange({ ...draft, heading: event.target.value })} placeholder="A focused proof path." /></label><label><span>Description</span><textarea value={draft.description} onChange={(event) => onDraftChange({ ...draft, description: event.target.value })} placeholder="What this journey helps the viewer understand." /></label><div className="brief-grid"><label><span>CTA</span><input value={draft.ctaLabel} onChange={(event) => onDraftChange({ ...draft, ctaLabel: event.target.value })} /></label><label><span>CTA URL</span><input value={draft.ctaUrl} onChange={(event) => onDraftChange({ ...draft, ctaUrl: event.target.value })} placeholder="https://..." /></label></div><div className="tray-list">{videos.map((video, index) => <article className="tray-item" key={video.id}><span>{index + 1}</span><strong>{video.title}</strong><button className="icon-mini" disabled={index === 0} onClick={() => onMove(video.id, -1)} aria-label="Move up"><ChevronUp /></button><button className="icon-mini" disabled={index === videos.length - 1} onClick={() => onMove(video.id, 1)} aria-label="Move down"><ChevronDown /></button><button className="icon-mini" onClick={() => onRemove(video.id)} aria-label="Remove video"><Trash2 /></button></article>)}</div><div className="tray-actions"><button className="seed-button" disabled={working || !videos.length} onClick={onGenerate}>{working ? <Loader2 className="spin" /> : <Wand2 />}Generate</button><button className="wide-action" disabled={working || !videos.length} onClick={onPublish}>{working ? <Loader2 className="spin" /> : <Share2 />}{selectedJourneyId ? "Update" : "Publish"}</button></div>{selectedJourneyId && <section className="contact-share"><span>Send to contact</span><select value={contactId} onChange={(event) => setContactId(event.target.value)}><option value="">New contact</option>{contacts.map((item) => <option value={item.id} key={item.id}>{item.name || item.email || "Unnamed"}</option>)}</select>{!contactId && <><input value={contact.name} onChange={(event) => setContact({ ...contact, name: event.target.value })} placeholder="Contact name" /><input value={contact.email} onChange={(event) => setContact({ ...contact, email: event.target.value })} placeholder="email@company.com" /><input value={contact.company} onChange={(event) => setContact({ ...contact, company: event.target.value })} placeholder="Company" /></>}<button className="seed-button" disabled={working} onClick={() => onCreateContactShare(contactId ? { contactId } : contact)}><Send />Create link</button></section>}{shareUrl && <a className="share-link" href={shareUrl} target="_blank" rel="noreferrer">{shareUrl}</a>}</div></aside>;
+}
+
+function SimpleGate({ title, body, onBack }: { title: string; body: string; onBack: () => void }) {
+  return <main className="role-gate"><button className="text-button" onClick={onBack}>Back</button><section className="gate-intro"><span>Setup</span><h1>{title}</h1><p>{body}</p></section></main>;
+}
+
+function formatDuration(seconds: number | null) {
+  if (!seconds) return "--";
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function filterVideos(videos: DbVideo[], query: string, filters: LibraryFilters) {
+  return videos.filter((video) => {
+    const context = video.metadata?.customContext ?? {};
+    const haystack = [video.title, video.source_platform, video.summary, video.suggested_use, video.proof_type, video.buying_stage, video.sales_category, video.funnel_stage, context.notes, context.targetBuyer, context.objections, context.offer, ...video.tags].join(" ").toLowerCase();
+    if (query && !haystack.includes(query.toLowerCase())) return false;
+    if (filters.platform !== "all" && video.source_platform !== filters.platform) return false;
+    if (filters.category !== "all" && (video.sales_category ?? video.proof_type) !== filters.category) return false;
+    if (filters.funnelStage !== "all" && (video.funnel_stage ?? video.buying_stage) !== filters.funnelStage) return false;
+    if (filters.proofType !== "all" && video.proof_type !== filters.proofType) return false;
+    if (filters.offer !== "all" && context.offer !== filters.offer) return false;
+    if (filters.buyer !== "all" && context.targetBuyer !== filters.buyer) return false;
+    if (filters.date !== "all") {
+      const dateValue = video.published_at ?? video.created_at;
+      if (!dateValue) return false;
+      const age = Date.now() - new Date(dateValue).getTime();
+      const days = age / 86400000;
+      if (filters.date === "last_7" && days > 7) return false;
+      if (filters.date === "last_30" && days > 30) return false;
+      if (filters.date === "older" && days <= 30) return false;
+    }
+    return true;
+  });
+}
+
+function buildOptions(videos: DbVideo[], folders: FolderRow[]) {
+  const contextValues = (key: string) => unique(videos.map((video) => video.metadata?.customContext?.[key]).filter(Boolean));
+  return {
+    platforms: unique(videos.map((video) => video.source_platform)),
+    categories: unique(videos.map((video) => video.sales_category ?? video.proof_type).filter(Boolean)),
+    funnelStages: unique(videos.map((video) => video.funnel_stage ?? video.buying_stage).filter(Boolean)),
+    proofTypes: unique(videos.map((video) => video.proof_type).filter(Boolean)),
+    buyers: contextValues("targetBuyer"),
+    objections: contextValues("objections"),
+    offers: contextValues("offer"),
+    uses: unique(videos.map((video) => video.suggested_use).filter(Boolean)),
+    tags: unique(videos.flatMap((video) => video.tags ?? [])),
+    folderNames: unique(folders.map((folder) => folder.name))
+  } as Record<string, string[]>;
+}
+
+function buildSmartGroups(videos: DbVideo[]): SmartGroup[] {
+  const buckets = videos.reduce<Record<string, DbVideo[]>>((groups, video) => {
+    const category = video.sales_category ?? video.proof_type ?? "Education";
+    groups[category] = [...(groups[category] ?? []), video];
+    return groups;
+  }, {});
+  const titleMap: Record<string, string> = { Objection: "Handle the hard questions", Testimonial: "Build trust with customer proof", "Product proof": "Show the work clearly", Education: "Teach before the call", "Founder story": "Make the company feel human", "Case study": "Show the transformation", FAQ: "Answer the obvious questions", Comparison: "Help buyers compare options", "Risk reversal": "Lower the perceived risk" };
+  return Object.entries(buckets).map(([key, groupVideos]) => ({ key, title: titleMap[key] ?? key, videos: groupVideos })).sort((a, b) => b.videos.length - a.videos.length).slice(0, 6);
+}
+
+function unique(values: Array<string | null | undefined>) {
+  return Array.from(new Set(values.map((value) => String(value ?? "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+}
+
+function rate(value: number, total: number) {
+  if (!total) return "0%";
+  return `${Math.round((value / total) * 100)}%`;
+}
+
+function buildTrackingLinkSummaries(links: TrackingLinkRow[], events: TrackingEventRow[]): TrackingLinkSummary[] {
+  return links.map((link) => {
+    const linkEvents = events.filter((event) => event.trackingLinkId === link.id);
+    const redirects = linkEvents.filter((event) => event.eventType === "redirect").length;
+    const pageViews = linkEvents.filter((event) => event.eventType === "page_view").length;
+    const ctas = linkEvents.filter((event) => event.eventType === "cta_click").length;
+    const uniqueVisits = new Set(linkEvents.map((event) => event.visitId).filter(Boolean)).size;
+    const uniqueVisitors = new Set(linkEvents.map((event) => event.visitorId || event.sessionId).filter(Boolean)).size;
+    const lastTouch = [...linkEvents]
+      .sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime())[0]
+      ?.createdAt ?? link.createdAt;
+
+    return {
+      link,
+      redirects,
+      pageViews,
+      ctas,
+      uniqueVisits,
+      uniqueVisitors,
+      lastTouch
+    };
+  }).sort((a, b) => new Date(b.lastTouch ?? 0).getTime() - new Date(a.lastTouch ?? 0).getTime());
 }
