@@ -29,21 +29,41 @@ export async function GET(request: Request, { params }: RouteContext) {
   const metadata = sanitizeMetadata({
     source: "redirect",
     query: sanitizeSearchParams(requestUrl),
-    userAgent: request.headers.get("user-agent")?.slice(0, 240) ?? null
+    userAgent: request.headers.get("user-agent")?.slice(0, 240) ?? null,
+    tracking: {
+      eventLabel: "Tracked redirect",
+      occurredAt: new Date().toISOString()
+    }
   });
+  const occurredAt = typeof metadata?.tracking?.occurredAt === "string" ? metadata.tracking.occurredAt : new Date().toISOString();
 
-  const { error: eventError } = await supabase.from("tracking_events").insert({
+  const richInsert = await supabase.from("tracking_events").insert({
     workspace_id: link.workspace_id,
     tracking_link_id: link.id,
     journey_id: link.journey_id,
     event_type: "redirect",
+    event_label: "Tracked redirect",
+    occurred_at: occurredAt,
     visit_id: visitId,
     page_url: requestUrl.toString().slice(0, 1800),
     referrer_url: request.headers.get("referer")?.slice(0, 1800) ?? null,
     metadata: metadata ?? {}
   });
 
-  if (eventError) return NextResponse.json({ error: eventError.message }, { status: 500 });
+  if (richInsert.error) {
+    const legacyInsert = await supabase.from("tracking_events").insert({
+      workspace_id: link.workspace_id,
+      tracking_link_id: link.id,
+      journey_id: link.journey_id,
+      event_type: "redirect",
+      visit_id: visitId,
+      page_url: requestUrl.toString().slice(0, 1800),
+      referrer_url: request.headers.get("referer")?.slice(0, 1800) ?? null,
+      metadata: metadata ?? {}
+    });
+
+    if (legacyInsert.error) return NextResponse.json({ error: legacyInsert.error.message }, { status: 500 });
+  }
 
   const destination = appendTrackingParams(link.destination_url, {
     slug: link.slug,
