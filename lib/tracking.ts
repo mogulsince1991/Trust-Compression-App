@@ -2,7 +2,16 @@ export const TRACKING_PARAM_LINK = "tc_link";
 export const TRACKING_PARAM_VISIT = "tc_visit";
 export const TRACKING_PARAM_JOURNEY = "tc_journey";
 
-export const trackingEventTypes = ["redirect", "page_view", "cta_click"] as const;
+export const trackingEventTypes = [
+  "redirect",
+  "page_view",
+  "cta_click",
+  "form_submit",
+  "opt_in",
+  "booking",
+  "purchase",
+  "custom"
+] as const;
 
 export type TrackingEventType = (typeof trackingEventTypes)[number];
 
@@ -27,7 +36,9 @@ export function buildTrackingSlug(title: string, seed?: string) {
 }
 
 export function normalizeDestinationUrl(value: string) {
-  const url = new URL(value);
+  const trimmed = value.trim();
+  const withProtocol = /^[a-z][a-z\d+\-.]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  const url = new URL(withProtocol);
   if (!["http:", "https:"].includes(url.protocol)) {
     throw new Error("Destination URL must start with http:// or https://");
   }
@@ -45,6 +56,33 @@ export function appendTrackingParams(destinationUrl: string, tracking: { slug: s
 
 export function sanitizeText(value: string | null | undefined, maxLength = 240) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : null;
+}
+
+export function sanitizeCurrency(value: string | null | undefined) {
+  const next = sanitizeText(value, 12)?.toUpperCase() ?? null;
+  if (!next) return null;
+  return /^[A-Z]{3}$/.test(next) ? next : null;
+}
+
+export function sanitizeNumber(value: unknown, { min = 0, max = 1_000_000_000 } = {}) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  const next = Math.round(value * 100) / 100;
+  if (next < min || next > max) return null;
+  return next;
+}
+
+export function sanitizeTimestamp(value: string | null | undefined) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  const now = Date.now();
+  const maxFutureOffsetMs = 5 * 60 * 1000;
+  const maxAgeMs = 180 * 24 * 60 * 60 * 1000;
+
+  if (parsed.getTime() > now + maxFutureOffsetMs) return null;
+  if (parsed.getTime() < now - maxAgeMs) return null;
+  return parsed.toISOString();
 }
 
 export function sanitizeUrl(value: string | null | undefined, maxLength = 1800) {
