@@ -35,7 +35,8 @@ export async function GET(request: Request, { params }: RouteContext) {
       occurredAt: new Date().toISOString()
     }
   });
-  const occurredAt = typeof metadata?.tracking?.occurredAt === "string" ? metadata.tracking.occurredAt : new Date().toISOString();
+  const trackingMetadata = metadata?.tracking as Record<string, unknown> | undefined;
+  const occurredAt = typeof trackingMetadata?.occurredAt === "string" ? trackingMetadata.occurredAt : new Date().toISOString();
 
   const richInsert = await supabase.from("tracking_events").insert({
     workspace_id: link.workspace_id,
