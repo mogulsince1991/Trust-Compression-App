@@ -53,7 +53,7 @@ export async function GET(request: Request) {
           .limit(2000)
       : null;
 
-    const events = richEventsResult.data ?? fallbackEventsResult?.data ?? [];
+    const events = (richEventsResult.data ?? fallbackEventsResult?.data ?? []) as Array<Record<string, any>>;
     const eventsError = richEventsResult.error && fallbackEventsResult?.error ? fallbackEventsResult.error : null;
     if (eventsError) return NextResponse.json({ error: eventsError.message }, { status: 500 });
 
@@ -64,7 +64,7 @@ export async function GET(request: Request) {
       .order("last_seen_at", { ascending: false })
       .limit(1000);
 
-    const identities = richIdentitiesResult.error ? [] : richIdentitiesResult.data ?? [];
+    const identities = (richIdentitiesResult.error ? [] : richIdentitiesResult.data ?? []) as Array<Record<string, any>>;
     const origin = url.origin;
 
     return NextResponse.json({
