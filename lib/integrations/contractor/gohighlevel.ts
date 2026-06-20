@@ -2,8 +2,16 @@ const DEFAULT_GHL_API_BASE_URL = "https://services.leadconnectorhq.com";
 const DEFAULT_GHL_CONTACTS_PATH = "/contacts/";
 const DEFAULT_GHL_VERSION = "2021-07-28";
 
-export async function fetchGoHighLevelSnapshot(account: any) {
-  const leads = await fetchGoHighLevelContacts(account, { limit: 500, maxPages: 5 });
+export async function fetchGoHighLevelSnapshot(
+  account: any,
+  options?: { limit?: number; maxPages?: number; startDate?: string; endDate?: string }
+) {
+  const leads = await fetchGoHighLevelContacts(account, {
+    limit: options?.limit ?? 2000,
+    maxPages: options?.maxPages ?? 20,
+    startDate: options?.startDate,
+    endDate: options?.endDate,
+  });
   const metadata = account.metadata ?? {};
   const locationId = String(metadata.locationId ?? account.external_account_id ?? "").trim();
   const baseUrl = normalizeBaseUrl(
@@ -26,7 +34,10 @@ export async function fetchGoHighLevelSnapshot(account: any) {
   };
 }
 
-export async function fetchGoHighLevelPreview(account: any, options?: { limit?: number; maxPages?: number }) {
+export async function fetchGoHighLevelPreview(
+  account: any,
+  options?: { limit?: number; maxPages?: number; startDate?: string; endDate?: string }
+) {
   const rows = await fetchGoHighLevelContacts(account, options);
   const sources = uniqueOptions(rows.map((row: any) => row.source));
   const tags = uniqueOptions(rows.flatMap((row: any) => (Array.isArray(row.tags) ? row.tags : [])));
@@ -52,7 +63,10 @@ export async function fetchGoHighLevelPreview(account: any, options?: { limit?: 
   };
 }
 
-async function fetchGoHighLevelContacts(account: any, options?: { limit?: number; maxPages?: number }) {
+async function fetchGoHighLevelContacts(
+  account: any,
+  options?: { limit?: number; maxPages?: number; startDate?: string; endDate?: string }
+) {
   const metadata = account.metadata ?? {};
   const accessToken = String(account.access_token ?? "").trim();
   const locationId = String(metadata.locationId ?? account.external_account_id ?? "").trim();
@@ -75,6 +89,8 @@ async function fetchGoHighLevelContacts(account: any, options?: { limit?: number
   let page = 1;
   const limit = clampPositiveInteger(options?.limit, 100);
   const maxPages = clampPositiveInteger(options?.maxPages, 5);
+  const startDate = String(options?.startDate ?? "").trim();
+  const endDate = String(options?.endDate ?? "").trim();
 
   for (let iteration = 0; iteration < maxPages && leads.length < limit; iteration += 1) {
     const requestUrl = new URL(contactsPath, baseUrl);
@@ -117,7 +133,8 @@ async function fetchGoHighLevelContacts(account: any, options?: { limit?: number
     page += 1;
   }
 
-  return leads.slice(0, limit);
+  const filteredLeads = leads.filter((lead: any) => inOptionalDateRange(lead.createdDate, startDate, endDate));
+  return filteredLeads.slice(0, limit);
 }
 
 function normalizeBaseUrl(value: string) {
@@ -133,6 +150,21 @@ function uniqueOptions(values: Array<string | null | undefined>) {
 function clampPositiveInteger(value: unknown, fallback: number) {
   const parsed = Number.parseInt(String(value ?? ""), 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function inOptionalDateRange(value: unknown, startDate: string, endDate: string) {
+  if (!startDate && !endDate) return true;
+  const date = new Date(String(value ?? ""));
+  if (Number.isNaN(date.getTime())) return false;
+  if (startDate) {
+    const start = new Date(`${startDate}T00:00:00`);
+    if (date < start) return false;
+  }
+  if (endDate) {
+    const end = new Date(`${endDate}T23:59:59`);
+    if (date > end) return false;
+  }
+  return true;
 }
 
 function extractArray(payload: any, paths: string[]) {
