@@ -344,16 +344,9 @@ export const DEFAULT_CONTRACTOR_RULE_SET: ContractorRuleSetRecord = {
       object: "jobs",
       conditions: [
         { id: "sold_job_condition_not_cancelled", field: "cancelled", operator: "equals", value: false },
-        {
-          id: "sold_job_condition_primary",
-          operator: "or",
-          conditions: [
-            { id: "sold_job_condition_has_sold_date", field: "soldDate", operator: "exists" },
-            { id: "sold_job_condition_status_in", field: "status", operator: "in", value: ["sold", "approved", "contract signed"], caseSensitive: false },
-          ],
-        },
+        { id: "sold_job_condition_has_sold_date", field: "soldDate", operator: "exists" },
       ],
-      statuses: ["sold", "approved", "contract signed"],
+      statuses: [],
       soldDateFields: ["soldDate", "jobSoldDate", "Sold Date"],
       cancelledPattern: "cancel",
     },
@@ -459,6 +452,8 @@ export function toRuntimeMetricRules(ruleSet?: Partial<ContractorRuleSetRecord> 
 
 export function normalizeStoredRuleSet(row: any): ContractorRuleSetRecord {
   const base = createDefaultContractorRuleSet(row?.name ?? DEFAULT_CONTRACTOR_RULE_SET.name);
+  const storedMetrics = mergeMetricDefinitions(row?.metric_definitions, base.metricDefinitions);
+  const storedGroupedSets = mergeGroupedMetricSets(row?.grouped_metric_sets, base.groupedMetricSets);
   return {
     ...base,
     id: row?.id,
@@ -475,13 +470,54 @@ export function normalizeStoredRuleSet(row: any): ContractorRuleSetRecord {
       ...base.classifications,
       ...(row?.classifications ?? {}),
     },
-    metricDefinitions: row?.metric_definitions ?? base.metricDefinitions,
-    groupedMetricSets: row?.grouped_metric_sets ?? base.groupedMetricSets,
+    metricDefinitions: storedMetrics,
+    groupedMetricSets: storedGroupedSets,
     settings: {
       ...base.settings,
       ...(row?.settings ?? {}),
     },
   };
+}
+
+function mergeMetricDefinitions(
+  storedDefinitions: ContractorMetricDefinition[] | undefined,
+  defaultDefinitions: ContractorMetricDefinition[]
+) {
+  if (!Array.isArray(storedDefinitions) || !storedDefinitions.length) return defaultDefinitions;
+
+  const defaultsById = new Map(defaultDefinitions.map((definition) => [definition.id, definition]));
+  const mergedDefaults = defaultDefinitions.map((definition) => {
+    const stored = storedDefinitions.find((entry) => entry?.id === definition.id);
+    if (!stored) return definition;
+    return {
+      ...definition,
+      name: stored.name ?? definition.name,
+      description: stored.description ?? definition.description,
+      displayType: stored.displayType ?? definition.displayType,
+    };
+  });
+  const customDefinitions = storedDefinitions.filter((definition) => definition?.id && !defaultsById.has(definition.id));
+  return [...mergedDefaults, ...customDefinitions];
+}
+
+function mergeGroupedMetricSets(
+  storedGroupedSets: ContractorGroupedMetricSet[] | undefined,
+  defaultGroupedSets: ContractorGroupedMetricSet[]
+) {
+  if (!Array.isArray(storedGroupedSets) || !storedGroupedSets.length) return defaultGroupedSets;
+
+  const defaultsById = new Map(defaultGroupedSets.map((entry) => [entry.id, entry]));
+  const mergedDefaults = defaultGroupedSets.map((groupedSet) => {
+    const stored = storedGroupedSets.find((entry) => entry?.id === groupedSet.id);
+    if (!stored) return groupedSet;
+    return {
+      ...groupedSet,
+      name: stored.name ?? groupedSet.name,
+      description: stored.description ?? groupedSet.description,
+    };
+  });
+  const customGroupedSets = storedGroupedSets.filter((entry) => entry?.id && !defaultsById.has(entry.id));
+  return [...mergedDefaults, ...customGroupedSets];
 }
 
 export function slugify(value: string) {
