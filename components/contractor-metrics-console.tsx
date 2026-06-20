@@ -375,105 +375,65 @@ export function ContractorMetricsConsole() {
                 </Panel>
               </section>
 
-              {sections.filter((section: any) => section.visible).map((section: any) => {
+              {sections.filter((section: any) => section.visible !== false).map((section: any) => {
                 if (section.kind === "summary") return null;
                 if (section.kind === "metric_band") {
-                  return (
-                    <Panel key={section.id} title={section.title} icon={<BarChart3 />}>
-                      <div className={styles.metricBand}>
-                        {(section.metricIds ?? []).map((metricId: string) => {
-                          const current = metricMap[metricId];
-                          if (!current) return null;
-                          return <MetricCard key={metricId} label={current.name} value={formatMetricValue(current.value, current.displayType)} detail={current.formula || "Starter metric"} delta={metricDelta(current, comparisonMap[metricId])} />;
-                        })}
-                      </div>
-                    </Panel>
-                  );
+                  return <section key={section.id} className={styles.metricBand}><h2>{section.title}</h2><div className={styles.metricGrid}>{(section.metricIds ?? []).map((metricId: string) => <MetricCard key={metricId} label={metricMap[metricId]?.name ?? metricId} value={formatMetricValue(metricMap[metricId]?.value, metricMap[metricId]?.displayType ?? "number")} detail={metricMap[metricId]?.description ?? ""} delta={metricDelta(metricMap[metricId], comparisonMap[metricId])} />)}</div></section>;
                 }
-                return <DataPanel key={section.id} title={section.title} tableId={section.tableId ?? ""} report={activeReport} />;
+                return <DataPanel key={section.id} title={section.title} tableId={section.tableId} report={activeReport} />;
               })}
             </>
-          ) : <Panel title="Dashboard ready" icon={<BarChart3 />}><p className={styles.copy}>No contractor report has been generated yet.</p></Panel>}
-
-          <Panel title="Recent saved runs" icon={<Database />}>
-            <div className={styles.reportList}>
-              {reports.length ? reports.map((report) => <button key={report.id} type="button" className={styles.reportRow} onClick={() => setPreview(fromStoredReport(report, ruleSetDraft))}><strong>{report.client_name || "Contractor Report"}</strong><small>{report.start_date} to {report.end_date}</small><small>{formatDateTime(report.created_at)}</small></button>) : <p className={styles.empty}>No saved runs yet.</p>}
-            </div>
-          </Panel>
+          ) : (
+            <Panel title="Metrics" icon={<BarChart3 />}><p className={styles.copy}>Run the contractor report to populate the dashboard with KPI cards, grouped tables, and inline detail.</p></Panel>
+          )}
         </div>
       ) : null}
 
       {tab === "config" ? (
         <div className={styles.stack}>
-          <section className={styles.builderHeader}>
-            <div>
-              <span>Workspace Report Config</span>
-              <h2>Control attribution defaults without touching JSON.</h2>
-              <p className={styles.copy}>This is the shared rules layer for the contractor dashboard. Change mappings here, save, and rerun the report.</p>
-            </div>
-            <div className={styles.heroActions}>
-              <button className={styles.secondary} type="button" onClick={duplicateRuleSet}><Plus />Duplicate template</button>
-              <button className={styles.primary} type="button" onClick={saveRuleSet} disabled={working === "save-rule-set"}><Save />{working === "save-rule-set" ? "Saving..." : "Save report config"}</button>
-            </div>
-          </section>
-
-          <section className={styles.grid}>
-            <Panel title="Template settings" icon={<Settings2 />}>
+          <section className={styles.controlGrid}>
+            <Panel title="Workspace report config" icon={<Settings2 />}>
               <div className={styles.formGrid}>
-                <Field label="Template name" value={ruleSetDraft.name} onChange={(value) => patchRuleSet({ name: value, slug: slugify(value) })} />
-                <SelectField label="Comparison" value={ruleSetDraft.settings?.comparisonMode ?? "previous_period"} onChange={(value) => patchSettings({ comparisonMode: value })} options={[{ value: "previous_period", label: "Previous period" }, { value: "none", label: "None" }]} />
-                <SelectField label="Spend fallback" value={ruleSetDraft.settings?.spendSourceFallback ?? "uploaded_first"} onChange={(value) => patchSettings({ spendSourceFallback: value })} options={[{ value: "uploaded_first", label: "Uploaded first" }, { value: "archive_only", label: "Archive only" }, { value: "uploaded_only", label: "Uploaded only" }]} />
-                <Field label="Lookback months" type="number" value={String(ruleSetDraft.settings?.attributionLookbackMonths ?? 12)} onChange={(value) => patchSettings({ attributionLookbackMonths: Number(value || 0) })} />
-                <TextAreaField label="Description" value={ruleSetDraft.description ?? ""} onChange={(value) => patchRuleSet({ description: value })} />
+                <Field label="Template name" value={ruleSetDraft.name ?? ""} onChange={(value) => patchRuleSet({ name: value, slug: slugify(value) })} />
+                <SelectField label="Comparison mode" value={ruleSetDraft.settings?.comparisonMode ?? "previous_period"} onChange={(value) => patchSettings({ comparisonMode: value })} options={[{ value: "previous_period", label: "Previous period" }, { value: "none", label: "None" }]} />
+              </div>
+              <div className={styles.actionRow}>
+                <button className={styles.primary} type="button" onClick={saveRuleSet} disabled={working === "save-rule-set"}><Save />Save workspace config</button>
+                <button className={styles.secondary} type="button" onClick={duplicateRuleSet}><Plus />Duplicate template</button>
               </div>
             </Panel>
-            <Panel title="Connected field catalog" icon={<Database />}>
-              <div className={styles.catalogGrid}>
-                {Object.entries(fieldCatalog).map(([provider, entry]: any) => <div key={provider} className={styles.catalogCard}><strong>{entry.label}</strong><small>{Object.keys(entry.objects).join(", ")}</small><p className={styles.copy}>{Object.values(entry.objects).flat().slice(0, 8).join(", ")}</p></div>)}
-              </div>
+            <Panel title="Shared attribution defaults" icon={<Database />}>
+              <p className={styles.copy}>Source bucket mapping, paid vendor aliases, and closing outcome rules apply across the full contractor dashboard.</p>
             </Panel>
           </section>
 
           <section className={styles.grid}>
-            <Panel title="Source bucket mapping" icon={<Settings2 />}>
-              <div className={styles.formGrid}>
-                <TextAreaField label="Paid patterns" value={bucketPatterns(ruleSetDraft, "paid")} onChange={(value) => setBucket("paid", value)} />
-                <TextAreaField label="Organic patterns" value={bucketPatterns(ruleSetDraft, "organic")} onChange={(value) => setBucket("organic", value)} />
-              </div>
+            <Panel title="Source bucket mapping" icon={<Database />}>
+              <div className={styles.stack}>{["paid", "organic", "referral", "unmatched"].map((bucketValue) => <TextAreaField key={bucketValue} label={`${bucketValue[0].toUpperCase()}${bucketValue.slice(1)} patterns`} value={bucketPatterns(ruleSetDraft, bucketValue)} onChange={(value) => setBucket(bucketValue, value)} />)}</div>
             </Panel>
-            <Panel title="Paid vendor aliases" icon={<Settings2 />}>
-              <TextAreaField label="One vendor per line" value={vendorAliasText} onChange={setVendorAliases} />
-              <p className={styles.copy}>Format: `Vendor: alias one, alias two`.</p>
+            <Panel title="Paid vendor aliases" icon={<Database />}>
+              <TextAreaField label="Vendor aliases" value={vendorAliasText} onChange={setVendorAliases} />
             </Panel>
-          </section>
-
-          <section className={styles.grid}>
-            <Panel title="Sold-job rules" icon={<Settings2 />}>
-              <div className={styles.formGrid}>
-                <Field label="Sold statuses" value={(ruleSetDraft.classifications?.soldJob?.statuses ?? []).join(", ")} onChange={(value) => patchClassifications("soldJob", { ...ruleSetDraft.classifications.soldJob, statuses: toCommaList(value) })} />
-                <Field label="Sold date fields" value={(ruleSetDraft.classifications?.soldJob?.soldDateFields ?? []).join(", ")} onChange={(value) => patchClassifications("soldJob", { ...ruleSetDraft.classifications.soldJob, soldDateFields: toCommaList(value) })} />
-                <Field label="Cancelled pattern" value={ruleSetDraft.classifications?.soldJob?.cancelledPattern ?? ""} onChange={(value) => patchClassifications("soldJob", { ...ruleSetDraft.classifications.soldJob, cancelledPattern: value })} />
-              </div>
-            </Panel>
-            <Panel title="Closing outcomes" icon={<Settings2 />}>
-              <TextAreaField label="One outcome per line" value={closingOutcomeText} onChange={setClosingOutcomes} />
-              <p className={styles.copy}>Format: `Reason | regex pattern | explanation`.</p>
+            <Panel title="Closing outcome rules" icon={<Database />}>
+              <TextAreaField label="Closing outcomes" value={closingOutcomeText} onChange={setClosingOutcomes} />
             </Panel>
           </section>
 
           <section className={styles.grid}>
-            <Panel title="Dashboard layout" icon={<BarChart3 />}>
-              <div className={styles.reportList}>
+            <Panel title="Dashboard sections" icon={<Settings2 />}>
+              <div className={styles.sectionList}>
                 {sections.map((section: any, index: number) => (
-                  <div key={section.id} className={styles.layoutRow}>
-                    <div className={styles.layoutMeta}><span>{section.kind}</span><strong>{section.title}</strong></div>
-                    <div className={styles.layoutControls}>
-                      <input value={section.title} onChange={(event) => updateSection(section.id, { title: event.target.value })} />
-                      <label className={styles.toggle}><input type="checkbox" checked={section.visible} onChange={(event) => updateSection(section.id, { visible: event.target.checked })} />Visible</label>
-                      <button className={styles.iconButton} type="button" disabled={index === 0} onClick={() => moveSection(section.id, -1)}>Up</button>
-                      <button className={styles.iconButton} type="button" disabled={index === sections.length - 1} onClick={() => moveSection(section.id, 1)}>Down</button>
+                  <article key={section.id} className={styles.sectionRow}>
+                    <div>
+                      <strong>{section.title}</strong>
+                      <small>{section.kind === "metric_band" ? "Metric band" : section.kind === "table" ? section.tableId : "Summary"}</small>
                     </div>
-                  </div>
+                    <div className={styles.sectionActions}>
+                      <label className={styles.toggle}><input type="checkbox" checked={section.visible !== false} onChange={(event) => updateSection(section.id, { visible: event.target.checked })} /><span>Visible</span></label>
+                      <button className={styles.ghost} type="button" disabled={index === 0} onClick={() => moveSection(section.id, -1)}>Up</button>
+                      <button className={styles.ghost} type="button" disabled={index === sections.length - 1} onClick={() => moveSection(section.id, 1)}>Down</button>
+                    </div>
+                  </article>
                 ))}
               </div>
             </Panel>
@@ -516,12 +476,12 @@ export function ContractorMetricsConsole() {
                 <button className={styles.primary} type="submit" disabled={working === "connect-ghl"}><Save />Save GoHighLevel account</button>
               </form>
             </ConnectionCard>
-            <ConnectionCard title="JobTread API token" description="Store a JobTread API token server-side, then sync jobs into the same reporting workspace.">
+              <ConnectionCard title="JobTread grant key" description="Store a JobTread Open API grant key server-side, then sync jobs into the same reporting workspace. This is not your JobTread password.">
               <form className={styles.formGrid} onSubmit={(event: FormEvent<HTMLFormElement>) => { event.preventDefault(); void postAction("/api/connect/jobtread", "connect-jobtread", { workspaceId, accountLabel: jobtread.accountLabel, apiToken: jobtread.apiToken, externalAccountId: jobtread.externalAccountId || undefined, apiBaseUrl: jobtread.apiBaseUrl }); setJobtread((current) => ({ ...current, apiToken: "" })); }}>
                 <Field label="Account label" value={jobtread.accountLabel} onChange={(value) => setJobtread((current) => ({ ...current, accountLabel: value }))} />
                 <Field label="External account ID" value={jobtread.externalAccountId} onChange={(value) => setJobtread((current) => ({ ...current, externalAccountId: value }))} />
                 <Field label="API base URL" value={jobtread.apiBaseUrl} onChange={(value) => setJobtread((current) => ({ ...current, apiBaseUrl: value }))} />
-                <Field label="API token" type="password" value={jobtread.apiToken} onChange={(value) => setJobtread((current) => ({ ...current, apiToken: value }))} />
+                <Field label="Grant key" type="password" value={jobtread.apiToken} onChange={(value) => setJobtread((current) => ({ ...current, apiToken: value }))} />
                 <button className={styles.primary} type="submit" disabled={working === "connect-jobtread"}><Save />Save JobTread account</button>
               </form>
             </ConnectionCard>
