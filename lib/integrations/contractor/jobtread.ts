@@ -1,11 +1,18 @@
 const DEFAULT_JOBTREAD_API_BASE_URL = "https://api.jobtread.com";
 const DEFAULT_JOBTREAD_PAVE_PATH = "/pave";
 const DEFAULT_PAGE_SIZE = 100;
-const DEFAULT_MAX_PAGES = 5;
-const DEFAULT_MAX_JOBS = 500;
+const DEFAULT_MAX_PAGES = 10;
+const DEFAULT_MAX_JOBS = 1000;
 
-export async function fetchJobTreadSnapshot(account: any) {
-  const jobs = await fetchJobTreadRows(account, { limit: 100 });
+export async function fetchJobTreadSnapshot(
+  account: any,
+  options?: { limit?: number; startDate?: string; endDate?: string }
+) {
+  const jobs = await fetchJobTreadRows(account, {
+    limit: options?.limit ?? DEFAULT_MAX_JOBS,
+    startDate: options?.startDate,
+    endDate: options?.endDate,
+  });
   const metadata = account.metadata ?? {};
   const baseUrl = normalizeBaseUrl(
     String(metadata.apiBaseUrl ?? process.env.JOBTREAD_API_BASE_URL ?? DEFAULT_JOBTREAD_API_BASE_URL)
@@ -27,7 +34,10 @@ export async function fetchJobTreadSnapshot(account: any) {
   };
 }
 
-export async function fetchJobTreadPreview(account: any, options?: { limit?: number }) {
+export async function fetchJobTreadPreview(
+  account: any,
+  options?: { limit?: number; startDate?: string; endDate?: string }
+) {
   const rows = await fetchJobTreadRows(account, options);
 
   return {
@@ -68,7 +78,10 @@ export async function fetchJobTreadPreview(account: any, options?: { limit?: num
   };
 }
 
-async function fetchJobTreadRows(account: any, options?: { limit?: number }) {
+async function fetchJobTreadRows(
+  account: any,
+  options?: { limit?: number; startDate?: string; endDate?: string }
+) {
   const metadata = account.metadata ?? {};
   const grantKey = String(account.access_token ?? "").trim();
 
@@ -82,7 +95,9 @@ async function fetchJobTreadRows(account: any, options?: { limit?: number }) {
   const pavePath = String(metadata.pavePath ?? process.env.JOBTREAD_PAVE_PATH ?? DEFAULT_JOBTREAD_PAVE_PATH);
   const pageSize = clampPositiveInteger(metadata.pageSize, DEFAULT_PAGE_SIZE);
   const maxPages = clampPositiveInteger(metadata.maxPages, DEFAULT_MAX_PAGES);
-  const maxJobs = Math.min(clampPositiveInteger(options?.limit, DEFAULT_MAX_JOBS), 100);
+  const maxJobs = clampPositiveInteger(options?.limit, DEFAULT_MAX_JOBS);
+  const startDate = String(options?.startDate ?? "").trim();
+  const endDate = String(options?.endDate ?? "").trim();
 
   const organizationId = await getOrganizationId({ baseUrl, pavePath, grantKey });
   const jobs = await listJobs({ baseUrl, pavePath, grantKey, organizationId, pageSize, maxPages, maxJobs });
@@ -95,7 +110,9 @@ async function fetchJobTreadRows(account: any, options?: { limit?: number }) {
     }
   }
 
-  return detailRows;
+  return detailRows
+    .filter((row) => inOptionalDateRange(row.createdAt, startDate, endDate) || inOptionalDateRange(row.soldDate, startDate, endDate))
+    .slice(0, maxJobs);
 }
 
 async function getOrganizationId({
@@ -390,6 +407,22 @@ function uniqueOptions(values: Array<string | null | undefined>) {
 function clampPositiveInteger(value: unknown, fallback: number) {
   const parsed = Number.parseInt(String(value ?? ""), 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function inOptionalDateRange(value: unknown, startDate: string, endDate: string) {
+  if (!startDate && !endDate) return true;
+  if (!value) return false;
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return false;
+  if (startDate) {
+    const start = new Date(`${startDate}T00:00:00`);
+    if (date < start) return false;
+  }
+  if (endDate) {
+    const end = new Date(`${endDate}T23:59:59`);
+    if (date > end) return false;
+  }
+  return true;
 }
 
 async function safeJson(response: Response) {
