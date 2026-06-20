@@ -1,9 +1,9 @@
 .screen {
   min-height: 100vh;
-  padding: clamp(20px, 5vw, 56px);
+  padding: clamp(24px, 4vw, 52px);
   background:
-    radial-gradient(circle at top left, rgba(255, 255, 255, 0.07), transparent 28%),
-    linear-gradient(180deg, #060606, #0a0a0a 44%, #080808);
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.06), transparent 30%),
+    linear-gradient(180deg, #050505, #090909 44%, #070707);
   color: #f6f3ee;
 }
 
@@ -15,60 +15,59 @@
 .hero span,
 .panelHead span,
 .metricCard span,
-.formGrid label span {
-  color: #8e8a83;
+.layoutMeta span,
+.inlineStat span,
+.wizardPreview span,
+.statusPill span {
+  color: #9d968d;
   font-size: 11px;
   line-height: 1;
   text-transform: uppercase;
-  letter-spacing: 0.13em;
+  letter-spacing: 0.14em;
 }
 
 .hero h1 {
-  max-width: 920px;
   margin: 16px 0 14px;
-  font-size: clamp(40px, 6vw, 80px);
+  max-width: 960px;
+  font-size: clamp(40px, 5.5vw, 72px);
   line-height: 0.94;
-  font-weight: 500;
+  font-weight: 520;
 }
 
 .hero p,
 .copy,
 .empty,
 .reportRow small,
-.metricCard small,
 .accountSummary small,
-.accountHeader small {
-  color: rgba(246, 243, 238, 0.68);
+.sourceMeta small,
+.metricCard small,
+.wizardPreview small {
+  color: rgba(246, 243, 238, 0.7);
   line-height: 1.5;
 }
 
 .heroActions,
 .actionRow,
-.kpis {
+.layoutControls {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
 }
 
-.kpis {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin-bottom: 14px;
-}
-
 .linkButton,
 .primary,
 .secondary,
-.ghost {
+.ghost,
+.iconButton {
   min-height: 42px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 9px;
+  gap: 8px;
   padding: 0 14px;
   border-radius: 999px;
-  text-decoration: none;
   font: inherit;
+  text-decoration: none;
   cursor: pointer;
   transition:
     transform 180ms ease,
@@ -76,21 +75,31 @@
     background 180ms ease;
 }
 
+.iconButton {
+  min-height: 38px;
+  min-width: 38px;
+  padding: 0;
+  border-radius: 12px;
+}
+
 .linkButton,
-.ghost {
-  border: 1px solid rgba(255, 255, 255, 0.14);
+.ghost,
+.iconButton,
+.shellTab,
+.shellTabActive {
+  border: 1px solid rgba(255, 255, 255, 0.12);
   color: #f6f3ee;
   background: rgba(255, 255, 255, 0.04);
 }
 
 .primary {
   border: 0;
-  color: #050505;
+  color: #060606;
   background: #f6f3ee;
 }
 
 .secondary {
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   color: #f6f3ee;
   background: rgba(255, 255, 255, 0.08);
 }
@@ -98,7 +107,10 @@
 .linkButton:hover,
 .primary:hover,
 .secondary:hover,
-.ghost:hover {
+.ghost:hover,
+.iconButton:hover,
+.shellTab:hover,
+.shellTabActive:hover {
   transform: translateY(-1px);
 }
 
@@ -106,65 +118,53 @@
 .error {
   margin: 0 0 18px;
   padding: 12px 14px;
-  border-radius: 10px;
+  border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .notice {
-  color: #e9e2d6;
+  color: #efe8dc;
   background: rgba(255, 255, 255, 0.05);
 }
 
 .error,
 .rowError {
-  color: #ffd4d4;
+  color: #ffd2d2;
 }
 
 .error {
-  background: rgba(255, 80, 80, 0.08);
-  border-color: rgba(255, 80, 80, 0.24);
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  margin-bottom: 14px;
+  background: rgba(255, 70, 70, 0.09);
+  border-color: rgba(255, 70, 70, 0.22);
 }
 
 .shellTabs {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  margin: 0 0 18px;
+  margin: 0 0 20px;
 }
 
 .shellTab,
 .shellTabActive {
-  min-height: 42px;
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   gap: 8px;
   padding: 0 14px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(246, 243, 238, 0.8);
-  cursor: pointer;
 }
 
 .shellTabActive {
+  color: #060606;
   background: #f6f3ee;
-  color: #050505;
 }
 
 .panel {
-  padding: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 18px;
+  padding: 20px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
   background: rgba(255, 255, 255, 0.035);
   backdrop-filter: blur(20px);
-  margin-bottom: 14px;
 }
 
 .panelHead {
@@ -179,33 +179,55 @@
 .primary svg,
 .secondary svg,
 .ghost svg,
+.iconButton svg,
 .loadingBox svg {
   width: 18px;
   height: 18px;
   stroke-width: 1.7;
 }
 
-.metricCard {
-  min-width: 0;
+.stack {
   display: grid;
-  gap: 8px;
-  padding: 14px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  gap: 14px;
 }
 
-.metricCard strong {
-  font-size: clamp(22px, 3vw, 34px);
-  line-height: 1;
-  font-weight: 520;
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.controlGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
+  gap: 14px;
+}
+
+.statusStrip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.statusPill {
+  min-width: 148px;
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.statusPill strong {
+  font-size: 16px;
+  font-weight: 560;
 }
 
 .formGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 14px;
+  gap: 12px;
 }
 
 .formGrid label {
@@ -220,49 +242,102 @@
 .formGrid input,
 .formGrid select,
 .formGrid textarea,
-.conditionRow input,
-.conditionRow select {
+.layoutControls input {
   width: 100%;
-  min-height: 42px;
+  min-height: 44px;
   padding: 0 12px;
+  border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 10px;
   outline: 0;
   color: #f6f3ee;
   background: rgba(255, 255, 255, 0.045);
 }
 
 .formGrid textarea {
-  min-height: 108px;
+  min-height: 112px;
   padding: 12px;
   resize: vertical;
 }
 
-.accountSummary,
-.accountHeader {
+.inlineStat {
   display: grid;
-  gap: 4px;
+  gap: 8px;
+  align-content: start;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.inlineStat strong {
+  font-size: 22px;
+  line-height: 1;
+  font-weight: 540;
+}
+
+.reportList,
 .accountList,
-.reportList {
+.sourceList,
+.summaryList {
   display: grid;
   gap: 10px;
 }
 
+.reportRow,
 .accountCard,
-.reportRow {
-  display: grid;
-  gap: 8px;
+.sourceRow,
+.summaryRow,
+.catalogCard,
+.ruleCard,
+.layoutRow {
   padding: 14px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.04);
+  border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
 }
 
-.accountHeader {
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
+.reportRow,
+.accountCard,
+.catalogCard,
+.ruleCard {
+  display: grid;
+  gap: 8px;
+}
+
+.accountHeader,
+.sourceRow,
+.ruleCardHeader,
+.builderHeader,
+.layoutRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.accountHeader,
+.sourceRow,
+.ruleCardHeader,
+.layoutRow {
+  align-items: flex-start;
+}
+
+.builderHeader {
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.builderHeader h2 {
+  margin: 10px 0 8px;
+  font-size: clamp(28px, 4vw, 44px);
+  line-height: 1;
+  font-weight: 540;
+}
+
+.accountSummary,
+.sourceMeta,
+.layoutMeta {
+  display: grid;
+  gap: 4px;
 }
 
 .accountMeta {
@@ -271,122 +346,108 @@
   gap: 8px;
 }
 
-.accountMeta span,
-.statusPill {
+.accountMeta span {
   padding: 6px 10px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(246, 243, 238, 0.82);
   font-size: 12px;
-  color: rgba(246, 243, 238, 0.8);
 }
 
-.reportSummary {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.metricGrid {
+.metricBand,
+.catalogGrid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
 }
 
-.builderHeader,
-.reportHero {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
+.metricCard {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
 }
 
-.builderHeader h2,
-.reportHero h2 {
-  margin: 10px 0 8px;
-  font-size: clamp(28px, 4vw, 46px);
+.metricCard strong {
+  font-size: clamp(24px, 2.8vw, 40px);
   line-height: 1;
   font-weight: 540;
 }
 
-.builderList,
-.stack,
-.summaryList,
-.conditionList {
-  display: grid;
-  gap: 12px;
+.metricCard em {
+  color: #cfc7bb;
+  font-size: 12px;
+  font-style: normal;
 }
 
-.ruleSummary,
-.subsection,
-.ruleCard {
-  display: grid;
-  gap: 12px;
+.summaryRow {
+  line-height: 1.6;
 }
 
-.ruleCard {
-  padding: 16px;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.ruleCardHeader,
-.subsectionHead,
-.inlineFields,
-.conditionRow {
-  display: flex;
-  gap: 10px;
-}
-
-.ruleCardHeader,
-.subsectionHead {
-  align-items: center;
-  justify-content: space-between;
-}
-
-.inlineFields {
-  flex-wrap: wrap;
-}
-
-.inlineFields label,
-.conditionRow > * {
-  flex: 1 1 180px;
-}
-
-.conditionRow {
+.layoutRow {
   align-items: center;
 }
 
-.iconButton {
-  min-height: 38px;
-  min-width: 38px;
+.layoutMeta strong {
+  font-size: 16px;
+  font-weight: 530;
+}
+
+.layoutControls {
+  flex: 1 1 420px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.layoutControls input {
+  flex: 1 1 220px;
+}
+
+.toggle {
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  border-radius: 10px;
+  gap: 8px;
+  padding: 0 12px;
+  border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.04);
-  color: #f6f3ee;
-  cursor: pointer;
 }
 
-.subsection {
-  padding-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+.toggle input {
+  width: auto;
+  min-height: auto;
+}
+
+.wizardPreview {
+  display: grid;
+  gap: 8px;
+  margin: 2px 0 14px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.wizardPreview strong {
+  font-size: 20px;
+  font-weight: 530;
 }
 
 .tableWrap {
   overflow: auto;
-  border-radius: 14px;
+  border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .table {
   width: 100%;
+  min-width: 820px;
   border-collapse: collapse;
-  min-width: 640px;
 }
 
 .table th,
@@ -397,14 +458,14 @@
 }
 
 .table th {
-  color: #8e8a83;
+  color: #9d968d;
   font-size: 11px;
-  letter-spacing: 0.13em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 
 .table td {
-  color: rgba(246, 243, 238, 0.84);
+  color: rgba(246, 243, 238, 0.86);
   vertical-align: top;
 }
 
@@ -425,25 +486,33 @@
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
+  .controlGrid,
   .grid,
-  .reportSummary,
-  .metricGrid,
-  .kpis,
+  .metricBand,
+  .catalogGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .layoutRow,
+  .builderHeader,
+  .accountHeader,
+  .sourceRow {
+    flex-direction: column;
+  }
+
+  .layoutControls {
+    width: 100%;
+    justify-content: stretch;
+  }
+}
+
+@media (max-width: 760px) {
   .formGrid {
     grid-template-columns: 1fr;
   }
 
   .hero h1 {
-    font-size: clamp(34px, 10vw, 56px);
-  }
-
-  .builderHeader,
-  .reportHero {
-    flex-direction: column;
-  }
-
-  .accountHeader {
-    grid-template-columns: 1fr;
+    font-size: clamp(34px, 10vw, 52px);
   }
 }
