@@ -265,6 +265,22 @@ function collectBaseMetricValues(metrics: any) {
     overall_revenue: Number(metrics?.totals?.revenue ?? 0),
     paid_revenue: Number(metrics?.totals?.paidRevenue ?? 0),
     organic_revenue: Number(metrics?.totals?.organicRevenue ?? 0),
+    net_sales: Number(metrics?.totals?.netSales ?? 0),
+    cost_per_paid_lead: Number(metrics?.totals?.costPerLead ?? 0),
+    cost_per_paid_appointment: Number(metrics?.totals?.costPerIssuedLead ?? 0),
+    overall_nsli: Number(metrics?.totals?.netSalesPerLeadIssued ?? 0),
+    paid_nsli: Number(metrics?.totals?.paidNetSalesPerLeadIssued ?? 0),
+    organic_nsli: Number(metrics?.totals?.organicNetSalesPerLeadIssued ?? 0),
+    paid_roas: Number(metrics?.totals?.roas ?? 0),
+    overall_close_rate: Number(metrics?.totals?.closeRate ?? 0),
+    paid_close_rate: Number(metrics?.totals?.paidCloseRate ?? 0),
+    organic_close_rate: Number(metrics?.totals?.organicCloseRate ?? 0),
+    average_ticket: Number(metrics?.totals?.averageJobSize ?? 0),
+    paid_average_ticket: Number(metrics?.totals?.paidAverageJobSize ?? 0),
+    organic_average_ticket: Number(metrics?.totals?.organicAverageJobSize ?? 0),
+    average_time_to_close: Number(metrics?.totals?.averageTimeToCloseDays ?? 0),
+    paid_average_time_to_close: Number(metrics?.totals?.paidAverageTimeToCloseDays ?? 0),
+    organic_average_time_to_close: Number(metrics?.totals?.organicAverageTimeToCloseDays ?? 0),
   };
 }
 
