@@ -111,7 +111,7 @@ async function fetchJobTreadRows(
   }
 
   return detailRows
-    .filter((row) => inOptionalDateRange(row.createdAt, startDate, endDate) || inOptionalDateRange(row.soldDate, startDate, endDate))
+    .filter((row) => inOptionalDateRange(row.soldDate, startDate, endDate))
     .slice(0, maxJobs);
 }
 
@@ -251,8 +251,14 @@ async function getJobDetail({
         },
         documents: {
           nodes: {
+            id: {},
             type: {},
             status: {},
+            closedAt: {},
+            signedAt: {},
+            issueDate: {},
+            name: {},
+            price: {},
             priceWithTax: {},
             amountPaid: {},
           },
@@ -303,9 +309,9 @@ async function paveQuery({
 function normalizeJob(job: any) {
   const fields = customFieldMap(job.customFieldValues?.nodes ?? []);
   const documents = Array.isArray(job.documents?.nodes) ? job.documents.nodes : [];
-  const soldDate = firstField(fields, ["sold_date", "job_sold_date", "date_sold", "contract_signed_date"]) ?? job.closedOn ?? null;
-  const revenue = revenueFromFields(fields) || revenueFromDocuments(documents);
-  const inferredSold = Boolean(soldDate) || hasSoldDocuments(documents) || revenue > 0;
+  const soldDate = approvedOrderSoldDate(documents) ?? firstField(fields, ["sold_date", "job_sold_date", "date_sold", "contract_signed_date"]);
+  const revenue = approvedOrderRevenue(documents) || revenueFromFields(fields);
+  const status = firstField(fields, ["status", "job_status", "appointment_result"]) ?? statusFromDocuments(documents);
 
   return {
     id: job.id ?? null,
@@ -318,7 +324,7 @@ function normalizeJob(job: any) {
     createdAt: job.createdAt ?? null,
     closedOn: job.closedOn ?? null,
     soldDate,
-    status: firstField(fields, ["status", "job_status", "appointment_result"]) ?? statusFromDocuments(documents, inferredSold),
+    status,
     projectType: firstField(fields, ["job_type_category", "project_type", "job_type", "category", "type"]),
     revenue,
     netSales: revenue,
@@ -361,19 +367,41 @@ function revenueFromFields(fields: Record<string, string>) {
   return toNumber(firstField(fields, ["revenue", "contract_amount", "sold_price", "contract_value", "net_sales", "approved_orders"]));
 }
 
-function revenueFromDocuments(documents: any[]) {
-  return documents
-    .filter((doc) => /customerorder/i.test(String(doc?.type ?? "")) && /approved|signed|open|paid/i.test(String(doc?.status ?? "")))
-    .reduce((total, doc) => total + toNumber(doc?.priceWithTax), 0);
+function approvedOrderRevenue(documents: any[]) {
+  return approvedOrderDocuments(documents).reduce((total, doc) => total + toNumber(doc?.priceWithTax ?? doc?.price), 0);
 }
 
-function hasSoldDocuments(documents: any[]) {
-  return documents.some((doc) => /customerorder/i.test(String(doc?.type ?? "")) && /approved|signed|open|paid/i.test(String(doc?.status ?? "")));
+function approvedOrderSoldDate(documents: any[]) {
+  const dates = approvedOrderDocuments(documents)
+    .map((doc) => normalizeDocumentDate(doc?.closedAt ?? doc?.signedAt ?? doc?.issueDate))
+    .filter(Boolean)
+    .sort();
+  return dates[0] ?? null;
 }
 
-function statusFromDocuments(documents: any[], inferredSold = false) {
-  if (hasSoldDocuments(documents) || inferredSold) return "Sold";
+function approvedOrderDocuments(documents: any[]) {
+  return documents.filter((doc) => isApprovedCustomerOrder(doc));
+}
+
+function isApprovedCustomerOrder(doc: any) {
+  const type = String(doc?.type ?? "");
+  const status = String(doc?.status ?? "");
+  const name = String(doc?.name ?? "");
+  const customerOrderLike = /customerorder/i.test(type) || /builder'?s agreement|proposal|estimate|contract|deposit/i.test(name);
+  const approvedLike = /approved|signed|paid|closed/i.test(status) || Boolean(doc?.closedAt || doc?.signedAt);
+  return customerOrderLike && approvedLike;
+}
+
+function statusFromDocuments(documents: any[]) {
+  if (approvedOrderDocuments(documents).length) return "Sold";
   return "Open";
+}
+
+function normalizeDocumentDate(value: any) {
+  if (!value) return null;
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString().slice(0, 10);
 }
 
 function notesFromFields(fields: Record<string, string>) {
