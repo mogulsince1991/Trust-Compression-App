@@ -83,7 +83,21 @@ export function buildConfiguredMetricResults({
     soldDate: match.job.soldDate,
   }));
   const baseValues = collectBaseMetricValues(report.metrics);
-  const results: Array<{ id: string; name: string; value: number | string | null; displayType: string; formula?: string | null }> = [];
+  const results: Array<{
+    id: string;
+    name: string;
+    value: number | string | null;
+    displayType: string;
+    formula?: string | null;
+    source?: string | null;
+    provider?: string | null;
+    object?: string | null;
+    operation?: string | null;
+    field?: string | null;
+    dateField?: string | null;
+    description?: string | null;
+    conditions?: ContractorCondition[];
+  }> = [];
 
   for (const definition of ruleSet.metricDefinitions) {
     const predefined = definition.currentOutputPath ? readPath(report.metrics, definition.currentOutputPath.replace(/^metrics\./, "")) : undefined;
@@ -116,6 +130,14 @@ export function buildConfiguredMetricResults({
       value: value ?? null,
       displayType: definition.displayType,
       formula: definition.formula ?? null,
+      source: definition.source ?? null,
+      provider: definition.provider ?? null,
+      object: definition.object ?? null,
+      operation: definition.operation,
+      field: definition.field ?? null,
+      dateField: definition.dateField ?? null,
+      description: definition.description ?? null,
+      conditions: definition.conditions ?? [],
     });
   }
 
