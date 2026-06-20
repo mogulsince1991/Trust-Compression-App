@@ -1,5 +1,5 @@
-import { ContractorMetricsConsole } from "@/components/contractor-metrics-console";
+import { ContractorMetricsWorkspace } from "@/components/contractor-metrics-workspace";
 
 export default function ContractorMetricsPage() {
-  return <ContractorMetricsConsole />;
+  return <ContractorMetricsWorkspace />;
 }
