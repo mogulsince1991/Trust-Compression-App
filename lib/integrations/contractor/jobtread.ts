@@ -303,8 +303,9 @@ async function paveQuery({
 function normalizeJob(job: any) {
   const fields = customFieldMap(job.customFieldValues?.nodes ?? []);
   const documents = Array.isArray(job.documents?.nodes) ? job.documents.nodes : [];
-  const soldDate = firstField(fields, ["sold_date", "job_sold_date", "date_sold", "contract_signed_date"]);
+  const soldDate = firstField(fields, ["sold_date", "job_sold_date", "date_sold", "contract_signed_date"]) ?? job.closedOn ?? null;
   const revenue = revenueFromFields(fields) || revenueFromDocuments(documents);
+  const inferredSold = Boolean(soldDate) || hasSoldDocuments(documents) || revenue > 0;
 
   return {
     id: job.id ?? null,
@@ -317,7 +318,7 @@ function normalizeJob(job: any) {
     createdAt: job.createdAt ?? null,
     closedOn: job.closedOn ?? null,
     soldDate,
-    status: firstField(fields, ["status", "job_status", "appointment_result"]) ?? statusFromDocuments(documents),
+    status: firstField(fields, ["status", "job_status", "appointment_result"]) ?? statusFromDocuments(documents, inferredSold),
     projectType: firstField(fields, ["job_type_category", "project_type", "job_type", "category", "type"]),
     revenue,
     netSales: revenue,
@@ -366,10 +367,13 @@ function revenueFromDocuments(documents: any[]) {
     .reduce((total, doc) => total + toNumber(doc?.priceWithTax), 0);
 }
 
-function statusFromDocuments(documents: any[]) {
-  return documents.some((doc) => /customerorder/i.test(String(doc?.type ?? "")) && /approved|signed/i.test(String(doc?.status ?? "")))
-    ? "Sold"
-    : "Open";
+function hasSoldDocuments(documents: any[]) {
+  return documents.some((doc) => /customerorder/i.test(String(doc?.type ?? "")) && /approved|signed|open|paid/i.test(String(doc?.status ?? "")));
+}
+
+function statusFromDocuments(documents: any[], inferredSold = false) {
+  if (hasSoldDocuments(documents) || inferredSold) return "Sold";
+  return "Open";
 }
 
 function notesFromFields(fields: Record<string, string>) {
