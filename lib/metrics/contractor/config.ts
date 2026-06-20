@@ -53,6 +53,16 @@ export type ContractorGroupedMetricSet = {
   description?: string | null;
 };
 
+export type ContractorDashboardSection = {
+  id: string;
+  title: string;
+  kind: "summary" | "metric_band" | "table";
+  visible: boolean;
+  metricIds?: string[];
+  tableId?: string | null;
+  description?: string | null;
+};
+
 export type ContractorRuleSetRecord = {
   id?: string;
   workspaceId?: string;
@@ -93,6 +103,8 @@ export type ContractorRuleSetRecord = {
     timezone: string;
     attributionLookbackMonths: number;
     spendSourceFallback: "uploaded_first" | "archive_only" | "uploaded_only";
+    comparisonMode?: "previous_period" | "none";
+    dashboardSections?: ContractorDashboardSection[];
   };
 };
 
@@ -164,6 +176,97 @@ export const CONTRACTOR_FIELD_CATALOG = {
     },
   },
 } as const;
+
+const DEFAULT_DASHBOARD_SECTIONS: ContractorDashboardSection[] = [
+  {
+    id: "executive_summary",
+    title: "Executive Summary",
+    kind: "summary",
+    visible: true,
+    description: "Human-readable narrative for owners and operators.",
+  },
+  {
+    id: "scoreboard_financial",
+    title: "Financial Scoreboard",
+    kind: "metric_band",
+    visible: true,
+    metricIds: ["overall_spend", "paid_roas", "overall_revenue", "paid_revenue", "organic_revenue", "overall_nsli"],
+  },
+  {
+    id: "scoreboard_pipeline",
+    title: "Pipeline Scoreboard",
+    kind: "metric_band",
+    visible: true,
+    metricIds: ["overall_leads", "paid_leads", "organic_leads", "overall_appointments", "paid_appointments", "organic_appointments"],
+  },
+  {
+    id: "scoreboard_sales",
+    title: "Sales Scoreboard",
+    kind: "metric_band",
+    visible: true,
+    metricIds: ["overall_sold_jobs", "paid_sold_jobs", "organic_sold_jobs", "overall_close_rate", "paid_close_rate", "organic_close_rate"],
+  },
+  {
+    id: "scoreboard_efficiency",
+    title: "Efficiency Scoreboard",
+    kind: "metric_band",
+    visible: true,
+    metricIds: [
+      "cost_per_paid_lead",
+      "cost_per_paid_appointment",
+      "average_ticket",
+      "paid_average_ticket",
+      "organic_average_ticket",
+      "average_time_to_close",
+      "paid_average_time_to_close",
+      "organic_average_time_to_close",
+      "paid_nsli",
+      "organic_nsli",
+    ],
+  },
+  {
+    id: "paid_channel_performance",
+    title: "Paid Channel Performance",
+    kind: "table",
+    visible: true,
+    tableId: "paid_channel_performance",
+  },
+  {
+    id: "design_consultant_performance",
+    title: "Design Consultant Performance",
+    kind: "table",
+    visible: true,
+    tableId: "design_consultant_performance",
+  },
+  {
+    id: "leads_by_source",
+    title: "Leads by Source",
+    kind: "table",
+    visible: true,
+    tableId: "leads_by_source",
+  },
+  {
+    id: "jobs_sold_detail",
+    title: "Jobs Sold Detail",
+    kind: "table",
+    visible: true,
+    tableId: "jobs_sold_detail",
+  },
+  {
+    id: "closing_outcomes",
+    title: "Why Jobs Aren't Closing",
+    kind: "table",
+    visible: true,
+    tableId: "closing_outcomes",
+  },
+  {
+    id: "unmatched_records",
+    title: "Unmatched Records",
+    kind: "table",
+    visible: true,
+    tableId: "unmatched_records",
+  },
+];
 
 export const DEFAULT_CONTRACTOR_RULE_SET: ContractorRuleSetRecord = {
   name: "Default Contractor Report",
@@ -270,32 +373,44 @@ export const DEFAULT_CONTRACTOR_RULE_SET: ContractorRuleSetRecord = {
     metric("overall_leads", "Overall Leads", "gohighlevel", "contacts", "count", { displayType: "number", currentOutputPath: "metrics.totals.leads", conditions: [{ id: "overall_leads_created", field: "createdDate", operator: "between", value: ["startDate", "endDate"] }, { id: "overall_leads_filter_ref", ruleRef: "exclude_not_lead_tags", operator: "and" }] }),
     metric("paid_leads", "Paid Leads", "gohighlevel", "contacts", "count", { displayType: "number", currentOutputPath: "metrics.totals.paidLeads", conditions: [{ id: "paid_leads_bucket", classification: "sourceBucket", operator: "equals", value: "paid" }] }),
     metric("organic_leads", "Organic Leads", "gohighlevel", "contacts", "count", { displayType: "number", currentOutputPath: "metrics.totals.organicLeads", conditions: [{ id: "organic_leads_bucket", classification: "sourceBucket", operator: "not_equals", value: "paid" }] }),
-    metric("overall_appointments", "Appointments Booked", "jobtread", "jobs", "count", { displayType: "number", currentOutputPath: "metrics.totals.issuedLeads", dateField: "appointmentDate", conditions: [{ id: "overall_appointments_date", field: "appointmentDate", operator: "between", value: ["startDate", "endDate"] }] }),
+    metric("overall_appointments", "Overall Appointments", "jobtread", "jobs", "count", { displayType: "number", currentOutputPath: "metrics.totals.issuedLeads", dateField: "appointmentDate", conditions: [{ id: "overall_appointments_date", field: "appointmentDate", operator: "between", value: ["startDate", "endDate"] }] }),
     metric("paid_appointments", "Paid Appointments", "combined", "matched_jobs", "count", { displayType: "number", currentOutputPath: "metrics.totals.paidIssuedLeads", conditions: [{ id: "paid_appointments_bucket", classification: "sourceBucket", operator: "equals", value: "paid" }] }),
     metric("organic_appointments", "Organic Appointments", "combined", "matched_jobs", "count", { displayType: "number", currentOutputPath: "metrics.totals.organicIssuedLeads", conditions: [{ id: "organic_appointments_bucket", classification: "sourceBucket", operator: "not_equals", value: "paid" }] }),
-    metric("overall_sold_jobs", "Sold Jobs", "jobtread", "jobs", "count", { displayType: "number", currentOutputPath: "metrics.totals.soldJobs", dateField: "soldDate", conditions: [{ id: "overall_sold_jobs_rule", ruleRef: "soldJob", operator: "and" }] }),
+    metric("overall_sold_jobs", "Overall Sold Jobs", "jobtread", "jobs", "count", { displayType: "number", currentOutputPath: "metrics.totals.soldJobs", dateField: "soldDate", conditions: [{ id: "overall_sold_jobs_rule", ruleRef: "soldJob", operator: "and" }] }),
     metric("paid_sold_jobs", "Paid Sold Jobs", "combined", "matched_sold_jobs", "count", { displayType: "number", currentOutputPath: "metrics.totals.paidSoldJobs", conditions: [{ id: "paid_sold_jobs_bucket", classification: "sourceBucket", operator: "equals", value: "paid" }] }),
     metric("organic_sold_jobs", "Organic Sold Jobs", "combined", "matched_sold_jobs", "count", { displayType: "number", currentOutputPath: "metrics.totals.organicSoldJobs", conditions: [{ id: "organic_sold_jobs_bucket", classification: "sourceBucket", operator: "not_equals", value: "paid" }] }),
-    metric("overall_revenue", "Revenue", "jobtread", "sold_jobs", "sum", { field: "revenue", displayType: "currency", currentOutputPath: "metrics.totals.revenue" }),
+    metric("overall_revenue", "Overall Revenue", "jobtread", "sold_jobs", "sum", { field: "revenue", displayType: "currency", currentOutputPath: "metrics.totals.revenue" }),
     metric("paid_revenue", "Paid Revenue", "combined", "matched_sold_jobs", "sum", { field: "job.revenue", displayType: "currency", currentOutputPath: "metrics.totals.paidRevenue", conditions: [{ id: "paid_revenue_bucket", classification: "sourceBucket", operator: "equals", value: "paid" }] }),
     metric("organic_revenue", "Organic Revenue", "combined", "sold_jobs", "formula", { formula: "overall_revenue - paid_revenue", displayType: "currency", currentOutputPath: "metrics.totals.organicRevenue" }),
+    metric("net_sales", "Net Sales", "jobtread", "sold_jobs", "sum", { field: "netSales", displayType: "currency", currentOutputPath: "metrics.totals.netSales" }),
     metric("paid_roas", "Paid ROAS", "combined", "matched_sold_jobs", "formula", { formula: "paid_revenue / overall_spend", displayType: "ratio", currentOutputPath: "metrics.totals.roas" }),
-    metric("cost_per_paid_lead", "CPL", "combined", "matched_jobs", "formula", { formula: "overall_spend / paid_leads", displayType: "currency", currentOutputPath: "metrics.totals.costPerLead" }),
-    metric("overall_close_rate", "Close Rate", "combined", "matched_jobs", "formula", { formula: "overall_sold_jobs / overall_appointments", displayType: "percent", currentOutputPath: "metrics.totals.closeRate" }),
-    metric("overall_nsli", "NSLI", "combined", "matched_jobs", "formula", { formula: "overall_revenue / overall_appointments", displayType: "currency", currentOutputPath: "metrics.totals.netSalesPerLeadIssued" }),
-    metric("average_ticket", "Average Ticket", "jobtread", "sold_jobs", "formula", { formula: "overall_revenue / overall_sold_jobs", displayType: "currency", currentOutputPath: "metrics.totals.averageJobSize" }),
-    metric("average_time_to_close", "Average Time To Close", "combined", "matched_sold_jobs", "average", { field: "timeToCloseDays", displayType: "days", currentOutputPath: "metrics.totals.averageTimeToCloseDays" }),
+    metric("cost_per_paid_lead", "Cost / Paid Lead", "combined", "matched_jobs", "formula", { formula: "overall_spend / paid_leads", displayType: "currency", currentOutputPath: "metrics.totals.costPerLead" }),
+    metric("cost_per_paid_appointment", "Cost / Paid Appointment", "combined", "matched_jobs", "formula", { formula: "overall_spend / paid_appointments", displayType: "currency", currentOutputPath: "metrics.totals.costPerIssuedLead" }),
+    metric("overall_nsli", "Overall NSLI", "combined", "matched_jobs", "formula", { formula: "net_sales / overall_appointments", displayType: "currency", currentOutputPath: "metrics.totals.netSalesPerLeadIssued" }),
+    metric("paid_nsli", "Paid NSLI", "combined", "matched_jobs", "formula", { formula: "paid_revenue / paid_appointments", displayType: "currency", currentOutputPath: "metrics.totals.paidNetSalesPerLeadIssued" }),
+    metric("organic_nsli", "Organic NSLI", "combined", "matched_jobs", "formula", { formula: "organic_revenue / organic_appointments", displayType: "currency", currentOutputPath: "metrics.totals.organicNetSalesPerLeadIssued" }),
+    metric("overall_close_rate", "Overall Close Rate", "combined", "matched_jobs", "formula", { formula: "overall_sold_jobs / overall_appointments", displayType: "percent", currentOutputPath: "metrics.totals.closeRate" }),
+    metric("paid_close_rate", "Paid Close Rate", "combined", "matched_jobs", "formula", { formula: "paid_sold_jobs / paid_appointments", displayType: "percent", currentOutputPath: "metrics.totals.paidCloseRate" }),
+    metric("organic_close_rate", "Organic Close Rate", "combined", "matched_jobs", "formula", { formula: "organic_sold_jobs / organic_appointments", displayType: "percent", currentOutputPath: "metrics.totals.organicCloseRate" }),
+    metric("average_ticket", "Avg Ticket", "jobtread", "sold_jobs", "formula", { formula: "overall_revenue / overall_sold_jobs", displayType: "currency", currentOutputPath: "metrics.totals.averageJobSize" }),
+    metric("paid_average_ticket", "Paid Avg Ticket", "combined", "matched_sold_jobs", "formula", { formula: "paid_revenue / paid_sold_jobs", displayType: "currency", currentOutputPath: "metrics.totals.paidAverageJobSize" }),
+    metric("organic_average_ticket", "Organic Avg Ticket", "combined", "matched_sold_jobs", "formula", { formula: "organic_revenue / organic_sold_jobs", displayType: "currency", currentOutputPath: "metrics.totals.organicAverageJobSize" }),
+    metric("average_time_to_close", "Avg Time to Close", "combined", "matched_sold_jobs", "average", { field: "timeToCloseDays", displayType: "days", currentOutputPath: "metrics.totals.averageTimeToCloseDays" }),
+    metric("paid_average_time_to_close", "Paid Avg Time to Close", "combined", "matched_sold_jobs", "average", { field: "timeToCloseDays", displayType: "days", currentOutputPath: "metrics.totals.paidAverageTimeToCloseDays", conditions: [{ id: "paid_time_to_close_bucket", classification: "sourceBucket", operator: "equals", value: "paid" }] }),
+    metric("organic_average_time_to_close", "Organic Avg Time to Close", "combined", "matched_sold_jobs", "average", { field: "timeToCloseDays", displayType: "days", currentOutputPath: "metrics.totals.organicAverageTimeToCloseDays", conditions: [{ id: "organic_time_to_close_bucket", classification: "sourceBucket", operator: "not_equals", value: "paid" }] }),
   ],
   groupedMetricSets: [
-    grouped("paid_channel_performance", "Paid Channel Performance", "spend", "marketing_spend_rows", "vendor", ["overall_spend", "paid_leads", "paid_appointments", "paid_sold_jobs", "paid_revenue", "paid_roas"]),
-    grouped("design_consultant_performance", "Design Consultant Performance", "jobtread", "jobs", "designConsultant", ["overall_appointments", "overall_sold_jobs", "overall_revenue", "overall_close_rate", "overall_nsli"]),
-    grouped("leads_by_source", "Leads By Source", "gohighlevel", "contacts", "source", ["overall_leads", "overall_appointments", "overall_sold_jobs", "overall_revenue", "overall_close_rate", "overall_nsli"]),
+    grouped("paid_channel_performance", "Paid Channel Performance", "spend", "marketing_spend_rows", "vendor", ["overall_spend", "paid_leads", "paid_appointments", "paid_sold_jobs", "paid_revenue", "paid_roas", "cost_per_paid_lead", "cost_per_paid_appointment", "paid_close_rate"]),
+    grouped("design_consultant_performance", "Design Consultant Performance", "jobtread", "jobs", "designConsultant", ["overall_appointments", "overall_sold_jobs", "overall_revenue", "overall_close_rate", "average_ticket", "overall_nsli"]),
+    grouped("leads_by_source", "Leads by Source", "gohighlevel", "contacts", "source", ["overall_leads", "overall_appointments", "overall_sold_jobs", "overall_revenue", "overall_close_rate", "overall_nsli"]),
     grouped("closing_outcomes", "Why Jobs Aren't Closing", "jobtread", "jobs", "status", ["overall_appointments"]),
   ],
   settings: {
     timezone: "America/New_York",
     attributionLookbackMonths: 12,
     spendSourceFallback: "uploaded_first",
+    comparisonMode: "previous_period",
+    dashboardSections: DEFAULT_DASHBOARD_SECTIONS,
   },
 };
 
