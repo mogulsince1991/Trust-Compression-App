@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     if (!workspaceId) return NextResponse.json({ error: "workspaceId is required." }, { status: 400 });
     if (!connectedAccountId) return NextResponse.json({ error: "connectedAccountId is required." }, { status: 400 });
 
-    const { user, userSupabase, serviceSupabase } = await requireWorkspaceAccess(request, workspaceId);
+    const { user, serviceSupabase } = await requireWorkspaceAccess(request, workspaceId);
     const account = await getConnectedAccountForWorkspace(serviceSupabase, { workspaceId, connectedAccountId });
 
     if (!account) return NextResponse.json({ error: "Connected account was not found." }, { status: 404 });
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unsupported connected account provider." }, { status: 400 });
     }
 
-    const result = await ingestContractorSnapshot(userSupabase, {
+    const result = await ingestContractorSnapshot(serviceSupabase, {
       workspaceId,
       provider,
       displayName: snapshot.displayName,
