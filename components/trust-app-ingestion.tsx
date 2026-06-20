@@ -30,6 +30,7 @@ import {
   type FolderRow,
   type JourneyDraft,
   type JourneySummary,
+  type JourneyViewRow,
   type LibraryFilters,
   type MetricsState,
   type SourceRow,
