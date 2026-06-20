@@ -1,18 +1,16 @@
 import { NextResponse } from "next/server";
-import { createUserSupabaseClient } from "../../../../../lib/supabase";
-import { buildReportFromDatabaseRows } from "../../../../../lib/metrics/contractor/dbReport.js";
+import { fetchGoHighLevelSnapshot } from "../../../../../lib/integrations/contractor/gohighlevel";
+import { fetchJobTreadSnapshot } from "../../../../../lib/integrations/contractor/jobtread";
 import { buildConfiguredMetricResults } from "../../../../../lib/metrics/contractor/configuredMetrics";
+import { buildReport } from "../../../../../lib/metrics/contractor/report.js";
 import { getContractorRuleSet } from "../../../../../lib/server/contractor-rule-sets";
-import { createServiceSupabaseClient } from "../../../../../lib/supabase";
 import { toRuntimeMetricRules } from "../../../../../lib/metrics/contractor/config";
+import { requireWorkspaceAccess } from "../../../../../lib/server/route-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request) {
-  const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-  if (!token) return NextResponse.json({ error: "Sign in before generating contractor metrics." }, { status: 401 });
-
   try {
     const body = await request.json();
     const workspaceId = String(body.workspaceId ?? "").trim();
@@ -28,22 +26,13 @@ export async function POST(request) {
       return NextResponse.json({ error: "startDate and endDate must use YYYY-MM-DD." }, { status: 400 });
     }
 
-    const supabase = createUserSupabaseClient(token);
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError || !user) return NextResponse.json({ error: "Your session expired. Sign in again." }, { status: 401 });
-
-    const serviceSupabase = createServiceSupabaseClient();
-    if (!serviceSupabase) return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY is not configured." }, { status: 500 });
-
+    const { user, userSupabase, serviceSupabase } = await requireWorkspaceAccess(request, workspaceId);
     const ruleSet = await getContractorRuleSet(serviceSupabase, workspaceId, ruleSetId);
     const runtimeRules = toRuntimeMetricRules(ruleSet);
 
     const current = await generateReportPayload({
-      supabase,
+      userSupabase,
+      serviceSupabase,
       workspaceId,
       clientName,
       startDate,
@@ -55,7 +44,8 @@ export async function POST(request) {
     const comparisonRange = compareToPreviousPeriod ? previousPeriodRange(startDate, endDate) : null;
     const comparison = comparisonRange
       ? await generateReportPayload({
-          supabase,
+          userSupabase,
+          serviceSupabase,
           workspaceId,
           clientName,
           startDate: comparisonRange.startDate,
@@ -69,7 +59,7 @@ export async function POST(request) {
     let savedRun = null;
 
     if (persist) {
-      const { data: insertedReport, error: saveError } = await supabase
+      const { data: insertedReport, error: saveError } = await userSupabase
         .from("contractor_reports")
         .insert({
           workspace_id: workspaceId,
@@ -105,7 +95,7 @@ export async function POST(request) {
       if (saveError) throw saveError;
       savedReport = insertedReport;
 
-      const { data: insertedRun, error: runError } = await supabase
+      const { data: insertedRun, error: runError } = await userSupabase
         .from("contractor_report_runs")
         .insert({
           workspace_id: workspaceId,
@@ -154,44 +144,71 @@ export async function POST(request) {
         : null,
     });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Contractor metrics report failed." }, { status: 400 });
+    const status = typeof error === "object" && error && "status" in error ? Number(error.status) : 400;
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Contractor metrics report failed." }, { status });
   }
 }
 
-async function generateReportPayload({ supabase, workspaceId, clientName, startDate, endDate, ruleSet, runtimeRules }) {
-  const [{ data: leads, error: leadsError }, { data: jobs, error: jobsError }, { data: spendRows, error: spendError }] = await Promise.all([
-    supabase
-      .from("contractor_leads")
-      .select("*")
-      .eq("workspace_id", workspaceId)
-      .gte("created_date", `${startDate}T00:00:00`)
-      .lte("created_date", `${endDate}T23:59:59`),
-    supabase
-      .from("contractor_jobs")
-      .select("*")
-      .eq("workspace_id", workspaceId)
-      .or(`appointment_date.gte.${startDate}T00:00:00,sold_date.gte.${startDate}T00:00:00`),
-    supabase
+async function generateReportPayload({ userSupabase, serviceSupabase, workspaceId, clientName, startDate, endDate, ruleSet, runtimeRules }) {
+  const [{ data: spendRows, error: spendError }, { data: connectedAccounts, error: accountsError }] = await Promise.all([
+    userSupabase
       .from("contractor_spend_rows")
       .select("*")
       .eq("workspace_id", workspaceId)
       .gte("spend_date", startDate)
       .lte("spend_date", endDate),
+    serviceSupabase
+      .from("connected_accounts")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .eq("status", "connected")
+      .in("provider", ["ghl", "gohighlevel", "jobtread"]),
   ]);
 
-  if (leadsError) throw leadsError;
-  if (jobsError) throw jobsError;
+  if (accountsError) throw accountsError;
   if (spendError) throw spendError;
 
-  const filteredJobs = (jobs ?? []).filter((job) => inPeriod(job.appointment_date, startDate, endDate) || inPeriod(job.sold_date, startDate, endDate));
-  const report = buildReportFromDatabaseRows({
+  const liveSnapshots = await Promise.all(
+    (connectedAccounts ?? []).map(async (account) => {
+      if (account.provider === "ghl" || account.provider === "gohighlevel") {
+        return {
+          provider: "gohighlevel",
+          accountLabel: account.account_label ?? "GoHighLevel",
+          snapshot: await fetchGoHighLevelSnapshot(account, { startDate, endDate, limit: 2000, maxPages: 20 }),
+        };
+      }
+
+      if (account.provider === "jobtread") {
+        return {
+          provider: "jobtread",
+          accountLabel: account.account_label ?? "JobTread",
+          snapshot: await fetchJobTreadSnapshot(account, { startDate, endDate, limit: 1000 }),
+        };
+      }
+
+      return null;
+    })
+  );
+
+  const liveLeads = [];
+  const liveJobs = [];
+
+  for (const entry of liveSnapshots) {
+    if (!entry?.snapshot) continue;
+    liveLeads.push(...(entry.snapshot.leads ?? []));
+    liveJobs.push(...(entry.snapshot.jobs ?? []));
+  }
+
+  const report = buildReport({
     client: clientName,
     startDate,
     endDate,
-    leads: leads ?? [],
-    jobs: filteredJobs,
-    spendRows: spendRows ?? [],
+    allowArchivedSpend: false,
     rules: runtimeRules,
+    uploadedSpendRows: (spendRows ?? []).map(toUploadedSpendRow),
+    windsorRows: liveLeads,
+    attributionRows: liveLeads,
+    jobtreadRows: liveJobs,
   });
 
   report.runtimeRules = runtimeRules;
@@ -200,17 +217,23 @@ async function generateReportPayload({ supabase, workspaceId, clientName, startD
     report,
     startDate,
     endDate,
-    leads: leads ?? [],
-    jobs: filteredJobs,
+    leads: liveLeads.map(toConfiguredLeadRow),
+    jobs: liveJobs.map(toConfiguredJobRow),
     spendRows: spendRows ?? [],
   });
+  const snapshotSources = liveSnapshots
+    .filter(Boolean)
+    .map((entry) => `${entry.accountLabel} (${entry.provider})`);
   const sourceSnapshot = {
-    leadRows: leads?.length ?? 0,
-    jobRows: filteredJobs.length,
+    leadRows: liveLeads.length,
+    jobRows: liveJobs.length,
     spendRows: spendRows?.length ?? 0,
-    generatedFrom: "contractor_* normalized tables",
+    generatedFrom: snapshotSources.length
+      ? `live connected accounts: ${snapshotSources.join(", ")}${spendRows?.length ? " + stored spend rows" : ""}`
+      : "stored spend rows only",
     ruleSetId: ruleSet.id ?? null,
     ruleSetVersion: ruleSet.version,
+    liveConnectedAccounts: snapshotSources,
   };
 
   return {
@@ -230,6 +253,54 @@ async function generateReportPayload({ supabase, workspaceId, clientName, startD
     detail: report.detail,
     dashboard: buildDashboardSnapshot(report),
     sourceSnapshot,
+  };
+}
+
+function toUploadedSpendRow(row) {
+  return {
+    Date: row.spend_date,
+    Vendor: row.vendor,
+    Channel: row.channel,
+    Campaign: row.campaign,
+    Spend: row.spend,
+    Leads: row.leads,
+    trackable: row.trackable,
+    sourceFile: row.source_file,
+  };
+}
+
+function toConfiguredLeadRow(row) {
+  return {
+    external_id: row.id ?? null,
+    name: row.name ?? null,
+    email: row.email ?? null,
+    phone: row.phone ?? null,
+    source: row.source ?? null,
+    campaign: row.campaign ?? null,
+    created_date: row.createdDate ?? null,
+    tags: row.tags ?? null,
+    notes_summary: row.notesSummary ?? null,
+  };
+}
+
+function toConfiguredJobRow(row) {
+  return {
+    external_id: row.jobId ?? row.id ?? null,
+    job_number: row.jobNumber ?? null,
+    customer: row.customer ?? null,
+    email: row.email ?? null,
+    phone: row.phone ?? null,
+    appointment_date: row.appointmentDate ?? row.createdAt ?? null,
+    sold_date: row.soldDate ?? null,
+    status: row.status ?? null,
+    project_type: row.projectType ?? null,
+    revenue: row.revenue ?? 0,
+    net_sales: row.netSales ?? row.revenue ?? 0,
+    design_consultant: row.designConsultant ?? null,
+    project_manager: row.projectManager ?? null,
+    source: row.source ?? null,
+    campaign: row.campaign ?? null,
+    notes_summary: row.notesSummary ?? null,
   };
 }
 
@@ -265,11 +336,4 @@ function toIsoDate(value) {
 
 function isIsoDate(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
-}
-
-function inPeriod(value, startDate, endDate) {
-  if (!value) return false;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return false;
-  return date >= new Date(`${startDate}T00:00:00`) && date <= new Date(`${endDate}T23:59:59`);
 }
