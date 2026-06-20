@@ -15,7 +15,7 @@
 .hero span,
 .panelHead span,
 .metricCard span,
-.steps li::marker {
+.formGrid label span {
   color: #8e8a83;
   font-size: 11px;
   line-height: 1;
@@ -24,16 +24,20 @@
 }
 
 .hero h1 {
-  max-width: 880px;
+  max-width: 920px;
   margin: 16px 0 14px;
-  font-size: clamp(42px, 7vw, 88px);
-  line-height: 0.92;
+  font-size: clamp(40px, 6vw, 80px);
+  line-height: 0.94;
   font-weight: 500;
 }
 
 .hero p,
+.copy,
 .empty,
-.reportRow small {
+.reportRow small,
+.metricCard small,
+.accountSummary small,
+.accountHeader small {
   color: rgba(246, 243, 238, 0.68);
   line-height: 1.5;
 }
@@ -44,6 +48,12 @@
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 14px;
 }
 
 .linkButton,
@@ -105,8 +115,12 @@
   background: rgba(255, 255, 255, 0.05);
 }
 
-.error {
+.error,
+.rowError {
   color: #ffd4d4;
+}
+
+.error {
   background: rgba(255, 80, 80, 0.08);
   border-color: rgba(255, 80, 80, 0.24);
 }
@@ -118,16 +132,39 @@
   margin-bottom: 14px;
 }
 
-.panel,
-.payloadPanel {
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.035);
-  backdrop-filter: blur(20px);
+.shellTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 18px;
+}
+
+.shellTab,
+.shellTabActive {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(246, 243, 238, 0.8);
+  cursor: pointer;
+}
+
+.shellTabActive {
+  background: #f6f3ee;
+  color: #050505;
 }
 
 .panel {
   padding: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.035);
+  backdrop-filter: blur(20px);
+  margin-bottom: 14px;
 }
 
 .panelHead {
@@ -148,16 +185,8 @@
   stroke-width: 1.7;
 }
 
-.steps {
-  margin: 0 0 18px;
-  padding-left: 20px;
-  color: rgba(246, 243, 238, 0.86);
-  line-height: 1.6;
-}
-
 .metricCard {
   min-width: 0;
-  flex: 1 1 150px;
   display: grid;
   gap: 8px;
   padding: 14px;
@@ -174,7 +203,7 @@
 
 .formGrid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 14px;
 }
@@ -184,41 +213,72 @@
   gap: 7px;
 }
 
-.formGrid label span {
-  color: #8e8a83;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.13em;
+.fullField {
+  grid-column: 1 / -1;
 }
 
 .formGrid input,
-.payload {
+.formGrid select,
+.formGrid textarea,
+.conditionRow input,
+.conditionRow select {
   width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
   border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
   outline: 0;
   color: #f6f3ee;
   background: rgba(255, 255, 255, 0.045);
 }
 
-.formGrid input {
-  min-height: 42px;
-  padding: 0 12px;
-  border-radius: 10px;
-}
-
-.payloadPanel {
-  padding: 18px;
-  margin-bottom: 14px;
-}
-
-.payload {
-  min-height: 420px;
-  padding: 16px;
-  border-radius: 14px;
+.formGrid textarea {
+  min-height: 108px;
+  padding: 12px;
   resize: vertical;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: 13px;
-  line-height: 1.5;
+}
+
+.accountSummary,
+.accountHeader {
+  display: grid;
+  gap: 4px;
+}
+
+.accountList,
+.reportList {
+  display: grid;
+  gap: 10px;
+}
+
+.accountCard,
+.reportRow {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.accountHeader {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.accountMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.accountMeta span,
+.statusPill {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+  color: rgba(246, 243, 238, 0.8);
 }
 
 .reportSummary {
@@ -227,23 +287,125 @@
   gap: 10px;
 }
 
-.reportList {
+.metricGrid {
   display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 
-.reportRow {
+.builderHeader,
+.reportHero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.builderHeader h2,
+.reportHero h2 {
+  margin: 10px 0 8px;
+  font-size: clamp(28px, 4vw, 46px);
+  line-height: 1;
+  font-weight: 540;
+}
+
+.builderList,
+.stack,
+.summaryList,
+.conditionList {
   display: grid;
-  gap: 4px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.04);
+  gap: 12px;
+}
+
+.ruleSummary,
+.subsection,
+.ruleCard {
+  display: grid;
+  gap: 12px;
+}
+
+.ruleCard {
+  padding: 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.reportRow strong,
-.reportRow span {
-  font-weight: 520;
+.ruleCardHeader,
+.subsectionHead,
+.inlineFields,
+.conditionRow {
+  display: flex;
+  gap: 10px;
+}
+
+.ruleCardHeader,
+.subsectionHead {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.inlineFields {
+  flex-wrap: wrap;
+}
+
+.inlineFields label,
+.conditionRow > * {
+  flex: 1 1 180px;
+}
+
+.conditionRow {
+  align-items: center;
+}
+
+.iconButton {
+  min-height: 38px;
+  min-width: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: #f6f3ee;
+  cursor: pointer;
+}
+
+.subsection {
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tableWrap {
+  overflow: auto;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 640px;
+}
+
+.table th,
+.table td {
+  padding: 12px 14px;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.table th {
+  color: #8e8a83;
+  font-size: 11px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.table td {
+  color: rgba(246, 243, 238, 0.84);
+  vertical-align: top;
 }
 
 .loadingBox {
@@ -265,8 +427,10 @@
 
 @media (max-width: 900px) {
   .grid,
-  .formGrid,
-  .reportSummary {
+  .reportSummary,
+  .metricGrid,
+  .kpis,
+  .formGrid {
     grid-template-columns: 1fr;
   }
 
@@ -274,7 +438,12 @@
     font-size: clamp(34px, 10vw, 56px);
   }
 
-  .payload {
-    min-height: 320px;
+  .builderHeader,
+  .reportHero {
+    flex-direction: column;
+  }
+
+  .accountHeader {
+    grid-template-columns: 1fr;
   }
 }
