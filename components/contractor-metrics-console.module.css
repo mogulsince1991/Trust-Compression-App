@@ -525,6 +525,23 @@
   grid-column: span 2;
 }
 
+.formulaRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.formulaRow select {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  outline: 0;
+  color: #f6f3ee;
+  background: rgba(255, 255, 255, 0.045);
+}
+
 .metricListItem,
 .metricListItemActive {
   width: 100%;
@@ -556,6 +573,38 @@
   grid-template-columns: minmax(150px, 0.8fr) minmax(0, 1fr) minmax(180px, 0.8fr) minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
+}
+
+.metricBand2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.metricBand3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.metricBand6 {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.metricBandCompact .metricCard {
+  padding: 14px;
+  gap: 6px;
+}
+
+.metricBandCompact .metricCard strong {
+  font-size: clamp(20px, 2.3vw, 30px);
+}
+
+.metricBandEditorial .metricCard {
+  min-height: 210px;
+  padding: 22px;
+  align-content: end;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.07));
+}
+
+.metricBandEditorial .metricCard strong {
+  font-size: clamp(32px, 3.6vw, 52px);
 }
 
 .tableWrap {
@@ -633,6 +682,10 @@
 
   .previewSearch {
     grid-column: auto;
+  }
+
+  .formulaRow {
+    grid-template-columns: 1fr;
   }
 
   .conditionRow {
