@@ -22,6 +22,11 @@ type SourcePreview = {
   fieldCatalog: string[];
 };
 type PreviewFilterState = Record<string, string>;
+type PreviewRequestState = {
+  limit: string;
+  startDate: string;
+  endDate: string;
+};
 
 const TABS: Array<{ id: TabId; label: string; icon: any }> = [
   { id: "metrics", label: "Metrics", icon: BarChart3 },
@@ -62,6 +67,7 @@ export function ContractorMetricsWorkspace() {
   const [preview, setPreview] = useState<any | null>(null);
   const [previews, setPreviews] = useState<Record<string, SourcePreview>>({});
   const [previewFilters, setPreviewFilters] = useState<Record<string, PreviewFilterState>>({});
+  const [previewRequests, setPreviewRequests] = useState<Record<string, PreviewRequestState>>({});
   const [clientName, setClientName] = useState("Trust Compression Contractor Report");
   const [startDate, setStartDate] = useState("2026-06-01");
   const [endDate, setEndDate] = useState("2026-06-30");
@@ -154,7 +160,11 @@ export function ContractorMetricsWorkspace() {
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error ?? "Request failed.");
-      setNotice(state.startsWith("sync-") ? `Sync complete. Imported ${result.imported ?? 0}, updated ${result.updated ?? 0}, skipped ${result.skipped ?? 0}.` : "Saved successfully.");
+      setNotice(
+        state.startsWith("sync-")
+          ? `Cache sync complete. Imported ${result.imported ?? 0}, updated ${result.updated ?? 0}, skipped ${result.skipped ?? 0}.`
+          : "Saved successfully."
+      );
       await refresh(workspaceId, session.access_token);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Request failed.");
@@ -219,6 +229,7 @@ export function ContractorMetricsWorkspace() {
 
   async function loadPreview(connectedAccountId: string) {
     if (!workspaceId || !session) return;
+    const requestState = previewRequests[connectedAccountId] ?? defaultPreviewRequest();
     setWorking(`preview-${connectedAccountId}`);
     setNotice("");
     setError("");
@@ -226,7 +237,13 @@ export function ContractorMetricsWorkspace() {
       const response = await fetch("/api/metrics/contractor/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ workspaceId, connectedAccountId, limit: 100 }),
+        body: JSON.stringify({
+          workspaceId,
+          connectedAccountId,
+          limit: clampPositiveInteger(requestState.limit, 100),
+          startDate: requestState.startDate || undefined,
+          endDate: requestState.endDate || undefined,
+        }),
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error ?? "Could not preview source rows.");
@@ -241,6 +258,13 @@ export function ContractorMetricsWorkspace() {
     } finally {
       setWorking("");
     }
+  }
+
+  function updatePreviewRequest(connectedAccountId: string, key: keyof PreviewRequestState, value: string) {
+    setPreviewRequests((current) => ({
+      ...current,
+      [connectedAccountId]: { ...(current[connectedAccountId] ?? defaultPreviewRequest()), [key]: value },
+    }));
   }
 
   function updatePreviewFilter(connectedAccountId: string, key: string, value: string) {
@@ -273,8 +297,8 @@ export function ContractorMetricsWorkspace() {
     <main className={styles.screen}>
       <section className={styles.hero}>
         <span>Contractor Metrics</span>
-        <h1>Source previews, sync backchecks, and live CRM-backed reporting.</h1>
-        <p>Preview source rows before trusting a sync, generate the contractor dashboard from normalized records, and keep the workspace configuration editable without raw JSON.</p>
+        <h1>Live CRM reporting with source previews and optional cache sync.</h1>
+        <p>Preview live source rows, generate the contractor dashboard directly from connected CRMs, and keep cache sync available only for backchecks or normalized-source review.</p>
         <div className={styles.heroActions}>
           <Link href="/" className={styles.linkButton}>Open main app</Link>
           <button className={styles.secondary} type="button" disabled={working === "refresh"} onClick={() => refresh()}><RefreshCw />Refresh workspace</button>
@@ -302,7 +326,7 @@ export function ContractorMetricsWorkspace() {
     return (
       <div className={styles.stack}>
         <section className={styles.grid}>
-          <ConnectionCard title="GoHighLevel private integration" description="Save a private integration token server-side, then preview contacts or sync them into this workspace.">
+          <ConnectionCard title="GoHighLevel private integration" description="Save a private integration token server-side, then preview live contacts or optionally cache them into this workspace.">
             <form className={styles.formGrid} onSubmit={(event: FormEvent<HTMLFormElement>) => { event.preventDefault(); void postAction("/api/connect/ghl", "connect-ghl", { workspaceId, accountLabel: ghl.accountLabel, privateIntegrationToken: ghl.privateIntegrationToken, locationId: ghl.locationId, externalAccountId: ghl.externalAccountId || undefined, apiBaseUrl: ghl.apiBaseUrl }); setGhl((current) => ({ ...current, privateIntegrationToken: "" })); }}>
               <Field label="Account label" value={ghl.accountLabel} onChange={(value) => setGhl((current) => ({ ...current, accountLabel: value }))} />
               <Field label="Location ID" value={ghl.locationId} onChange={(value) => setGhl((current) => ({ ...current, locationId: value }))} />
@@ -313,7 +337,7 @@ export function ContractorMetricsWorkspace() {
             </form>
           </ConnectionCard>
 
-          <ConnectionCard title="JobTread grant key" description="Save a JobTread Open API grant key server-side, then preview jobs or sync them into this workspace.">
+          <ConnectionCard title="JobTread grant key" description="Save a JobTread Open API grant key server-side, then preview live jobs or optionally cache them into this workspace.">
             <form className={styles.formGrid} onSubmit={(event: FormEvent<HTMLFormElement>) => { event.preventDefault(); void postAction("/api/connect/jobtread", "connect-jobtread", { workspaceId, accountLabel: jobtread.accountLabel, apiToken: jobtread.apiToken, externalAccountId: jobtread.externalAccountId || undefined, apiBaseUrl: jobtread.apiBaseUrl }); setJobtread((current) => ({ ...current, apiToken: "" })); }}>
               <Field label="Account label" value={jobtread.accountLabel} onChange={(value) => setJobtread((current) => ({ ...current, accountLabel: value }))} />
               <Field label="External account ID" value={jobtread.externalAccountId} onChange={(value) => setJobtread((current) => ({ ...current, externalAccountId: value }))} />
@@ -331,6 +355,7 @@ export function ContractorMetricsWorkspace() {
                 const accountPreview = previews[account.id];
                 const filters = previewFilters[account.id] ?? defaultPreviewFilters(accountPreview?.filters);
                 const filteredRows = accountPreview ? applyPreviewFilters(accountPreview.rows, accountPreview.filters, filters) : [];
+                const previewRequest = previewRequests[account.id] ?? defaultPreviewRequest();
 
                 return (
                   <article key={account.id} className={styles.accountCard}>
@@ -352,9 +377,14 @@ export function ContractorMetricsWorkspace() {
                         <Pill label="Skipped" value={String(account.metadata.lastSyncSummary.skipped ?? 0)} />
                       </div>
                     ) : null}
+                    <div className={styles.formGrid}>
+                      <Field label="Preview row limit" type="number" value={previewRequest.limit} onChange={(value) => updatePreviewRequest(account.id, "limit", value)} />
+                      <Field label="Preview start date" type="date" value={previewRequest.startDate} onChange={(value) => updatePreviewRequest(account.id, "startDate", value)} />
+                      <Field label="Preview end date" type="date" value={previewRequest.endDate} onChange={(value) => updatePreviewRequest(account.id, "endDate", value)} />
+                    </div>
                     <div className={styles.actionRow}>
-                      <button className={styles.secondary} type="button" disabled={working === `sync-${account.id}`} onClick={() => postAction("/api/metrics/contractor/sync", `sync-${account.id}`, { workspaceId, connectedAccountId: account.id })}><RefreshCw />Sync now</button>
-                      <button className={styles.ghost} type="button" disabled={working === `preview-${account.id}`} onClick={() => loadPreview(account.id)}><Database />{working === `preview-${account.id}` ? "Loading preview..." : "Preview source rows"}</button>
+                      <button className={styles.secondary} type="button" disabled={working === `sync-${account.id}`} onClick={() => postAction("/api/metrics/contractor/sync", `sync-${account.id}`, { workspaceId, connectedAccountId: account.id })}><RefreshCw />Cache sync (optional)</button>
+                      <button className={styles.ghost} type="button" disabled={working === `preview-${account.id}`} onClick={() => loadPreview(account.id)}><Database />{working === `preview-${account.id}` ? "Loading preview..." : "Preview live rows"}</button>
                     </div>
                     {accountPreview ? (
                       <SourcePreviewPanel
@@ -384,7 +414,7 @@ export function ContractorMetricsWorkspace() {
                     {source.last_error ? <small className={styles.rowError}>{source.last_error}</small> : null}
                   </div>
                 </article>
-              )) : <p className={styles.empty}>No normalized sources yet. Connect an account and run a sync.</p>}
+              )) : <p className={styles.empty}>No cached sources yet. Live report runs do not require a cache sync.</p>}
             </div>
           </Panel>
         </section>
@@ -599,6 +629,14 @@ function defaultPreviewFilters(filters?: Array<{ key: string }>) {
   }, { search: "" } as PreviewFilterState);
 }
 
+function defaultPreviewRequest(): PreviewRequestState {
+  return {
+    limit: "100",
+    startDate: "",
+    endDate: "",
+  };
+}
+
 function applyPreviewFilters(rows: AnyRecord[], filterDefinitions: Array<{ key: string }>, filters: PreviewFilterState) {
   const search = String(filters.search ?? "").trim().toLowerCase();
   return rows.filter((row) => {
@@ -687,4 +725,9 @@ function clone<T>(value: T): T {
 
 function slugify(value: string) {
   return String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+function clampPositiveInteger(value: string, fallback: number) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
