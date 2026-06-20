@@ -242,7 +242,10 @@
 .formGrid input,
 .formGrid select,
 .formGrid textarea,
-.layoutControls input {
+.layoutControls input,
+.layoutControls select,
+.conditionRow input,
+.conditionRow select {
   width: 100%;
   min-height: 44px;
   padding: 0 12px;
@@ -363,6 +366,7 @@
 }
 
 .metricCard {
+  position: relative;
   min-width: 0;
   display: grid;
   gap: 8px;
@@ -370,6 +374,19 @@
   border-radius: 18px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.04);
+}
+
+.metricCardTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.metricInfoIcon {
+  width: 16px;
+  height: 16px;
+  color: rgba(246, 243, 238, 0.54);
 }
 
 .metricCard strong {
@@ -382,6 +399,31 @@
   color: #cfc7bb;
   font-size: 12px;
   font-style: normal;
+}
+
+.metricTooltip {
+  position: absolute;
+  inset: auto 14px 14px 14px;
+  z-index: 3;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(10, 10, 10, 0.96);
+  color: rgba(246, 243, 238, 0.84);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(6px);
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+.metricCard:hover .metricTooltip,
+.metricCard:focus-within .metricTooltip {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .summaryRow {
@@ -436,6 +478,84 @@
 .wizardPreview strong {
   font-size: 20px;
   font-weight: 530;
+}
+
+.previewPanel {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.previewHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.previewFieldList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.previewFieldPill {
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(246, 243, 238, 0.72);
+  font-size: 12px;
+}
+
+.previewToolbar {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.5fr) repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.previewToolbar label {
+  display: grid;
+  gap: 7px;
+}
+
+.previewSearch {
+  grid-column: span 2;
+}
+
+.metricListItem,
+.metricListItemActive {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: #f6f3ee;
+  display: grid;
+  gap: 6px;
+}
+
+.metricListItemActive {
+  border-color: rgba(246, 243, 238, 0.36);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.metricListItem strong,
+.metricListItemActive strong {
+  font-size: 15px;
+  font-weight: 540;
+}
+
+.conditionRow {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.8fr) minmax(0, 1fr) minmax(180px, 0.8fr) minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
 }
 
 .tableWrap {
@@ -497,13 +617,26 @@
   .layoutRow,
   .builderHeader,
   .accountHeader,
-  .sourceRow {
+  .sourceRow,
+  .previewHeader {
     flex-direction: column;
   }
 
   .layoutControls {
     width: 100%;
     justify-content: stretch;
+  }
+
+  .previewToolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .previewSearch {
+    grid-column: auto;
+  }
+
+  .conditionRow {
+    grid-template-columns: 1fr;
   }
 }
 
