@@ -235,6 +235,8 @@ async function getJobDetail({
         number: {},
         createdAt: {},
         closedOn: {},
+        projectedPrice: {},
+        projectedPriceWithTax: {},
         location: {
           account: {
             name: {},
@@ -310,7 +312,9 @@ function normalizeJob(job: any) {
   const fields = customFieldMap(job.customFieldValues?.nodes ?? []);
   const documents = Array.isArray(job.documents?.nodes) ? job.documents.nodes : [];
   const soldDate = approvedOrderSoldDate(documents);
-  const revenue = approvedOrderRevenue(documents) || revenueFromFields(fields);
+  const revenue =
+    toNumber(job.projectedPriceWithTax ?? job.projectedPrice) ||
+    revenueFromFields(fields);
   const status = firstField(fields, ["status", "job_status", "appointment_result"]) ?? statusFromDocuments(documents);
 
   return {
@@ -365,10 +369,6 @@ function firstField(fields: Record<string, string>, names: string[]) {
 
 function revenueFromFields(fields: Record<string, string>) {
   return toNumber(firstField(fields, ["revenue", "contract_amount", "sold_price", "contract_value", "net_sales", "approved_orders"]));
-}
-
-function approvedOrderRevenue(documents: any[]) {
-  return approvedOrderDocuments(documents).reduce((total, doc) => total + toNumber(doc?.priceWithTax ?? doc?.price), 0);
 }
 
 function approvedOrderSoldDate(documents: any[]) {
