@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { BarChart3, Database, Link2, Loader2, RefreshCw, Save, Settings2, Sparkles } from "lucide-react";
+import { ArrowDown, ArrowUp, BarChart3, Database, Info, Link2, Loader2, Plus, RefreshCw, Save, Settings2, Sparkles, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { FormEvent, ReactNode } from "react";
+import type { FormEvent } from "react";
+import type { ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 import styles from "./contractor-metrics-console.module.css";
@@ -27,6 +28,7 @@ type PreviewRequestState = {
   startDate: string;
   endDate: string;
 };
+type FieldCatalog = Record<string, { label?: string; objects?: Record<string, string[]> }>;
 
 const TABS: Array<{ id: TabId; label: string; icon: any }> = [
   { id: "metrics", label: "Metrics", icon: BarChart3 },
@@ -49,6 +51,18 @@ const EMPTY_JOBTREAD = {
   apiBaseUrl: "https://api.jobtread.com",
 };
 
+const METRIC_OPERATIONS = ["count", "sum", "average", "formula"] as const;
+const DISPLAY_TYPES = ["currency", "percent", "number", "ratio", "days", "string"] as const;
+const CONDITION_OPERATORS = ["equals", "not_equals", "contains", "not_contains", "in", "not_in", "exists", "not_exists", "between", "greater_than", "less_than", "regex"] as const;
+const TABLE_OPTIONS = [
+  { value: "paid_channel_performance", label: "Paid Channel Performance" },
+  { value: "design_consultant_performance", label: "Design Consultant Performance" },
+  { value: "leads_by_source", label: "Leads by Source" },
+  { value: "jobs_sold_detail", label: "Jobs Sold Detail" },
+  { value: "closing_outcomes", label: "Why Jobs Aren't Closing" },
+  { value: "unmatched_review", label: "Unmatched / Review Rows" },
+];
+
 export function ContractorMetricsWorkspace() {
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const [session, setSession] = useState<Session | null>(null);
@@ -63,7 +77,9 @@ export function ContractorMetricsWorkspace() {
   const [reports, setReports] = useState<any[]>([]);
   const [ruleSets, setRuleSets] = useState<any[]>([]);
   const [ruleSetDraft, setRuleSetDraft] = useState<any | null>(null);
+  const [fieldCatalog, setFieldCatalog] = useState<FieldCatalog>({});
   const [selectedRuleSetId, setSelectedRuleSetId] = useState<string | null>(null);
+  const [selectedMetricId, setSelectedMetricId] = useState<string | null>(null);
   const [preview, setPreview] = useState<any | null>(null);
   const [previews, setPreviews] = useState<Record<string, SourcePreview>>({});
   const [previewFilters, setPreviewFilters] = useState<Record<string, PreviewFilterState>>({});
@@ -74,10 +90,13 @@ export function ContractorMetricsWorkspace() {
   const [ghl, setGhl] = useState(EMPTY_GHL);
   const [jobtread, setJobtread] = useState(EMPTY_JOBTREAD);
 
-  const activeReport = preview ?? fromStoredReport(reports[0] ?? null, ruleSetDraft);
+  const activeReport = preview;
   const metricMap = Object.fromEntries((activeReport?.configuredMetrics ?? []).map((metric: any) => [metric.id, metric]));
   const comparisonMap = Object.fromEntries((activeReport?.comparison?.configuredMetrics ?? []).map((metric: any) => [metric.id, metric]));
   const sections = normalizeSections(ruleSetDraft?.settings?.dashboardSections);
+  const metrics = ruleSetDraft?.metricDefinitions ?? [];
+  const selectedMetric = metrics.find((metric: any) => metric.id === selectedMetricId) ?? metrics[0] ?? null;
+  const selectedMetricFields = selectedMetric ? getFieldOptions(fieldCatalog, selectedMetric.provider, selectedMetric.object) : [];
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -116,6 +135,14 @@ export function ContractorMetricsWorkspace() {
     if (next) setRuleSetDraft(clone(next));
   }, [selectedRuleSetId, ruleSets]);
 
+  useEffect(() => {
+    if (!metrics.length) {
+      setSelectedMetricId(null);
+      return;
+    }
+    setSelectedMetricId((current) => (current && metrics.some((metric: any) => metric.id === current) ? current : metrics[0].id));
+  }, [metrics]);
+
   async function refresh(nextWorkspaceId = workspaceId, token = session?.access_token) {
     if (!nextWorkspaceId || !token) return;
     setWorking((current) => current || "refresh");
@@ -140,6 +167,7 @@ export function ContractorMetricsWorkspace() {
     setAccounts(accountsJson.accounts ?? []);
     setSources(sourceRows.data ?? []);
     setReports(reportRows.data ?? []);
+    setFieldCatalog(configJson.fieldCatalog ?? {});
     setRuleSets(configJson.ruleSets ?? []);
     const currentRuleSet = configJson.currentRuleSet ?? configJson.ruleSets?.[0] ?? null;
     setSelectedRuleSetId((current) => current ?? currentRuleSet?.id ?? null);
@@ -274,6 +302,148 @@ export function ContractorMetricsWorkspace() {
     }));
   }
 
+  function updateRuleSet(mutator: (current: any) => any) {
+    setRuleSetDraft((current: any) => (current ? mutator(clone(current)) : current));
+  }
+
+  function updateMetric(metricId: string, mutator: (metric: any) => any) {
+    updateRuleSet((current) => ({
+      ...current,
+      metricDefinitions: (current.metricDefinitions ?? []).map((metric: any) => (metric.id === metricId ? mutator(clone(metric)) : metric)),
+    }));
+  }
+
+  function addMetric() {
+    const provider = Object.keys(fieldCatalog)[0] ?? "gohighlevel";
+    const object = Object.keys(fieldCatalog[provider]?.objects ?? {})[0] ?? "contacts";
+    const field = getFieldOptions(fieldCatalog, provider, object)[0] ?? "";
+    const nextId = `custom_${Date.now()}`;
+    updateRuleSet((current) => ({
+      ...current,
+      metricDefinitions: [
+        ...(current.metricDefinitions ?? []),
+        {
+          id: nextId,
+          name: "New Metric",
+          source: provider,
+          provider,
+          object,
+          operation: "count",
+          field,
+          dateField: "",
+          conditions: [],
+          formula: "",
+          displayType: "number",
+          currentOutputPath: "",
+          description: "",
+        },
+      ],
+    }));
+    setSelectedMetricId(nextId);
+  }
+
+  function removeMetric(metricId: string) {
+    updateRuleSet((current) => ({
+      ...current,
+      metricDefinitions: (current.metricDefinitions ?? []).filter((metric: any) => metric.id !== metricId),
+      settings: {
+        ...current.settings,
+        dashboardSections: (current.settings?.dashboardSections ?? []).map((section: any) => ({
+          ...section,
+          metricIds: (section.metricIds ?? []).filter((id: string) => id !== metricId),
+        })),
+      },
+    }));
+  }
+
+  function addCondition(metricId: string) {
+    updateMetric(metricId, (metric) => ({
+      ...metric,
+      conditions: [
+        ...(metric.conditions ?? []),
+        {
+          id: `condition_${Date.now()}`,
+          field: getFieldOptions(fieldCatalog, metric.provider, metric.object)[0] ?? "",
+          operator: "equals",
+          value: "",
+        },
+      ],
+    }));
+  }
+
+  function updateCondition(metricId: string, conditionId: string, patch: AnyRecord) {
+    updateMetric(metricId, (metric) => ({
+      ...metric,
+      conditions: (metric.conditions ?? []).map((condition: any) => (condition.id === conditionId ? { ...condition, ...patch } : condition)),
+    }));
+  }
+
+  function removeCondition(metricId: string, conditionId: string) {
+    updateMetric(metricId, (metric) => ({
+      ...metric,
+      conditions: (metric.conditions ?? []).filter((condition: any) => condition.id !== conditionId),
+    }));
+  }
+
+  function addSection(kind: "metric_band" | "table") {
+    const nextId = `${kind}_${Date.now()}`;
+    updateRuleSet((current) => ({
+      ...current,
+      settings: {
+        ...current.settings,
+        dashboardSections: [
+          ...(current.settings?.dashboardSections ?? []),
+          kind === "metric_band"
+            ? { id: nextId, title: "Custom Metric Band", kind, visible: true, metricIds: [] }
+            : { id: nextId, title: "Custom Table", kind, visible: true, tableId: "unmatched_review" },
+        ],
+      },
+    }));
+  }
+
+  function updateSection(sectionId: string, patch: AnyRecord) {
+    updateRuleSet((current) => ({
+      ...current,
+      settings: {
+        ...current.settings,
+        dashboardSections: (current.settings?.dashboardSections ?? []).map((section: any) => (section.id === sectionId ? { ...section, ...patch } : section)),
+      },
+    }));
+  }
+
+  function moveSection(sectionId: string, direction: -1 | 1) {
+    updateRuleSet((current) => {
+      const nextSections = [...(current.settings?.dashboardSections ?? [])];
+      const index = nextSections.findIndex((section: any) => section.id === sectionId);
+      const swapIndex = index + direction;
+      if (index < 0 || swapIndex < 0 || swapIndex >= nextSections.length) return current;
+      [nextSections[index], nextSections[swapIndex]] = [nextSections[swapIndex], nextSections[index]];
+      return {
+        ...current,
+        settings: {
+          ...current.settings,
+          dashboardSections: nextSections,
+        },
+      };
+    });
+  }
+
+  function toggleMetricInSection(sectionId: string, metricId: string) {
+    updateRuleSet((current) => ({
+      ...current,
+      settings: {
+        ...current.settings,
+        dashboardSections: (current.settings?.dashboardSections ?? []).map((section: any) => {
+          if (section.id !== sectionId || section.kind !== "metric_band") return section;
+          const metricIds = new Set(section.metricIds ?? []);
+          if (metricIds.has(metricId)) metricIds.delete(metricId);
+          else metricIds.add(metricId);
+          return { ...section, metricIds: Array.from(metricIds) };
+        }),
+      },
+    }));
+  }
+
   if (loading) {
     return (
       <main className={styles.screen}>
@@ -355,7 +525,6 @@ export function ContractorMetricsWorkspace() {
                 const accountPreview = previews[account.id];
                 const filters = previewFilters[account.id] ?? defaultPreviewFilters(accountPreview?.filters);
                 const filteredRows = accountPreview ? applyPreviewFilters(accountPreview.rows, accountPreview.filters, filters) : [];
-                const previewRequest = previewRequests[account.id] ?? defaultPreviewRequest();
 
                 return (
                   <article key={account.id} className={styles.accountCard}>
@@ -378,9 +547,24 @@ export function ContractorMetricsWorkspace() {
                       </div>
                     ) : null}
                     <div className={styles.formGrid}>
-                      <Field label="Preview row limit" type="number" value={previewRequest.limit} onChange={(value) => updatePreviewRequest(account.id, "limit", value)} />
-                      <Field label="Preview start date" type="date" value={previewRequest.startDate} onChange={(value) => updatePreviewRequest(account.id, "startDate", value)} />
-                      <Field label="Preview end date" type="date" value={previewRequest.endDate} onChange={(value) => updatePreviewRequest(account.id, "endDate", value)} />
+                      <Field
+                        label="Preview row limit"
+                        type="number"
+                        value={(previewRequests[account.id] ?? defaultPreviewRequest()).limit}
+                        onChange={(value) => updatePreviewRequest(account.id, "limit", value)}
+                      />
+                      <Field
+                        label="Preview start date"
+                        type="date"
+                        value={(previewRequests[account.id] ?? defaultPreviewRequest()).startDate}
+                        onChange={(value) => updatePreviewRequest(account.id, "startDate", value)}
+                      />
+                      <Field
+                        label="Preview end date"
+                        type="date"
+                        value={(previewRequests[account.id] ?? defaultPreviewRequest()).endDate}
+                        onChange={(value) => updatePreviewRequest(account.id, "endDate", value)}
+                      />
                     </div>
                     <div className={styles.actionRow}>
                       <button className={styles.secondary} type="button" disabled={working === `sync-${account.id}`} onClick={() => postAction("/api/metrics/contractor/sync", `sync-${account.id}`, { workspaceId, connectedAccountId: account.id })}><RefreshCw />Cache sync (optional)</button>
@@ -477,7 +661,16 @@ export function ContractorMetricsWorkspace() {
                       {(section.metricIds ?? []).map((metricId: string) => {
                         const metric = metricMap[metricId];
                         if (!metric) return null;
-                        return <MetricCard key={metricId} label={metric.name} value={formatMetricValue(metric.value, metric.displayType)} detail={metric.description ?? metric.formula ?? "Starter metric"} delta={metricDelta(metric, comparisonMap[metricId])} />;
+                        return (
+                          <MetricCard
+                            key={metricId}
+                            label={metric.name}
+                            value={formatMetricValue(metric.value, metric.displayType)}
+                            detail={metric.description ?? metric.formula ?? "Starter metric"}
+                            delta={metricDelta(metric, comparisonMap[metricId])}
+                            inspector={buildMetricInspector(metric)}
+                          />
+                        );
                       })}
                     </div>
                   </Panel>
@@ -498,7 +691,7 @@ export function ContractorMetricsWorkspace() {
               </div>
             </Panel>
           </>
-        ) : <Panel title="Metrics" icon={<BarChart3 />}><p className={styles.copy}>Run the contractor report to populate the dashboard.</p></Panel>}
+        ) : <Panel title="Metrics" icon={<BarChart3 />}><p className={styles.copy}>Run the contractor report to load live workspace data, or open one of the saved runs below.</p><div className={styles.reportList}>{reports.length ? reports.map((report) => (<button key={report.id} type="button" className={styles.reportRow} onClick={() => setPreview(fromStoredReport(report, ruleSetDraft))}><strong>{report.client_name || "Contractor Report"}</strong><small>{report.start_date} to {report.end_date}</small><small>{formatDateTime(report.created_at)}</small></button>)) : <p className={styles.empty}>No saved runs yet.</p>}</div></Panel>}
       </div>
     );
   }
@@ -506,11 +699,25 @@ export function ContractorMetricsWorkspace() {
   function renderConfig() {
     return (
       <div className={styles.stack}>
+        <section className={styles.builderHeader}>
+          <div>
+            <span>Builder</span>
+            <h2>Restore clarity to the live dashboard.</h2>
+            <p className={styles.copy}>This config controls the cards and sections that appear on the live metrics screen. Each custom metric stays plain-language and uses CRM field catalogs instead of raw JSON.</p>
+          </div>
+          <div className={styles.heroActions}>
+            <button className={styles.secondary} type="button" onClick={addMetric}><Plus />Add metric</button>
+            <button className={styles.ghost} type="button" onClick={() => addSection("metric_band")}><Plus />Add metric band</button>
+            <button className={styles.ghost} type="button" onClick={() => addSection("table")}><Plus />Add table section</button>
+          </div>
+        </section>
+
         <section className={styles.controlGrid}>
           <Panel title="Workspace report config" icon={<Settings2 />}>
             <div className={styles.formGrid}>
               <Field label="Template name" value={ruleSetDraft.name ?? ""} onChange={(value) => setRuleSetDraft((current: any) => ({ ...current, name: value, slug: slugify(value) }))} />
               <SelectField label="Comparison mode" value={ruleSetDraft.settings?.comparisonMode ?? "previous_period"} onChange={(value) => setRuleSetDraft((current: any) => ({ ...current, settings: { ...current.settings, comparisonMode: value } }))} options={[{ value: "previous_period", label: "Previous period" }, { value: "none", label: "None" }]} />
+              <TextAreaField label="Template description" value={ruleSetDraft.description ?? ""} onChange={(value) => setRuleSetDraft((current: any) => ({ ...current, description: value }))} />
             </div>
             <div className={styles.actionRow}>
               <button className={styles.primary} type="button" disabled={working === "save-rule-set"} onClick={saveRuleSet}><Save />Save workspace config</button>
@@ -522,9 +729,173 @@ export function ContractorMetricsWorkspace() {
                 <strong>{ruleSetDraft.name}</strong>
                 <small>{ruleSetDraft.description || "Default contractor dashboard template."}</small>
               </div>
+              <div className={styles.inlineStat}>
+                <span>Custom metrics</span>
+                <strong>{String(metrics.length)}</strong>
+              </div>
+              <div className={styles.inlineStat}>
+                <span>Visible sections</span>
+                <strong>{String(sections.filter((section: any) => section.visible !== false).length)}</strong>
+              </div>
             </div>
           </Panel>
         </section>
+
+        <section className={styles.grid}>
+          <Panel title="Dashboard layout" icon={<BarChart3 />}>
+            <div className={styles.reportList}>
+              {sections.map((section: any, index: number) => (
+                <article key={section.id} className={styles.layoutRow}>
+                  <div className={styles.layoutMeta}>
+                    <span>{section.kind === "metric_band" ? "Metric band" : section.kind === "table" ? "Table section" : "Summary"}</span>
+                    <strong>{section.title}</strong>
+                    <small>{section.kind === "metric_band" ? `${(section.metricIds ?? []).length} cards` : section.tableId ? prettyLabel(section.tableId) : "Narrative summary"}</small>
+                  </div>
+                  <div className={styles.layoutControls}>
+                    <input value={section.title ?? ""} onChange={(event) => updateSection(section.id, { title: event.target.value })} placeholder="Section title" />
+                    {section.kind === "table" ? (
+                      <select value={section.tableId ?? "unmatched_review"} onChange={(event) => updateSection(section.id, { tableId: event.target.value })}>
+                        {TABLE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+                    ) : null}
+                    <label className={styles.toggle}><input type="checkbox" checked={section.visible !== false} onChange={(event) => updateSection(section.id, { visible: event.target.checked })} />Visible</label>
+                    <button className={styles.iconButton} type="button" disabled={index === 0} onClick={() => moveSection(section.id, -1)} aria-label="Move section up"><ArrowUp /></button>
+                    <button className={styles.iconButton} type="button" disabled={index === sections.length - 1} onClick={() => moveSection(section.id, 1)} aria-label="Move section down"><ArrowDown /></button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </Panel>
+
+          <Panel title="Metric catalog" icon={<Database />}>
+            <div className={styles.reportList}>
+              {metrics.map((metric: any) => (
+                <button key={metric.id} type="button" className={selectedMetricId === metric.id ? styles.metricListItemActive : styles.metricListItem} onClick={() => setSelectedMetricId(metric.id)}>
+                  <strong>{metric.name}</strong>
+                  <small>{describeMetricDefinition(metric)}</small>
+                </button>
+              ))}
+            </div>
+          </Panel>
+        </section>
+
+        {selectedMetric ? (
+          <section className={styles.grid}>
+            <Panel title="Metric builder" icon={<Settings2 />}>
+              <div className={styles.wizardPreview}>
+                <span>Formula preview</span>
+                <strong>{selectedMetric.name}</strong>
+                <small>{describeMetricDefinition(selectedMetric)}</small>
+              </div>
+
+              <div className={styles.formGrid}>
+                <Field label="Metric name" value={selectedMetric.name ?? ""} onChange={(value) => updateMetric(selectedMetric.id, (metric) => ({ ...metric, name: value }))} />
+                <SelectField label="Display type" value={selectedMetric.displayType ?? "number"} onChange={(value) => updateMetric(selectedMetric.id, (metric) => ({ ...metric, displayType: value }))} options={DISPLAY_TYPES.map((value) => ({ value, label: prettyLabel(value) }))} />
+                <SelectField label="Provider" value={selectedMetric.provider ?? ""} onChange={(value) => updateMetric(selectedMetric.id, (metric) => {
+                  const nextObject = Object.keys(fieldCatalog[value]?.objects ?? {})[0] ?? "";
+                  const nextField = getFieldOptions(fieldCatalog, value, nextObject)[0] ?? "";
+                  return { ...metric, provider: value, source: value, object: nextObject, field: nextField, dateField: "" };
+                })} options={Object.entries(fieldCatalog).map(([value, provider]) => ({ value, label: provider.label ?? prettyLabel(value) }))} />
+                <SelectField label="Object" value={selectedMetric.object ?? ""} onChange={(value) => updateMetric(selectedMetric.id, (metric) => ({ ...metric, object: value, field: getFieldOptions(fieldCatalog, metric.provider, value)[0] ?? "" }))} options={Object.keys(fieldCatalog[selectedMetric.provider]?.objects ?? {}).map((value) => ({ value, label: prettyLabel(value) }))} />
+                <SelectField label="Operation" value={selectedMetric.operation ?? "count"} onChange={(value) => updateMetric(selectedMetric.id, (metric) => ({ ...metric, operation: value, formula: value === "formula" ? metric.formula ?? "" : "" }))} options={METRIC_OPERATIONS.map((value) => ({ value, label: prettyLabel(value) }))} />
+                <SelectField label="Value field" value={selectedMetric.field ?? ""} onChange={(value) => updateMetric(selectedMetric.id, (metric) => ({ ...metric, field: value }))} options={(selectedMetricFields.length ? selectedMetricFields : [""]).map((value) => ({ value, label: value ? value : "No field required" }))} />
+                <SelectField label="Date field" value={selectedMetric.dateField ?? ""} onChange={(value) => updateMetric(selectedMetric.id, (metric) => ({ ...metric, dateField: value }))} options={[{ value: "", label: "Use report default" }, ...selectedMetricFields.map((value) => ({ value, label: value }))]} />
+                <TextAreaField label="Metric description" value={selectedMetric.description ?? ""} onChange={(value) => updateMetric(selectedMetric.id, (metric) => ({ ...metric, description: value }))} />
+                {selectedMetric.operation === "formula" ? (
+                  <TextAreaField label="Formula" value={selectedMetric.formula ?? ""} onChange={(value) => updateMetric(selectedMetric.id, (metric) => ({ ...metric, formula: value }))} />
+                ) : null}
+              </div>
+
+              <div className={styles.previewPanel}>
+                <div className={styles.previewHeader}>
+                  <div>
+                    <span>Available CRM fields</span>
+                    <p className={styles.copy}>These are the selectable fields for the current provider and object.</p>
+                  </div>
+                </div>
+                <div className={styles.previewFieldList}>
+                  {selectedMetricFields.map((field) => <span key={field} className={styles.previewFieldPill}>{field}</span>)}
+                </div>
+              </div>
+
+              <div className={styles.previewPanel}>
+                <div className={styles.previewHeader}>
+                  <div>
+                    <span>Filter conditions</span>
+                    <p className={styles.copy}>Set the exact field conditions used to calculate this metric.</p>
+                  </div>
+                  <button className={styles.secondary} type="button" onClick={() => addCondition(selectedMetric.id)}><Plus />Add condition</button>
+                </div>
+                <div className={styles.reportList}>
+                  {(selectedMetric.conditions ?? []).map((condition: any) => (
+                    <div key={condition.id} className={styles.conditionRow}>
+                      <select
+                        value={conditionTargetKind(condition)}
+                        onChange={(event) => {
+                          const nextKind = event.target.value;
+                          if (nextKind === "classification") updateCondition(selectedMetric.id, condition.id, { classification: Object.keys(ruleSetDraft.classifications ?? {})[0] ?? "sourceBucket", field: undefined, ruleRef: undefined });
+                          else if (nextKind === "ruleRef") updateCondition(selectedMetric.id, condition.id, { ruleRef: "soldJob", field: undefined, classification: undefined });
+                          else updateCondition(selectedMetric.id, condition.id, { field: selectedMetricFields[0] ?? "", classification: undefined, ruleRef: undefined });
+                        }}
+                      >
+                        <option value="field">Field</option>
+                        <option value="classification">Classification</option>
+                        <option value="ruleRef">Rule</option>
+                      </select>
+                      {conditionTargetKind(condition) === "classification" ? (
+                        <select value={condition.classification ?? "sourceBucket"} onChange={(event) => updateCondition(selectedMetric.id, condition.id, { classification: event.target.value })}>
+                          {Object.keys(ruleSetDraft.classifications ?? {}).map((value) => <option key={value} value={value}>{prettyLabel(value)}</option>)}
+                        </select>
+                      ) : conditionTargetKind(condition) === "ruleRef" ? (
+                        <input value={condition.ruleRef ?? ""} onChange={(event) => updateCondition(selectedMetric.id, condition.id, { ruleRef: event.target.value })} placeholder="Rule reference" />
+                      ) : (
+                        <select value={condition.field ?? ""} onChange={(event) => updateCondition(selectedMetric.id, condition.id, { field: event.target.value })}>
+                          {selectedMetricFields.map((value) => <option key={value} value={value}>{value}</option>)}
+                        </select>
+                      )}
+                      <select value={condition.operator ?? "equals"} onChange={(event) => updateCondition(selectedMetric.id, condition.id, { operator: event.target.value })}>
+                        {CONDITION_OPERATORS.map((value) => <option key={value} value={value}>{prettyLabel(value)}</option>)}
+                      </select>
+                      <input
+                        value={Array.isArray(condition.value) ? condition.value.join(", ") : condition.value ?? ""}
+                        onChange={(event) => updateCondition(selectedMetric.id, condition.id, {
+                          value: ["between", "in", "not_in"].includes(condition.operator) ? toCommaList(event.target.value) : event.target.value,
+                        })}
+                        placeholder="Value or comma list"
+                      />
+                      <button className={styles.iconButton} type="button" onClick={() => removeCondition(selectedMetric.id, condition.id)} aria-label="Remove condition"><Trash2 /></button>
+                    </div>
+                  ))}
+                  {selectedMetric.conditions?.length ? null : <p className={styles.empty}>No conditions yet. Add filters if this metric should segment by source, status, date, or campaign.</p>}
+                </div>
+              </div>
+
+              <div className={styles.actionRow}>
+                <button className={styles.ghost} type="button" onClick={() => removeMetric(selectedMetric.id)}><Trash2 />Remove metric</button>
+              </div>
+            </Panel>
+
+            <Panel title="Card placement" icon={<BarChart3 />}>
+              <div className={styles.reportList}>
+                {sections.filter((section: any) => section.kind === "metric_band").map((section: any) => (
+                  <article key={section.id} className={styles.ruleCard}>
+                    <div className={styles.ruleCardHeader}>
+                      <div className={styles.layoutMeta}>
+                        <span>Metric band</span>
+                        <strong>{section.title}</strong>
+                      </div>
+                      <label className={styles.toggle}>
+                        <input type="checkbox" checked={(section.metricIds ?? []).includes(selectedMetric.id)} onChange={() => toggleMetricInSection(section.id, selectedMetric.id)} />
+                        Show card
+                      </label>
+                    </div>
+                    <small>{(section.metricIds ?? []).length} cards in this band</small>
+                  </article>
+                ))}
+              </div>
+            </Panel>
+          </section>
+        ) : null}
       </div>
     );
   }
@@ -546,8 +917,19 @@ function Pill({ label, value }: { label: string; value: string }) {
   return <div className={styles.statusPill}><span>{label}</span><strong>{value}</strong></div>;
 }
 
-function MetricCard({ label, value, detail, delta }: { label: string; value: string; detail: string; delta?: string | null }) {
-  return <div className={styles.metricCard}><span>{label}</span><strong>{value}</strong><small>{detail}</small>{delta ? <em>{delta}</em> : null}</div>;
+function MetricCard({ label, value, detail, delta, inspector }: { label: string; value: string; detail: string; delta?: string | null; inspector?: string }) {
+  return (
+    <div className={styles.metricCard} title={inspector || detail}>
+      <div className={styles.metricCardTop}>
+        <span>{label}</span>
+        {inspector ? <Info className={styles.metricInfoIcon} /> : null}
+      </div>
+      <strong>{value}</strong>
+      <small>{detail}</small>
+      {delta ? <em>{delta}</em> : null}
+      {inspector ? <div className={styles.metricTooltip}>{inspector}</div> : null}
+    </div>
+  );
 }
 
 function Field({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (value: string) => void; type?: string }) {
@@ -556,6 +938,10 @@ function Field({ label, value, onChange, type = "text" }: { label: string; value
 
 function SelectField({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: Array<{ value: string; label: string }> }) {
   return <label><span>{label}</span><select value={value} onChange={(event) => onChange(event.target.value)}>{options.map((option) => <option key={`${option.value}-${option.label}`} value={option.value}>{option.label}</option>)}</select></label>;
+}
+
+function TextAreaField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return <label className={styles.fullField}><span>{label}</span><textarea value={value} onChange={(event) => onChange(event.target.value)} /></label>;
 }
 
 function SourcePreviewPanel({
@@ -719,6 +1105,14 @@ function formatDateTime(value?: string | null) {
   return date.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
+function toLines(value: string) {
+  return value.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean);
+}
+
+function toCommaList(value: string) {
+  return value.split(",").map((entry) => entry.trim()).filter(Boolean);
+}
+
 function clone<T>(value: T): T {
   return value == null ? value : JSON.parse(JSON.stringify(value));
 }
@@ -730,4 +1124,36 @@ function slugify(value: string) {
 function clampPositiveInteger(value: string, fallback: number) {
   const parsed = Number.parseInt(String(value ?? ""), 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function prettyLabel(value: string) {
+  return String(value ?? "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (entry) => entry.toUpperCase());
+}
+
+function getFieldOptions(fieldCatalog: FieldCatalog, provider?: string, object?: string) {
+  if (!provider || !object) return [];
+  return fieldCatalog[provider]?.objects?.[object] ?? [];
+}
+
+function describeMetricDefinition(metric: any) {
+  const base = metric.operation === "formula"
+    ? `Formula: ${metric.formula || "Set a formula"}`
+    : `${prettyLabel(metric.operation)} ${metric.field ? metric.field : "records"} from ${providerLabel(metric.provider)} ${prettyLabel(metric.object)}`;
+  const date = metric.dateField ? ` | Date: ${metric.dateField}` : "";
+  const conditions = metric.conditions?.length
+    ? ` | Filters: ${metric.conditions.map((condition: any) => `${condition.field || "field"} ${prettyLabel(condition.operator)} ${Array.isArray(condition.value) ? condition.value.join(", ") : condition.value ?? ""}`.trim()).join("; ")}`
+    : "";
+  return `${base}${date}${conditions}`;
+}
+
+function buildMetricInspector(metric: any) {
+  return [metric.description, describeMetricDefinition(metric)].filter(Boolean).join("\n");
+}
+
+function conditionTargetKind(condition: any) {
+  if (condition?.classification) return "classification";
+  if (condition?.ruleRef) return "ruleRef";
+  return "field";
 }
