@@ -1,105 +1,340 @@
 const DEFAULT_JOBTREAD_API_BASE_URL = "https://api.jobtread.com";
-const DEFAULT_JOBTREAD_JOBS_PATH = "/jobs";
+const DEFAULT_JOBTREAD_PAVE_PATH = "/pave";
+const DEFAULT_PAGE_SIZE = 100;
+const DEFAULT_MAX_PAGES = 5;
+const DEFAULT_MAX_JOBS = 500;
 
 export async function fetchJobTreadSnapshot(account: any) {
   const metadata = account.metadata ?? {};
-  const accessToken = String(account.access_token ?? "").trim();
+  const grantKey = String(account.access_token ?? "").trim();
 
-  if (!accessToken) {
-    throw new Error("JobTread API token is missing. Reconnect the account.");
+  if (!grantKey) {
+    throw new Error("JobTread grant key is missing. Reconnect the account.");
   }
 
   const baseUrl = normalizeBaseUrl(
     String(metadata.apiBaseUrl ?? process.env.JOBTREAD_API_BASE_URL ?? DEFAULT_JOBTREAD_API_BASE_URL)
   );
-  const jobsPath = String(metadata.jobsPath ?? process.env.JOBTREAD_JOBS_PATH ?? DEFAULT_JOBTREAD_JOBS_PATH);
-  const authHeaderName = String(metadata.authHeaderName ?? process.env.JOBTREAD_AUTH_HEADER_NAME ?? "Authorization");
-  const authScheme = String(metadata.authScheme ?? process.env.JOBTREAD_AUTH_SCHEME ?? "Bearer");
+  const pavePath = String(metadata.pavePath ?? process.env.JOBTREAD_PAVE_PATH ?? DEFAULT_JOBTREAD_PAVE_PATH);
+  const pageSize = clampPositiveInteger(metadata.pageSize, DEFAULT_PAGE_SIZE);
+  const maxPages = clampPositiveInteger(metadata.maxPages, DEFAULT_MAX_PAGES);
+  const maxJobs = clampPositiveInteger(metadata.maxJobs, DEFAULT_MAX_JOBS);
 
-  const jobs = [];
-  let page = 1;
-  const limit = 100;
+  const organizationId = await getOrganizationId({ baseUrl, pavePath, grantKey });
+  const jobs = await listJobs({ baseUrl, pavePath, grantKey, organizationId, pageSize, maxPages, maxJobs });
+  const detailRows = [];
 
-  for (let iteration = 0; iteration < 5; iteration += 1) {
-    const requestUrl = new URL(jobsPath, baseUrl);
-    requestUrl.searchParams.set("page", String(page));
-    requestUrl.searchParams.set("limit", String(limit));
-
-    const headers: Record<string, string> = { Accept: "application/json" };
-    headers[authHeaderName] =
-      authHeaderName.toLowerCase() === "authorization" ? `${authScheme} ${accessToken}` : accessToken;
-
-    const response = await fetch(requestUrl.toString(), {
-      headers,
-      cache: "no-store",
-    });
-
-    const payload = await safeJson(response);
-    if (!response.ok) {
-      throw new Error(readProviderError(payload, "JobTread job sync failed."));
+  for (const job of jobs) {
+    const detail = await getJobDetail({ baseUrl, pavePath, grantKey, jobId: job.id });
+    if (detail?.job) {
+      detailRows.push(normalizeJob(detail.job));
     }
-
-    const rows = extractArray(payload, ["jobs", "data.jobs", "data", "results", "items"]);
-    if (!rows.length) break;
-
-    jobs.push(...rows.map((row: any) => flattenJob(row)));
-
-    if (rows.length < limit) break;
-    page += 1;
   }
 
   return {
     displayName: account.account_label || "JobTread",
-    externalAccountId: account.external_account_id || account.id,
+    externalAccountId: account.external_account_id || organizationId || account.id,
     leads: [],
-    jobs,
+    jobs: detailRows,
     spendRows: [],
     settings: {
-      syncSource: "jobtread_api",
+      syncSource: "jobtread_pave",
       apiBaseUrl: baseUrl,
-      jobsPath,
-      authHeaderName,
-      authScheme,
+      pavePath,
+      organizationId,
+      pageSize,
+      maxPages,
+      maxJobs,
     },
   };
 }
 
-function flattenJob(row: any) {
-  const customer = row.customer ?? row.customerName ?? row.client ?? row.clientName ?? row.homeowner ?? row.owner;
+async function getOrganizationId({
+  baseUrl,
+  pavePath,
+  grantKey,
+}: {
+  baseUrl: string;
+  pavePath: string;
+  grantKey: string;
+}) {
+  const payload = await paveQuery({
+    baseUrl,
+    pavePath,
+    grantKey,
+    query: {
+      currentGrant: {
+        user: {
+          memberships: {
+            nodes: {
+              organization: {
+                id: {},
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const organizationId = payload?.currentGrant?.user?.memberships?.nodes?.[0]?.organization?.id;
+  if (!organizationId) {
+    throw new Error("Could not discover the JobTread organization from this grant key.");
+  }
+  return String(organizationId);
+}
+
+async function listJobs({
+  baseUrl,
+  pavePath,
+  grantKey,
+  organizationId,
+  pageSize,
+  maxPages,
+  maxJobs,
+}: {
+  baseUrl: string;
+  pavePath: string;
+  grantKey: string;
+  organizationId: string;
+  pageSize: number;
+  maxPages: number;
+  maxJobs: number;
+}) {
+  const jobs = [];
+  let nextPage: string | null = null;
+
+  for (let pageIndex = 0; pageIndex < maxPages && jobs.length < maxJobs; pageIndex += 1) {
+    const params: Record<string, any> = {
+      size: pageSize,
+      sortBy: [{ field: "number", order: "desc" }],
+    };
+
+    if (nextPage) {
+      params.page = nextPage;
+    }
+
+    const payload = await paveQuery({
+      baseUrl,
+      pavePath,
+      grantKey,
+      query: {
+        organization: {
+          $: { id: organizationId },
+          jobs: {
+            $: params,
+            nodes: {
+              id: {},
+              name: {},
+              number: {},
+            },
+            nextPage: {},
+          },
+        },
+      },
+    });
+
+    const pageJobs = Array.isArray(payload?.organization?.jobs?.nodes) ? payload.organization.jobs.nodes : [];
+    jobs.push(...pageJobs);
+    nextPage = payload?.organization?.jobs?.nextPage ?? null;
+
+    if (!pageJobs.length || !nextPage) {
+      break;
+    }
+  }
+
+  return jobs.slice(0, maxJobs);
+}
+
+async function getJobDetail({
+  baseUrl,
+  pavePath,
+  grantKey,
+  jobId,
+}: {
+  baseUrl: string;
+  pavePath: string;
+  grantKey: string;
+  jobId: string;
+}) {
+  return paveQuery({
+    baseUrl,
+    pavePath,
+    grantKey,
+    query: {
+      job: {
+        $: { id: jobId },
+        id: {},
+        name: {},
+        number: {},
+        createdAt: {},
+        closedOn: {},
+        location: {
+          account: {
+            name: {},
+          },
+        },
+        customFieldValues: {
+          $: { size: 50 },
+          nodes: {
+            value: {},
+            customField: {
+              name: {},
+            },
+          },
+        },
+        documents: {
+          nodes: {
+            type: {},
+            status: {},
+            priceWithTax: {},
+            amountPaid: {},
+          },
+        },
+      },
+    },
+  });
+}
+
+async function paveQuery({
+  baseUrl,
+  pavePath,
+  grantKey,
+  query,
+}: {
+  baseUrl: string;
+  pavePath: string;
+  grantKey: string;
+  query: Record<string, any>;
+}) {
+  const requestUrl = new URL(pavePath, baseUrl);
+  const response = await fetch(requestUrl.toString(), {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      query: {
+        ...query,
+        $: {
+          ...(query.$ ?? {}),
+          grantKey,
+        },
+      },
+    }),
+    cache: "no-store",
+  });
+
+  const payload = await safeJson(response);
+  if (!response.ok) {
+    throw new Error(readProviderError(payload, "JobTread Pave sync failed."));
+  }
+
+  return payload;
+}
+
+function normalizeJob(job: any) {
+  const fields = customFieldMap(job.customFieldValues?.nodes ?? []);
+  const documents = Array.isArray(job.documents?.nodes) ? job.documents.nodes : [];
+  const soldDate = firstField(fields, ["sold_date", "job_sold_date", "date_sold", "contract_signed_date"]);
+  const revenue = revenueFromFields(fields) || revenueFromDocuments(documents);
 
   return {
-    ...row,
-    id: row.id ?? row.jobId ?? row.rawId ?? row.uuid ?? null,
-    jobId: row.jobId ?? row.id ?? row.uuid ?? null,
-    jobNumber: row.jobNumber ?? row.number ?? row.code ?? row.referenceNumber ?? null,
-    customer: customer?.name ?? customer?.fullName ?? customer ?? row.name ?? null,
-    email: row.email ?? customer?.email ?? customer?.primaryEmail ?? null,
-    phone: row.phone ?? customer?.phone ?? customer?.mobilePhone ?? customer?.primaryPhone ?? null,
-    appointmentDate: row.appointmentDate ?? row.createdAt ?? row.createdOn ?? null,
-    soldDate: row.soldDate ?? row.contractSignedAt ?? row.closedAt ?? null,
-    status: row.status ?? row.stage ?? null,
-    projectType: row.projectType ?? row.jobType ?? row.category ?? null,
-    revenue: row.revenue ?? row.contractAmount ?? row.total ?? row.soldPrice ?? null,
-    netSales: row.netSales ?? row.revenue ?? row.contractAmount ?? row.total ?? row.soldPrice ?? null,
-    designConsultant: row.designConsultant ?? row.estimator ?? row.salesRep ?? null,
-    projectManager: row.projectManager ?? row.manager ?? null,
-    source: row.source ?? row.leadSource ?? null,
-    campaign: row.campaign ?? row.utmCampaign ?? null,
-    notesSummary: row.notesSummary ?? row.notes ?? row.description ?? null,
+    id: job.id ?? null,
+    jobId: job.id ?? null,
+    jobNumber: job.number ?? null,
+    customer: job.location?.account?.name ?? job.name ?? null,
+    email: firstField(fields, ["email", "customer_email"]),
+    phone: firstField(fields, ["phone", "customer_phone"]),
+    appointmentDate: job.createdAt ?? soldDate,
+    createdAt: job.createdAt ?? null,
+    closedOn: job.closedOn ?? null,
+    soldDate,
+    status: firstField(fields, ["status", "job_status", "appointment_result"]) ?? statusFromDocuments(documents),
+    projectType: firstField(fields, ["job_type_category", "project_type", "job_type", "category", "type"]),
+    revenue,
+    netSales: revenue,
+    designConsultant: firstField(fields, ["project_design_consultant", "design_consultant", "estimator", "sales_rep", "salesperson", "sales_person", "consultant"]),
+    projectManager: firstField(fields, ["project_manager"]),
+    source: firstField(fields, ["source", "lead_source", "ghl_source", "marketing_source"]),
+    campaign: firstField(fields, ["campaign", "utm_campaign"]),
+    notesSummary: notesFromFields(fields),
   };
+}
+
+function customFieldMap(nodes: any[]) {
+  const map: Record<string, string> = {};
+
+  for (const node of nodes) {
+    const key = String(node?.customField?.name ?? "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_|_$/g, "");
+
+    if (key) {
+      const value = stringifyValue(node?.value);
+      if (value) {
+        map[key] = value;
+      }
+    }
+  }
+
+  return map;
+}
+
+function firstField(fields: Record<string, string>, names: string[]) {
+  for (const name of names) {
+    if (fields[name]) return fields[name];
+  }
+  return null;
+}
+
+function revenueFromFields(fields: Record<string, string>) {
+  return toNumber(firstField(fields, ["revenue", "contract_amount", "sold_price", "contract_value", "net_sales", "approved_orders"]));
+}
+
+function revenueFromDocuments(documents: any[]) {
+  return documents
+    .filter((doc) => /customerorder/i.test(String(doc?.type ?? "")) && /approved|signed|open|paid/i.test(String(doc?.status ?? "")))
+    .reduce((total, doc) => total + toNumber(doc?.priceWithTax), 0);
+}
+
+function statusFromDocuments(documents: any[]) {
+  return documents.some((doc) => /customerorder/i.test(String(doc?.type ?? "")) && /approved|signed/i.test(String(doc?.status ?? "")))
+    ? "Sold"
+    : "Open";
+}
+
+function notesFromFields(fields: Record<string, string>) {
+  return Object.entries(fields)
+    .filter(([key]) => /note|result|reason|objection|summary|comment/i.test(key))
+    .map(([key, value]) => `${key}: ${value}`)
+    .join(" | ")
+    .slice(0, 1000);
+}
+
+function stringifyValue(value: any) {
+  if (value == null) return null;
+  if (typeof value === "object") {
+    return value.value ?? value.name ?? value.label ?? JSON.stringify(value);
+  }
+  return String(value);
+}
+
+function toNumber(value: unknown) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  const number = Number(String(value ?? "").replace(/[$,]/g, ""));
+  return Number.isFinite(number) ? number : 0;
 }
 
 function normalizeBaseUrl(value: string) {
   return value.endsWith("/") ? value : `${value}/`;
 }
 
-function extractArray(payload: any, paths: string[]) {
-  for (const path of paths) {
-    const value = path.split(".").reduce((current, key) => current?.[key], payload);
-    if (Array.isArray(value)) return value;
-  }
-  if (Array.isArray(payload)) return payload;
-  return [];
+function clampPositiveInteger(value: unknown, fallback: number) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 async function safeJson(response: Response) {
@@ -111,5 +346,5 @@ async function safeJson(response: Response) {
 }
 
 function readProviderError(payload: any, fallback: string) {
-  return payload?.message || payload?.error?.message || payload?.error || fallback;
+  return payload?.message || payload?.error?.message || payload?.error || payload?.errors?.[0]?.message || fallback;
 }
