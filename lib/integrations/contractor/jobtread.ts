@@ -309,7 +309,7 @@ async function paveQuery({
 function normalizeJob(job: any) {
   const fields = customFieldMap(job.customFieldValues?.nodes ?? []);
   const documents = Array.isArray(job.documents?.nodes) ? job.documents.nodes : [];
-  const soldDate = approvedOrderSoldDate(documents) ?? firstField(fields, ["sold_date", "job_sold_date", "date_sold", "contract_signed_date"]);
+  const soldDate = approvedOrderSoldDate(documents);
   const revenue = approvedOrderRevenue(documents) || revenueFromFields(fields);
   const status = firstField(fields, ["status", "job_status", "appointment_result"]) ?? statusFromDocuments(documents);
 
@@ -373,7 +373,7 @@ function approvedOrderRevenue(documents: any[]) {
 
 function approvedOrderSoldDate(documents: any[]) {
   const dates = approvedOrderDocuments(documents)
-    .map((doc) => normalizeDocumentDate(doc?.closedAt ?? doc?.signedAt ?? doc?.issueDate))
+    .map((doc) => normalizeDocumentDate(doc?.closedAt))
     .filter(Boolean)
     .sort();
   return dates[0] ?? null;
@@ -386,9 +386,8 @@ function approvedOrderDocuments(documents: any[]) {
 function isApprovedCustomerOrder(doc: any) {
   const type = String(doc?.type ?? "");
   const status = String(doc?.status ?? "");
-  const name = String(doc?.name ?? "");
-  const customerOrderLike = /customerorder/i.test(type) || /builder'?s agreement|proposal|estimate|contract|deposit/i.test(name);
-  const approvedLike = /approved|signed|paid|closed/i.test(status) || Boolean(doc?.closedAt || doc?.signedAt);
+  const customerOrderLike = /customerorder/i.test(type);
+  const approvedLike = /approved|paid|closed/i.test(status) || Boolean(doc?.closedAt);
   return customerOrderLike && approvedLike;
 }
 
