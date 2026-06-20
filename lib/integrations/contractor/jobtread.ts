@@ -5,6 +5,70 @@ const DEFAULT_MAX_PAGES = 5;
 const DEFAULT_MAX_JOBS = 500;
 
 export async function fetchJobTreadSnapshot(account: any) {
+  const jobs = await fetchJobTreadRows(account, { limit: 100 });
+  const metadata = account.metadata ?? {};
+  const baseUrl = normalizeBaseUrl(
+    String(metadata.apiBaseUrl ?? process.env.JOBTREAD_API_BASE_URL ?? DEFAULT_JOBTREAD_API_BASE_URL)
+  );
+  const pavePath = String(metadata.pavePath ?? process.env.JOBTREAD_PAVE_PATH ?? DEFAULT_JOBTREAD_PAVE_PATH);
+
+  return {
+    displayName: account.account_label || "JobTread",
+    externalAccountId: account.external_account_id || jobs[0]?.organizationId || account.id,
+    leads: [],
+    jobs,
+    spendRows: [],
+    settings: {
+      syncSource: "jobtread_pave",
+      apiBaseUrl: baseUrl,
+      pavePath,
+      organizationId: jobs[0]?.organizationId ?? null,
+    },
+  };
+}
+
+export async function fetchJobTreadPreview(account: any, options?: { limit?: number }) {
+  const rows = await fetchJobTreadRows(account, options);
+
+  return {
+    provider: "jobtread",
+    columns: [
+      { key: "jobNumber", label: "Job number" },
+      { key: "customer", label: "Customer" },
+      { key: "createdAt", label: "Created" },
+      { key: "soldDate", label: "Sold date" },
+      { key: "status", label: "Status" },
+      { key: "projectType", label: "Project type" },
+      { key: "designConsultant", label: "Design consultant" },
+      { key: "source", label: "Lead source" },
+      { key: "revenue", label: "Revenue" },
+    ],
+    rows,
+    filters: [
+      { key: "status", label: "Status", options: uniqueOptions(rows.map((row: any) => row.status)) },
+      { key: "source", label: "Lead source", options: uniqueOptions(rows.map((row: any) => row.source)) },
+      { key: "projectType", label: "Project type", options: uniqueOptions(rows.map((row: any) => row.projectType)) },
+      { key: "designConsultant", label: "Design consultant", options: uniqueOptions(rows.map((row: any) => row.designConsultant)) },
+    ],
+    fieldCatalog: [
+      "jobNumber",
+      "customer",
+      "createdAt",
+      "soldDate",
+      "status",
+      "projectType",
+      "designConsultant",
+      "projectManager",
+      "source",
+      "campaign",
+      "revenue",
+      "notesSummary",
+    ],
+    totalRows: rows.length,
+  };
+}
+
+async function fetchJobTreadRows(account: any, options?: { limit?: number }) {
   const metadata = account.metadata ?? {};
   const grantKey = String(account.access_token ?? "").trim();
 
@@ -18,7 +82,7 @@ export async function fetchJobTreadSnapshot(account: any) {
   const pavePath = String(metadata.pavePath ?? process.env.JOBTREAD_PAVE_PATH ?? DEFAULT_JOBTREAD_PAVE_PATH);
   const pageSize = clampPositiveInteger(metadata.pageSize, DEFAULT_PAGE_SIZE);
   const maxPages = clampPositiveInteger(metadata.maxPages, DEFAULT_MAX_PAGES);
-  const maxJobs = clampPositiveInteger(metadata.maxJobs, DEFAULT_MAX_JOBS);
+  const maxJobs = Math.min(clampPositiveInteger(options?.limit, DEFAULT_MAX_JOBS), 100);
 
   const organizationId = await getOrganizationId({ baseUrl, pavePath, grantKey });
   const jobs = await listJobs({ baseUrl, pavePath, grantKey, organizationId, pageSize, maxPages, maxJobs });
@@ -27,26 +91,11 @@ export async function fetchJobTreadSnapshot(account: any) {
   for (const job of jobs) {
     const detail = await getJobDetail({ baseUrl, pavePath, grantKey, jobId: job.id });
     if (detail?.job) {
-      detailRows.push(normalizeJob(detail.job));
+      detailRows.push({ ...normalizeJob(detail.job), organizationId });
     }
   }
 
-  return {
-    displayName: account.account_label || "JobTread",
-    externalAccountId: account.external_account_id || organizationId || account.id,
-    leads: [],
-    jobs: detailRows,
-    spendRows: [],
-    settings: {
-      syncSource: "jobtread_pave",
-      apiBaseUrl: baseUrl,
-      pavePath,
-      organizationId,
-      pageSize,
-      maxPages,
-      maxJobs,
-    },
-  };
+  return detailRows;
 }
 
 async function getOrganizationId({
@@ -330,6 +379,12 @@ function toNumber(value: unknown) {
 
 function normalizeBaseUrl(value: string) {
   return value.endsWith("/") ? value : `${value}/`;
+}
+
+function uniqueOptions(values: Array<string | null | undefined>) {
+  return Array.from(new Set(values.map((value) => String(value ?? "").trim()).filter(Boolean))).sort((a, b) =>
+    a.localeCompare(b)
+  );
 }
 
 function clampPositiveInteger(value: unknown, fallback: number) {
