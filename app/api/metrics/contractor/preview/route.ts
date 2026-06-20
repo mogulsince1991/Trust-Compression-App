@@ -11,6 +11,8 @@ type PreviewRequest = {
   workspaceId?: string;
   connectedAccountId?: string;
   limit?: number;
+  startDate?: string;
+  endDate?: string;
 };
 
 export async function POST(request: Request) {
@@ -19,6 +21,8 @@ export async function POST(request: Request) {
     const workspaceId = String(body.workspaceId ?? "").trim();
     const connectedAccountId = String(body.connectedAccountId ?? "").trim();
     const limit = clampPositiveInteger(body.limit, 100);
+    const startDate = String(body.startDate ?? "").trim();
+    const endDate = String(body.endDate ?? "").trim();
 
     if (!workspaceId) return NextResponse.json({ error: "workspaceId is required." }, { status: 400 });
     if (!connectedAccountId) return NextResponse.json({ error: "connectedAccountId is required." }, { status: 400 });
@@ -32,10 +36,10 @@ export async function POST(request: Request) {
     }
 
     let preview;
-    if (account.provider === "ghl") {
-      preview = await fetchGoHighLevelPreview(account, { limit });
+    if (account.provider === "ghl" || account.provider === "gohighlevel") {
+      preview = await fetchGoHighLevelPreview(account, { limit, startDate, endDate });
     } else if (account.provider === "jobtread") {
-      preview = await fetchJobTreadPreview(account, { limit });
+      preview = await fetchJobTreadPreview(account, { limit, startDate, endDate });
     } else {
       return NextResponse.json({ error: "Preview is not supported for this connected account provider." }, { status: 400 });
     }
