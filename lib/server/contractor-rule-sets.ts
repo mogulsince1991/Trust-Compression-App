@@ -1,5 +1,6 @@
 import {
   CONTRACTOR_FIELD_CATALOG,
+  buildFieldCatalog,
   createDefaultContractorRuleSet,
   normalizeStoredRuleSet,
   slugify,
@@ -103,10 +104,13 @@ export async function saveContractorRuleSet(
 }
 
 export function contractorMetricBuilderPayload(ruleSets: ContractorRuleSetRecord[], currentRuleSet?: ContractorRuleSetRecord | null) {
+  const activeRuleSet = currentRuleSet ?? ruleSets[0] ?? null;
+  const datasets = activeRuleSet?.settings?.datasetDefinitions ?? [];
   return {
-    fieldCatalog: CONTRACTOR_FIELD_CATALOG,
+    fieldCatalog: datasets.length ? buildFieldCatalog(datasets) : CONTRACTOR_FIELD_CATALOG,
+    datasetCatalog: datasets,
     ruleSets,
-    currentRuleSet: currentRuleSet ?? ruleSets[0] ?? null,
+    currentRuleSet: activeRuleSet,
   };
 }
 

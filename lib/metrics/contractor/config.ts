@@ -42,6 +42,20 @@ export type ContractorMetricDefinition = {
   description?: string | null;
 };
 
+export type ContractorDatasetDefinition = {
+  id: string;
+  label: string;
+  provider: string;
+  object: string;
+  kind: "raw" | "computed";
+  rowGrain: string;
+  dateField?: string | null;
+  description?: string | null;
+  inputDatasets?: string[];
+  fields: string[];
+  isSystem?: boolean;
+};
+
 export type ContractorGroupedMetricSet = {
   id: string;
   name: string;
@@ -105,77 +119,127 @@ export type ContractorRuleSetRecord = {
     spendSourceFallback: "uploaded_first" | "archive_only" | "uploaded_only";
     comparisonMode?: "previous_period" | "none";
     dashboardSections?: ContractorDashboardSection[];
+    datasetDefinitions?: ContractorDatasetDefinition[];
   };
 };
 
-export const CONTRACTOR_FIELD_CATALOG = {
-  gohighlevel: {
-    label: "GoHighLevel",
-    objects: {
-      contacts: [
-        "id",
-        "name",
-        "email",
-        "phone",
-        "source",
-        "campaign",
-        "createdDate",
-        "tags",
-        "notesSummary",
-      ],
-      opportunities: ["id", "pipeline", "stage", "status", "value", "createdDate", "closedDate"],
-    },
+export const DEFAULT_CONTRACTOR_DATASETS: ContractorDatasetDefinition[] = [
+  {
+    id: "gohighlevel.contacts",
+    label: "GoHighLevel Contacts",
+    provider: "gohighlevel",
+    object: "contacts",
+    kind: "raw",
+    rowGrain: "One CRM contact / lead.",
+    dateField: "createdDate",
+    description: "Raw lead records fetched live from GoHighLevel.",
+    fields: ["id", "name", "email", "phone", "source", "campaign", "createdDate", "tags", "notesSummary"],
+    isSystem: true,
   },
-  jobtread: {
-    label: "JobTread",
-    objects: {
-      jobs: [
-        "id",
-        "jobNumber",
-        "customer",
-        "email",
-        "phone",
-        "appointmentDate",
-        "soldDate",
-        "status",
-        "projectType",
-        "revenue",
-        "netSales",
-        "designConsultant",
-        "projectManager",
-        "source",
-        "campaign",
-        "notesSummary",
-      ],
-    },
+  {
+    id: "gohighlevel.opportunities",
+    label: "GoHighLevel Opportunities",
+    provider: "gohighlevel",
+    object: "opportunities",
+    kind: "raw",
+    rowGrain: "One opportunity record.",
+    dateField: "createdDate",
+    description: "Optional pipeline records from GoHighLevel.",
+    fields: ["id", "pipeline", "stage", "status", "value", "createdDate", "closedDate"],
+    isSystem: true,
   },
-  spend: {
-    label: "Marketing Spend",
-    objects: {
-      marketing_spend_rows: ["date", "vendor", "channel", "campaign", "spend", "leads", "trackable", "sourceFile"],
-    },
+  {
+    id: "jobtread.jobs",
+    label: "JobTread Jobs",
+    provider: "jobtread",
+    object: "jobs",
+    kind: "raw",
+    rowGrain: "One JobTread job.",
+    dateField: "appointmentDate",
+    description: "Raw JobTread jobs with appointmentDate normalized from createdAt.",
+    fields: ["id", "jobNumber", "customer", "email", "phone", "appointmentDate", "soldDate", "status", "projectType", "revenue", "netSales", "designConsultant", "projectManager", "source", "campaign", "notesSummary"],
+    isSystem: true,
   },
-  combined: {
-    label: "Combined",
-    objects: {
-      matched_jobs: [
-        "job.id",
-        "job.appointmentDate",
-        "job.soldDate",
-        "job.status",
-        "job.revenue",
-        "job.designConsultant",
-        "job.projectType",
-        "lead.source",
-        "lead.campaign",
-        "lead.createdDate",
-      ],
-      matched_sold_jobs: ["job.id", "job.soldDate", "job.revenue", "lead.source", "lead.campaign", "lead.createdDate"],
-      sold_jobs: ["job.id", "job.soldDate", "job.status", "job.revenue", "job.netSales", "job.projectType"],
-      appointments: ["job.id", "job.appointmentDate", "job.status", "job.designConsultant"],
-    },
+  {
+    id: "spend.marketing_spend_rows",
+    label: "Spend Upload Rows",
+    provider: "spend",
+    object: "marketing_spend_rows",
+    kind: "raw",
+    rowGrain: "One uploaded spend row.",
+    dateField: "date",
+    description: "Durable spend ledger rows from weekly or monthly uploads.",
+    fields: ["date", "vendor", "channel", "campaign", "spend", "leads", "trackable", "sourceFile"],
+    isSystem: true,
   },
-} as const;
+  {
+    id: "combined.matched_jobs",
+    label: "Matched Jobs",
+    provider: "combined",
+    object: "matched_jobs",
+    kind: "computed",
+    rowGrain: "One attributed job matched to a lead.",
+    dateField: "job.appointmentDate",
+    description: "Computed from GoHighLevel contacts and JobTread jobs using workspace attribution rules.",
+    inputDatasets: ["gohighlevel.contacts", "jobtread.jobs"],
+    fields: ["job.id", "job.appointmentDate", "job.soldDate", "job.status", "job.revenue", "job.designConsultant", "job.projectType", "lead.source", "lead.campaign", "lead.createdDate", "timeToCloseDays"],
+    isSystem: true,
+  },
+  {
+    id: "combined.matched_sold_jobs",
+    label: "Matched Sold Jobs",
+    provider: "combined",
+    object: "matched_sold_jobs",
+    kind: "computed",
+    rowGrain: "One attributed sold job matched to a lead.",
+    dateField: "job.soldDate",
+    description: "Computed subset of matched jobs that passes the sold-job rule.",
+    inputDatasets: ["combined.matched_jobs"],
+    fields: ["job.id", "job.soldDate", "job.revenue", "job.netSales", "lead.source", "lead.campaign", "lead.createdDate", "timeToCloseDays"],
+    isSystem: true,
+  },
+  {
+    id: "combined.sold_jobs",
+    label: "Sold Jobs",
+    provider: "combined",
+    object: "sold_jobs",
+    kind: "computed",
+    rowGrain: "One sold JobTread job.",
+    dateField: "soldDate",
+    description: "Computed subset of JobTread jobs that passes the sold-job rule.",
+    inputDatasets: ["jobtread.jobs"],
+    fields: ["id", "soldDate", "status", "revenue", "netSales", "projectType", "designConsultant", "projectManager", "source", "campaign"],
+    isSystem: true,
+  },
+  {
+    id: "combined.unmatched_leads",
+    label: "Unmatched Leads",
+    provider: "combined",
+    object: "unmatched_leads",
+    kind: "computed",
+    rowGrain: "One lead with no matched job.",
+    dateField: "lead.createdDate",
+    description: "QA view of GoHighLevel leads that do not match a JobTread job.",
+    inputDatasets: ["gohighlevel.contacts", "jobtread.jobs"],
+    fields: ["lead.id", "lead.name", "lead.source", "lead.campaign", "lead.createdDate"],
+    isSystem: true,
+  },
+  {
+    id: "combined.unmatched_jobs",
+    label: "Unmatched Jobs",
+    provider: "combined",
+    object: "unmatched_jobs",
+    kind: "computed",
+    rowGrain: "One JobTread job with no matched lead.",
+    dateField: "job.appointmentDate",
+    description: "QA view of JobTread jobs that do not match a GoHighLevel lead.",
+    inputDatasets: ["gohighlevel.contacts", "jobtread.jobs"],
+    fields: ["job.id", "job.jobNumber", "job.customer", "job.appointmentDate", "job.soldDate", "job.revenue"],
+    isSystem: true,
+  },
+];
+
+export const CONTRACTOR_FIELD_CATALOG = buildFieldCatalog(DEFAULT_CONTRACTOR_DATASETS);
 
 const DEFAULT_DASHBOARD_SECTIONS: ContractorDashboardSection[] = [
   {
@@ -364,18 +428,18 @@ export const DEFAULT_CONTRACTOR_RULE_SET: ContractorRuleSetRecord = {
   metricDefinitions: [
     metric("overall_spend", "Overall Spend", "spend", "marketing_spend_rows", "sum", { field: "spend", displayType: "currency", currentOutputPath: "metrics.totals.spend" }),
     metric("overall_leads", "Overall Leads", "gohighlevel", "contacts", "count", { displayType: "number", currentOutputPath: "metrics.totals.leads", conditions: [{ id: "overall_leads_created", field: "createdDate", operator: "between", value: ["startDate", "endDate"] }, { id: "overall_leads_filter_ref", ruleRef: "exclude_not_lead_tags", operator: "and" }] }),
-    metric("paid_leads", "Paid Leads", "gohighlevel", "contacts", "count", { displayType: "number", currentOutputPath: "metrics.totals.paidLeads", conditions: [{ id: "paid_leads_bucket", classification: "sourceBucket", operator: "equals", value: "paid" }] }),
-    metric("organic_leads", "Organic Leads", "gohighlevel", "contacts", "count", { displayType: "number", currentOutputPath: "metrics.totals.organicLeads", conditions: [{ id: "organic_leads_bucket", classification: "sourceBucket", operator: "not_equals", value: "paid" }] }),
+    metric("paid_leads", "Paid Leads", "gohighlevel", "contacts", "count", { displayType: "number", dateField: "createdDate", currentOutputPath: "metrics.totals.paidLeads", conditions: [{ id: "paid_leads_bucket", classification: "sourceBucket", operator: "equals", value: "paid" }] }),
+    metric("organic_leads", "Organic Leads", "gohighlevel", "contacts", "count", { displayType: "number", dateField: "createdDate", currentOutputPath: "metrics.totals.organicLeads", conditions: [{ id: "organic_leads_bucket", classification: "sourceBucket", operator: "not_equals", value: "paid" }] }),
     metric("overall_appointments", "Overall Appointments", "jobtread", "jobs", "count", { displayType: "number", currentOutputPath: "metrics.totals.issuedLeads", dateField: "appointmentDate", conditions: [{ id: "overall_appointments_date", field: "appointmentDate", operator: "between", value: ["startDate", "endDate"] }] }),
-    metric("paid_appointments", "Paid Appointments", "combined", "matched_jobs", "count", { displayType: "number", currentOutputPath: "metrics.totals.paidIssuedLeads", conditions: [{ id: "paid_appointments_bucket", classification: "sourceBucket", operator: "equals", value: "paid" }] }),
-    metric("organic_appointments", "Organic Appointments", "combined", "matched_jobs", "count", { displayType: "number", currentOutputPath: "metrics.totals.organicIssuedLeads", conditions: [{ id: "organic_appointments_bucket", classification: "sourceBucket", operator: "not_equals", value: "paid" }] }),
+    metric("paid_appointments", "Paid Appointments", "combined", "matched_jobs", "count", { displayType: "number", dateField: "job.appointmentDate", currentOutputPath: "metrics.totals.paidIssuedLeads", conditions: [{ id: "paid_appointments_bucket", classification: "sourceBucket", operator: "equals", value: "paid" }] }),
+    metric("organic_appointments", "Organic Appointments", "combined", "matched_jobs", "count", { displayType: "number", dateField: "job.appointmentDate", currentOutputPath: "metrics.totals.organicIssuedLeads", conditions: [{ id: "organic_appointments_bucket", classification: "sourceBucket", operator: "not_equals", value: "paid" }] }),
     metric("overall_sold_jobs", "Overall Sold Jobs", "jobtread", "jobs", "count", { displayType: "number", currentOutputPath: "metrics.totals.soldJobs", dateField: "soldDate", conditions: [{ id: "overall_sold_jobs_rule", ruleRef: "soldJob", operator: "and" }] }),
-    metric("paid_sold_jobs", "Paid Sold Jobs", "combined", "matched_sold_jobs", "count", { displayType: "number", currentOutputPath: "metrics.totals.paidSoldJobs", conditions: [{ id: "paid_sold_jobs_bucket", classification: "sourceBucket", operator: "equals", value: "paid" }] }),
-    metric("organic_sold_jobs", "Organic Sold Jobs", "combined", "matched_sold_jobs", "count", { displayType: "number", currentOutputPath: "metrics.totals.organicSoldJobs", conditions: [{ id: "organic_sold_jobs_bucket", classification: "sourceBucket", operator: "not_equals", value: "paid" }] }),
-    metric("overall_revenue", "Overall Revenue", "jobtread", "sold_jobs", "sum", { field: "revenue", displayType: "currency", currentOutputPath: "metrics.totals.revenue" }),
-    metric("paid_revenue", "Paid Revenue", "combined", "matched_sold_jobs", "sum", { field: "job.revenue", displayType: "currency", currentOutputPath: "metrics.totals.paidRevenue", conditions: [{ id: "paid_revenue_bucket", classification: "sourceBucket", operator: "equals", value: "paid" }] }),
+    metric("paid_sold_jobs", "Paid Sold Jobs", "combined", "matched_sold_jobs", "count", { displayType: "number", dateField: "job.soldDate", currentOutputPath: "metrics.totals.paidSoldJobs", conditions: [{ id: "paid_sold_jobs_bucket", classification: "sourceBucket", operator: "equals", value: "paid" }] }),
+    metric("organic_sold_jobs", "Organic Sold Jobs", "combined", "matched_sold_jobs", "count", { displayType: "number", dateField: "job.soldDate", currentOutputPath: "metrics.totals.organicSoldJobs", conditions: [{ id: "organic_sold_jobs_bucket", classification: "sourceBucket", operator: "not_equals", value: "paid" }] }),
+    metric("overall_revenue", "Overall Revenue", "combined", "sold_jobs", "sum", { field: "revenue", dateField: "soldDate", displayType: "currency", currentOutputPath: "metrics.totals.revenue" }),
+    metric("paid_revenue", "Paid Revenue", "combined", "matched_sold_jobs", "sum", { field: "job.revenue", dateField: "job.soldDate", displayType: "currency", currentOutputPath: "metrics.totals.paidRevenue", conditions: [{ id: "paid_revenue_bucket", classification: "sourceBucket", operator: "equals", value: "paid" }] }),
     metric("organic_revenue", "Organic Revenue", "combined", "sold_jobs", "formula", { formula: "overall_revenue - paid_revenue", displayType: "currency", currentOutputPath: "metrics.totals.organicRevenue" }),
-    metric("net_sales", "Net Sales", "jobtread", "sold_jobs", "sum", { field: "netSales", displayType: "currency", currentOutputPath: "metrics.totals.netSales" }),
+    metric("net_sales", "Net Sales", "combined", "sold_jobs", "sum", { field: "netSales", dateField: "soldDate", displayType: "currency", currentOutputPath: "metrics.totals.netSales" }),
     metric("paid_roas", "Paid ROAS", "combined", "matched_sold_jobs", "formula", { formula: "paid_revenue / overall_spend", displayType: "ratio", currentOutputPath: "metrics.totals.roas" }),
     metric("cost_per_paid_lead", "Cost / Paid Lead", "combined", "matched_jobs", "formula", { formula: "overall_spend / paid_leads", displayType: "currency", currentOutputPath: "metrics.totals.costPerLead" }),
     metric("cost_per_paid_appointment", "Cost / Paid Appointment", "combined", "matched_jobs", "formula", { formula: "overall_spend / paid_appointments", displayType: "currency", currentOutputPath: "metrics.totals.costPerIssuedLead" }),
@@ -388,9 +452,9 @@ export const DEFAULT_CONTRACTOR_RULE_SET: ContractorRuleSetRecord = {
     metric("average_ticket", "Avg Ticket", "jobtread", "sold_jobs", "formula", { formula: "overall_revenue / overall_sold_jobs", displayType: "currency", currentOutputPath: "metrics.totals.averageJobSize" }),
     metric("paid_average_ticket", "Paid Avg Ticket", "combined", "matched_sold_jobs", "formula", { formula: "paid_revenue / paid_sold_jobs", displayType: "currency", currentOutputPath: "metrics.totals.paidAverageJobSize" }),
     metric("organic_average_ticket", "Organic Avg Ticket", "combined", "matched_sold_jobs", "formula", { formula: "organic_revenue / organic_sold_jobs", displayType: "currency", currentOutputPath: "metrics.totals.organicAverageJobSize" }),
-    metric("average_time_to_close", "Avg Time to Close", "combined", "matched_sold_jobs", "average", { field: "timeToCloseDays", displayType: "days", currentOutputPath: "metrics.totals.averageTimeToCloseDays" }),
-    metric("paid_average_time_to_close", "Paid Avg Time to Close", "combined", "matched_sold_jobs", "average", { field: "timeToCloseDays", displayType: "days", currentOutputPath: "metrics.totals.paidAverageTimeToCloseDays", conditions: [{ id: "paid_time_to_close_bucket", classification: "sourceBucket", operator: "equals", value: "paid" }] }),
-    metric("organic_average_time_to_close", "Organic Avg Time to Close", "combined", "matched_sold_jobs", "average", { field: "timeToCloseDays", displayType: "days", currentOutputPath: "metrics.totals.organicAverageTimeToCloseDays", conditions: [{ id: "organic_time_to_close_bucket", classification: "sourceBucket", operator: "not_equals", value: "paid" }] }),
+    metric("average_time_to_close", "Avg Time to Close", "combined", "matched_sold_jobs", "average", { field: "timeToCloseDays", dateField: "job.soldDate", displayType: "days", currentOutputPath: "metrics.totals.averageTimeToCloseDays" }),
+    metric("paid_average_time_to_close", "Paid Avg Time to Close", "combined", "matched_sold_jobs", "average", { field: "timeToCloseDays", dateField: "job.soldDate", displayType: "days", currentOutputPath: "metrics.totals.paidAverageTimeToCloseDays", conditions: [{ id: "paid_time_to_close_bucket", classification: "sourceBucket", operator: "equals", value: "paid" }] }),
+    metric("organic_average_time_to_close", "Organic Avg Time to Close", "combined", "matched_sold_jobs", "average", { field: "timeToCloseDays", dateField: "job.soldDate", displayType: "days", currentOutputPath: "metrics.totals.organicAverageTimeToCloseDays", conditions: [{ id: "organic_time_to_close_bucket", classification: "sourceBucket", operator: "not_equals", value: "paid" }] }),
   ],
   groupedMetricSets: [
     grouped("paid_channel_performance", "Paid Channel Performance", "spend", "marketing_spend_rows", "vendor", ["overall_spend", "paid_leads", "paid_appointments", "paid_sold_jobs", "paid_revenue", "paid_roas", "cost_per_paid_lead", "cost_per_paid_appointment", "paid_close_rate"]),
@@ -404,6 +468,7 @@ export const DEFAULT_CONTRACTOR_RULE_SET: ContractorRuleSetRecord = {
     spendSourceFallback: "uploaded_first",
     comparisonMode: "previous_period",
     dashboardSections: DEFAULT_DASHBOARD_SECTIONS,
+    datasetDefinitions: DEFAULT_CONTRACTOR_DATASETS,
   },
 };
 
@@ -454,6 +519,7 @@ export function normalizeStoredRuleSet(row: any): ContractorRuleSetRecord {
   const base = createDefaultContractorRuleSet(row?.name ?? DEFAULT_CONTRACTOR_RULE_SET.name);
   const storedMetrics = mergeMetricDefinitions(row?.metric_definitions, base.metricDefinitions);
   const storedGroupedSets = mergeGroupedMetricSets(row?.grouped_metric_sets, base.groupedMetricSets);
+  const storedDatasetDefinitions = mergeDatasetDefinitions(row?.settings?.datasetDefinitions, base.settings.datasetDefinitions ?? []);
   return {
     ...base,
     id: row?.id,
@@ -475,6 +541,7 @@ export function normalizeStoredRuleSet(row: any): ContractorRuleSetRecord {
     settings: {
       ...base.settings,
       ...(row?.settings ?? {}),
+      datasetDefinitions: storedDatasetDefinitions,
     },
   };
 }
@@ -518,6 +585,30 @@ function mergeGroupedMetricSets(
   });
   const customGroupedSets = storedGroupedSets.filter((entry) => entry?.id && !defaultsById.has(entry.id));
   return [...mergedDefaults, ...customGroupedSets];
+}
+
+function mergeDatasetDefinitions(
+  storedDefinitions: ContractorDatasetDefinition[] | undefined,
+  defaultDefinitions: ContractorDatasetDefinition[]
+) {
+  if (!Array.isArray(storedDefinitions) || !storedDefinitions.length) return defaultDefinitions;
+
+  const defaultsById = new Map(defaultDefinitions.map((definition) => [definition.id, definition]));
+  const mergedDefaults = defaultDefinitions.map((definition) => {
+    const stored = storedDefinitions.find((entry) => entry?.id === definition.id);
+    if (!stored) return definition;
+    return {
+      ...definition,
+      label: stored.label ?? definition.label,
+      description: stored.description ?? definition.description,
+      rowGrain: stored.rowGrain ?? definition.rowGrain,
+      dateField: stored.dateField ?? definition.dateField,
+      inputDatasets: stored.inputDatasets ?? definition.inputDatasets,
+      fields: Array.isArray(stored.fields) && stored.fields.length ? stored.fields : definition.fields,
+    };
+  });
+  const customDefinitions = storedDefinitions.filter((definition) => definition?.id && !defaultsById.has(definition.id));
+  return [...mergedDefaults, ...customDefinitions];
 }
 
 export function slugify(value: string) {
@@ -575,4 +666,19 @@ function grouped(
 
 function deepClone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
+}
+
+export function buildFieldCatalog(datasetDefinitions: ContractorDatasetDefinition[]) {
+  return datasetDefinitions.reduce<Record<string, { label?: string; objects?: Record<string, string[]> }>>((catalog, dataset) => {
+    const provider = dataset.provider;
+    if (!catalog[provider]) {
+      catalog[provider] = {
+        label: provider === "gohighlevel" ? "GoHighLevel" : provider === "jobtread" ? "JobTread" : provider === "spend" ? "Marketing Spend" : "Combined",
+        objects: {},
+      };
+    }
+    catalog[provider].objects = catalog[provider].objects ?? {};
+    catalog[provider].objects![dataset.object] = dataset.fields;
+    return catalog;
+  }, {});
 }

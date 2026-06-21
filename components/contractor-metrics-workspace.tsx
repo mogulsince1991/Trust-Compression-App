@@ -28,6 +28,19 @@ type SourcePreview = {
   fieldCatalog: string[];
 };
 type FieldCatalog = Record<string, { label?: string; objects?: Record<string, string[]> }>;
+type DatasetDefinition = {
+  id: string;
+  label: string;
+  provider: string;
+  object: string;
+  kind: "raw" | "computed";
+  rowGrain: string;
+  dateField?: string | null;
+  description?: string | null;
+  inputDatasets?: string[];
+  fields: string[];
+  isSystem?: boolean;
+};
 
 const TABS: Array<{ id: TabId; label: string; icon: any }> = [
   { id: "metrics", label: "Metrics", icon: BarChart3 },
@@ -76,9 +89,11 @@ export function ContractorMetricsWorkspace() {
   const [reports, setReports] = useState<any[]>([]);
   const [ruleSets, setRuleSets] = useState<any[]>([]);
   const [fieldCatalog, setFieldCatalog] = useState<FieldCatalog>({});
+  const [datasetCatalog, setDatasetCatalog] = useState<DatasetDefinition[]>([]);
   const [selectedRuleSetId, setSelectedRuleSetId] = useState<string | null>(null);
   const [ruleSetDraft, setRuleSetDraft] = useState<any | null>(null);
   const [selectedMetricId, setSelectedMetricId] = useState<string | null>(null);
+  const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(null);
   const [preview, setPreview] = useState<any | null>(null);
   const [previews, setPreviews] = useState<Record<string, SourcePreview>>({});
   const [previewFilters, setPreviewFilters] = useState<Record<string, PreviewFilterState>>({});
@@ -94,7 +109,12 @@ export function ContractorMetricsWorkspace() {
   const metrics = ruleSetDraft?.metricDefinitions ?? [];
   const metricMap = Object.fromEntries((activeReport?.configuredMetrics ?? []).map((metric: any) => [metric.id, metric]));
   const comparisonMap = Object.fromEntries((activeReport?.comparison?.configuredMetrics ?? []).map((metric: any) => [metric.id, metric]));
+  const datasets = ruleSetDraft?.settings?.datasetDefinitions ?? datasetCatalog;
   const selectedMetric = metrics.find((metric: any) => metric.id === selectedMetricId) ?? metrics[0] ?? null;
+  const selectedMetricDatasetId = selectedMetric ? metricDatasetId(selectedMetric) : null;
+  const selectedMetricDataset = datasets.find((dataset: DatasetDefinition) => dataset.id === selectedMetricDatasetId) ?? null;
+  const selectedMetricFields = selectedMetricDataset?.fields ?? getFieldOptions(fieldCatalog, selectedMetric?.provider, selectedMetric?.object);
+  const selectedDataset = datasets.find((dataset: DatasetDefinition) => dataset.id === selectedDatasetId) ?? datasets[0] ?? null;
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -141,6 +161,14 @@ export function ContractorMetricsWorkspace() {
     setSelectedMetricId((current) => (current && metrics.some((metric: any) => metric.id === current) ? current : metrics[0].id));
   }, [metrics]);
 
+  useEffect(() => {
+    if (!datasets.length) {
+      setSelectedDatasetId(null);
+      return;
+    }
+    setSelectedDatasetId((current) => (current && datasets.some((dataset: DatasetDefinition) => dataset.id === current) ? current : datasets[0].id));
+  }, [datasets]);
+
   async function refresh(nextWorkspaceId = workspaceId, token = session?.access_token) {
     if (!nextWorkspaceId || !token) return;
     setWorking((current) => current || "refresh");
@@ -166,6 +194,7 @@ export function ContractorMetricsWorkspace() {
     setSources(sourceRows.data ?? []);
     setReports(reportRows.data ?? []);
     setFieldCatalog(configJson.fieldCatalog ?? {});
+    setDatasetCatalog(configJson.datasetCatalog ?? []);
     setRuleSets(configJson.ruleSets ?? []);
     const currentRuleSet = configJson.currentRuleSet ?? configJson.ruleSets?.[0] ?? null;
     setSelectedRuleSetId((current) => current ?? currentRuleSet?.id ?? null);
@@ -298,8 +327,7 @@ export function ContractorMetricsWorkspace() {
   }
 
   function addMetric() {
-    const provider = Object.keys(fieldCatalog)[0] ?? "combined";
-    const object = Object.keys(fieldCatalog[provider]?.objects ?? {})[0] ?? "matched_jobs";
+    const dataset = datasets[0] ?? null;
     const nextId = `custom_${Date.now()}`;
     updateRuleSet((current) => ({
       ...current,
@@ -308,11 +336,12 @@ export function ContractorMetricsWorkspace() {
         {
           id: nextId,
           name: "New Metric",
-          provider,
-          object,
+          source: dataset?.provider ?? "combined",
+          provider: dataset?.provider ?? "combined",
+          object: dataset?.object ?? "matched_jobs",
           operation: "formula",
-          field: null,
-          dateField: "",
+          field: dataset?.fields?.[0] ?? null,
+          dateField: dataset?.dateField ?? "",
           conditions: [],
           formula: "",
           displayType: "number",
@@ -322,6 +351,45 @@ export function ContractorMetricsWorkspace() {
       ],
     }));
     setSelectedMetricId(nextId);
+  }
+
+  function updateDataset(datasetId: string, mutator: (dataset: DatasetDefinition) => DatasetDefinition) {
+    updateRuleSet((current) => ({
+      ...current,
+      settings: {
+        ...current.settings,
+        datasetDefinitions: (current.settings?.datasetDefinitions ?? []).map((dataset: DatasetDefinition) =>
+          dataset.id === datasetId ? mutator(clone(dataset)) : dataset
+        ),
+      },
+    }));
+  }
+
+  function addComputedDataset() {
+    const nextId = `combined.custom_${Date.now()}`;
+    updateRuleSet((current) => ({
+      ...current,
+      settings: {
+        ...current.settings,
+        datasetDefinitions: [
+          ...(current.settings?.datasetDefinitions ?? []),
+          {
+            id: nextId,
+            label: "New Computed Dataset",
+            provider: "combined",
+            object: nextId.replace(/^combined\./, ""),
+            kind: "computed",
+            rowGrain: "Describe the row grain for this computed dataset.",
+            dateField: "",
+            description: "Plan a future computed dataset here before wiring execution logic.",
+            inputDatasets: ["jobtread.jobs"],
+            fields: ["id"],
+            isSystem: false,
+          },
+        ],
+      },
+    }));
+    setSelectedDatasetId(nextId);
   }
 
   function removeMetric(metricId: string) {
@@ -428,7 +496,6 @@ export function ContractorMetricsWorkspace() {
   }
 
   const metricOptions = metrics.map((metric: any) => ({ value: metric.id, label: metric.name }));
-  const selectedMetricFields = selectedMetric ? getFieldOptions(fieldCatalog, selectedMetric.provider, selectedMetric.object) : [];
 
   return (
     <main className={styles.screen}>
@@ -576,14 +643,35 @@ export function ContractorMetricsWorkspace() {
                     </div>
                   ) : (
                     <>
-                      <SelectField label="Provider" value={selectedMetric.provider ?? ""} onChange={(value) => {
-                        const nextObject = Object.keys(fieldCatalog[value]?.objects ?? {})[0] ?? "";
-                        const nextField = getFieldOptions(fieldCatalog, value, nextObject)[0] ?? "";
-                        updateMetric(selectedMetric.id, (metric) => ({ ...metric, provider: value, object: nextObject, field: nextField }));
-                      }} options={Object.entries(fieldCatalog).map(([value, provider]) => ({ value, label: provider.label ?? prettyLabel(value) }))} />
-                      <SelectField label="Object" value={selectedMetric.object ?? ""} onChange={(value) => updateMetric(selectedMetric.id, (metric) => ({ ...metric, object: value, field: getFieldOptions(fieldCatalog, metric.provider, value)[0] ?? "" }))} options={Object.keys(fieldCatalog[selectedMetric.provider]?.objects ?? {}).map((value) => ({ value, label: prettyLabel(value) }))} />
+                      <SelectField label="Dataset" value={selectedMetricDatasetId ?? ""} onChange={(value) => {
+                        const dataset = datasets.find((entry: DatasetDefinition) => entry.id === value);
+                        if (!dataset) return;
+                        updateMetric(selectedMetric.id, (metric) => ({
+                          ...metric,
+                          source: dataset.provider,
+                          provider: dataset.provider,
+                          object: dataset.object,
+                          field: dataset.fields[0] ?? "",
+                          dateField: metric.dateField || dataset.dateField || "",
+                        }));
+                      }} options={datasets.map((dataset: DatasetDefinition) => ({ value: dataset.id, label: `${dataset.label} (${dataset.kind})` }))} />
                       <SelectField label="Field" value={selectedMetric.field ?? ""} onChange={(value) => updateMetric(selectedMetric.id, (metric) => ({ ...metric, field: value }))} options={selectedMetricFields.map((value) => ({ value, label: value }))} />
                       <Field label="Date field" value={selectedMetric.dateField ?? ""} onChange={(value) => updateMetric(selectedMetric.id, (metric) => ({ ...metric, dateField: value }))} />
+                      {selectedMetricDataset ? (
+                        <div className={styles.fullField}>
+                          <div className={styles.ruleCard}>
+                            <div className={styles.ruleCardHeader}>
+                              <div className={styles.layoutMeta}>
+                                <span>{selectedMetricDataset.kind === "computed" ? "Computed dataset" : "Raw dataset"}</span>
+                                <strong>{selectedMetricDataset.label}</strong>
+                              </div>
+                            </div>
+                            <small>{selectedMetricDataset.description}</small>
+                            <small>Row grain: {selectedMetricDataset.rowGrain}</small>
+                            {selectedMetricDataset.inputDatasets?.length ? <small>Inputs: {selectedMetricDataset.inputDatasets.join(", ")}</small> : null}
+                          </div>
+                        </div>
+                      ) : null}
                     </>
                   )}
                 </div>
@@ -647,6 +735,76 @@ export function ContractorMetricsWorkspace() {
               </div>
             </Panel>
           ) : null}
+
+          <section className={styles.controlGrid}>
+            <Panel title="Dataset registry" icon={<Database />}>
+              <div className={styles.actionRow}>
+                <button className={styles.secondary} type="button" onClick={addComputedDataset}><Plus />Add computed dataset</button>
+              </div>
+              <div className={styles.previewPanel}>
+                <div className={styles.reportList}>
+                  {datasets.map((dataset: DatasetDefinition) => (
+                    <button
+                      key={dataset.id}
+                      type="button"
+                      className={selectedDataset?.id === dataset.id ? styles.metricListItemActive : styles.metricListItem}
+                      onClick={() => setSelectedDatasetId(dataset.id)}
+                    >
+                      <strong>{dataset.label}</strong>
+                      <small>{dataset.kind === "computed" ? "Computed" : "Raw"} | {dataset.id}</small>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </Panel>
+
+            <Panel title="Dataset editor" icon={<Settings2 />}>
+              {selectedDataset ? (
+                <div className={styles.formGrid}>
+                  <Field
+                    label="Dataset label"
+                    value={selectedDataset.label ?? ""}
+                    onChange={(value) => updateDataset(selectedDataset.id, (dataset) => ({ ...dataset, label: value }))}
+                  />
+                  <Field
+                    label="Date field"
+                    value={selectedDataset.dateField ?? ""}
+                    onChange={(value) => updateDataset(selectedDataset.id, (dataset) => ({ ...dataset, dateField: value }))}
+                  />
+                  <TextAreaField
+                    label="Description"
+                    value={selectedDataset.description ?? ""}
+                    onChange={(value) => updateDataset(selectedDataset.id, (dataset) => ({ ...dataset, description: value }))}
+                  />
+                  <TextAreaField
+                    label="Row grain"
+                    value={selectedDataset.rowGrain ?? ""}
+                    onChange={(value) => updateDataset(selectedDataset.id, (dataset) => ({ ...dataset, rowGrain: value }))}
+                  />
+                  <TextAreaField
+                    label="Available fields"
+                    value={(selectedDataset.fields ?? []).join("\n")}
+                    onChange={(value) =>
+                      updateDataset(selectedDataset.id, (dataset) => ({
+                        ...dataset,
+                        fields: value.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean),
+                      }))
+                    }
+                  />
+                  <TextAreaField
+                    label="Input datasets"
+                    value={(selectedDataset.inputDatasets ?? []).join("\n")}
+                    onChange={(value) =>
+                      updateDataset(selectedDataset.id, (dataset) => ({
+                        ...dataset,
+                        inputDatasets: value.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean),
+                      }))
+                    }
+                  />
+                </div>
+              ) : <p className={styles.copy}>Select a dataset to inspect or edit it.</p>}
+            </Panel>
+          </section>
         </div>
       ) : null}
 
@@ -997,6 +1155,11 @@ function prettyLabel(value: string) {
 function getFieldOptions(fieldCatalog: FieldCatalog, provider?: string, object?: string) {
   if (!provider || !object) return [];
   return fieldCatalog[provider]?.objects?.[object] ?? [];
+}
+
+function metricDatasetId(metric: any) {
+  if (!metric?.provider || !metric?.object) return null;
+  return `${metric.provider}.${metric.object}`;
 }
 
 function describeMetricDefinition(metric: any) {
