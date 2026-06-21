@@ -259,7 +259,7 @@ function evaluateMetricIds(
 ) {
   const values: Record<string, number | string | null> = {};
 
-  for (const definition of metricsById.values()) {
+  for (const definition of Array.from(metricsById.values())) {
     const value = evaluateMetricDefinition(definition, context);
     values[definition.id] = value ?? null;
     if (typeof value === "number" && Number.isFinite(value)) {
