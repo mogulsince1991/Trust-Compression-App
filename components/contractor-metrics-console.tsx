@@ -9,6 +9,18 @@ import { createBrowserSupabaseClient } from "@/lib/supabase";
 import styles from "./contractor-metrics-console.module.css";
 
 type AnyRecord = Record<string, any>;
+type SourcePreview = {
+  connectedAccountId: string;
+  accountLabel?: string | null;
+  provider: string;
+  fetchedAt: string;
+  totalRows: number;
+  columns: Array<{ key: string; label: string }>;
+  rows: AnyRecord[];
+  filters: Array<{ key: string; label: string; options: string[] }>;
+  fieldCatalog: string[];
+};
+type PreviewFilterState = Record<string, string>;
 
 const TABS = [
   { id: "metrics", label: "Metrics", icon: BarChart3 },
@@ -57,6 +69,8 @@ export function ContractorMetricsConsole() {
   const [ghl, setGhl] = useState(EMPTY_GHL);
   const [jobtread, setJobtread] = useState(EMPTY_JOBTREAD);
   const [wizard, setWizard] = useState(EMPTY_WIZARD);
+  const [previews, setPreviews] = useState<Record<string, SourcePreview>>({});
+  const [previewFilters, setPreviewFilters] = useState<Record<string, PreviewFilterState>>({});
 
   const activeReport = preview ?? fromStoredReport(reports[0] ?? null, ruleSetDraft);
   const metricMap = Object.fromEntries((activeReport?.configuredMetrics ?? []).map((m: any) => [m.id, m]));
@@ -199,6 +213,42 @@ export function ContractorMetricsConsole() {
     } finally {
       setWorking("");
     }
+  }
+
+  async function loadPreview(connectedAccountId: string) {
+    if (!workspaceId || !session) return;
+    setWorking(`preview-${connectedAccountId}`);
+    setNotice("");
+    setError("");
+    try {
+      const response = await fetch("/api/metrics/contractor/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ workspaceId, connectedAccountId, limit: 100 }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error ?? "Could not preview source rows.");
+      setPreviews((current) => ({ ...current, [connectedAccountId]: result }));
+      setPreviewFilters((current) => ({
+        ...current,
+        [connectedAccountId]: current[connectedAccountId] ?? defaultPreviewFilters(result.filters),
+      }));
+      setNotice(`Loaded ${result.totalRows ?? 0} source rows for preview.`);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not preview source rows.");
+    } finally {
+      setWorking("");
+    }
+  }
+
+  function updatePreviewFilter(connectedAccountId: string, key: string, value: string) {
+    setPreviewFilters((current) => ({
+      ...current,
+      [connectedAccountId]: {
+        ...(current[connectedAccountId] ?? {}),
+        [key]: value,
+      },
+    }));
   }
 
   function patchRuleSet(patch: AnyRecord) {
@@ -476,7 +526,7 @@ export function ContractorMetricsConsole() {
                 <button className={styles.primary} type="submit" disabled={working === "connect-ghl"}><Save />Save GoHighLevel account</button>
               </form>
             </ConnectionCard>
-              <ConnectionCard title="JobTread grant key" description="Store a JobTread Open API grant key server-side, then sync jobs into the same reporting workspace. This is not your JobTread password.">
+            <ConnectionCard title="JobTread grant key" description="Store a JobTread Open API grant key server-side, then sync jobs into the same reporting workspace. This is not your JobTread password.">
               <form className={styles.formGrid} onSubmit={(event: FormEvent<HTMLFormElement>) => { event.preventDefault(); void postAction("/api/connect/jobtread", "connect-jobtread", { workspaceId, accountLabel: jobtread.accountLabel, apiToken: jobtread.apiToken, externalAccountId: jobtread.externalAccountId || undefined, apiBaseUrl: jobtread.apiBaseUrl }); setJobtread((current) => ({ ...current, apiToken: "" })); }}>
                 <Field label="Account label" value={jobtread.accountLabel} onChange={(value) => setJobtread((current) => ({ ...current, accountLabel: value }))} />
                 <Field label="External account ID" value={jobtread.externalAccountId} onChange={(value) => setJobtread((current) => ({ ...current, externalAccountId: value }))} />
@@ -490,7 +540,13 @@ export function ContractorMetricsConsole() {
           <section className={styles.grid}>
             <Panel title={`Connected accounts (${accounts.length})`} icon={<Link2 />}>
               <div className={styles.accountList}>
-                {accounts.length ? accounts.map((account) => <article key={account.id} className={styles.accountCard}><div className={styles.accountHeader}><div className={styles.accountSummary}><strong>{account.accountLabel || providerLabel(account.provider)}</strong><small>{providerLabel(account.provider)}</small></div><div className={styles.accountMeta}><span>{account.status}</span>{account.expiresAt ? <span>Expires {formatDateTime(account.expiresAt)}</span> : null}</div></div><p className={styles.copy}>{describeAccount(account)}</p><div className={styles.actionRow}><button className={styles.secondary} type="button" disabled={working === `sync-${account.id}`} onClick={() => postAction("/api/metrics/contractor/sync", `sync-${account.id}`, { workspaceId, connectedAccountId: account.id })}><RefreshCw />Sync now</button></div></article>) : <p className={styles.empty}>No connected accounts yet.</p>}
+                {accounts.length ? accounts.map((account) => {
+                  const preview = previews[account.id];
+                  const filters = previewFilters[account.id] ?? defaultPreviewFilters(preview?.filters);
+                  const filteredRows = preview ? applyPreviewFilters(preview.rows, preview.filters, filters) : [];
+
+                  return <article key={account.id} className={styles.accountCard}><div className={styles.accountHeader}><div className={styles.accountSummary}><strong>{account.accountLabel || providerLabel(account.provider)}</strong><small>{providerLabel(account.provider)}</small></div><div className={styles.accountMeta}><span>{account.status}</span>{account.expiresAt ? <span>Expires {formatDateTime(account.expiresAt)}</span> : null}</div></div><p className={styles.copy}>{describeAccount(account)}</p>{account.metadata?.lastSyncSummary ? <div className={styles.statusStrip}><Pill label="Imported" value={String(account.metadata.lastSyncSummary.imported ?? 0)} /><Pill label="Updated" value={String(account.metadata.lastSyncSummary.updated ?? 0)} /><Pill label="Skipped" value={String(account.metadata.lastSyncSummary.skipped ?? 0)} /></div> : null}<div className={styles.actionRow}><button className={styles.secondary} type="button" disabled={working === `sync-${account.id}`} onClick={() => postAction("/api/metrics/contractor/sync", `sync-${account.id}`, { workspaceId, connectedAccountId: account.id })}><RefreshCw />Sync now</button><button className={styles.ghost} type="button" disabled={working === `preview-${account.id}`} onClick={() => loadPreview(account.id)}><Database />{working === `preview-${account.id}` ? "Loading preview..." : "Preview source rows"}</button></div>{preview ? <SourcePreviewPanel preview={preview} filters={filters} filteredRows={filteredRows} onFilterChange={(key, value) => updatePreviewFilter(account.id, key, value)} /> : null}</article>;
+                }) : <p className={styles.empty}>No connected accounts yet.</p>}
               </div>
             </Panel>
             <Panel title={`Normalized sources (${sources.length})`} icon={<Database />}>
@@ -542,11 +598,90 @@ function DataPanel({ title, tableId, report }: { title: string; tableId: string;
   return <Panel title={title} icon={<Database />}>{section.description ? <p className={styles.copy}>{section.description}</p> : null}<div className={styles.tableWrap}><table className={styles.table}><thead><tr>{section.columns.map((column: any) => <th key={column.key}>{column.label}</th>)}</tr></thead><tbody>{section.rows.length ? section.rows.map((row: any, index: number) => <tr key={`${row.id ?? row.jobId ?? row.name ?? row.source ?? index}`}>{section.columns.map((column: any) => <td key={column.key}>{formatCell(row[column.key], column.format)}</td>)}</tr>) : <tr><td colSpan={section.columns.length}>No rows yet.</td></tr>}</tbody></table></div></Panel>;
 }
 
+function SourcePreviewPanel({
+  preview,
+  filters,
+  filteredRows,
+  onFilterChange,
+}: {
+  preview: SourcePreview;
+  filters: PreviewFilterState;
+  filteredRows: AnyRecord[];
+  onFilterChange: (key: string, value: string) => void;
+}) {
+  return (
+    <section className={styles.previewPanel}>
+      <div className={styles.previewHeader}>
+        <div className={styles.layoutMeta}>
+          <span>Source preview</span>
+          <strong>{preview.accountLabel || providerLabel(preview.provider)}</strong>
+          <small>{preview.totalRows} fetched rows | updated {formatDateTime(preview.fetchedAt)}</small>
+        </div>
+        <div className={styles.previewFieldList}>
+          {preview.fieldCatalog.slice(0, 8).map((field) => (
+            <span key={field} className={styles.previewFieldPill}>
+              {field}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className={styles.previewToolbar}>
+        <label className={styles.previewSearch}>
+          <span>Search</span>
+          <input
+            type="text"
+            value={filters.search ?? ""}
+            onChange={(event) => onFilterChange("search", event.target.value)}
+            placeholder="Search rows, fields, names, sources, or tags"
+          />
+        </label>
+        {preview.filters.map((filter) => (
+          <SelectField
+            key={filter.key}
+            label={filter.label}
+            value={filters[filter.key] ?? ""}
+            onChange={(value) => onFilterChange(filter.key, value)}
+            options={[{ value: "", label: `All ${filter.label}` }, ...filter.options.map((option) => ({ value: option, label: option }))]}
+          />
+        ))}
+      </div>
+
+      <div className={styles.tableWrap}>
+        <table className={styles.table}>
+          <thead>
+            <tr>
+              {preview.columns.map((column) => (
+                <th key={column.key}>{column.label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filteredRows.length ? (
+              filteredRows.map((row, index) => (
+                <tr key={`${preview.connectedAccountId}-${row.id ?? row.jobNumber ?? row.email ?? index}`}>
+                  {preview.columns.map((column) => (
+                    <td key={column.key}>{formatCell(row[column.key], column.key === "revenue" ? "currency" : undefined)}</td>
+                  ))}
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={preview.columns.length}>No rows match the current filters.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 function resolveTable(tableId: string, report: any) {
-  if (tableId === "paid_channel_performance") return { description: "Spend, appointments, sold jobs, revenue, and efficiency by paid vendor alias.", rows: report.dashboard?.paidChannelPerformance ?? report.breakdowns?.byVendor ?? [], columns: [{ key: "name", label: "Name" }, { key: "spend", label: "Spend", format: "currency" }, { key: "leads", label: "Leads" }, { key: "issuedLeads", label: "Appointments" }, { key: "soldJobs", label: "Sold Jobs" }, { key: "revenue", label: "Revenue", format: "currency" }, { key: "costPerLead", label: "Cost / Lead", format: "currency" }, { key: "costPerIssuedLead", label: "Cost / Booked Appt", format: "currency" }, { key: "roas", label: "ROAS", format: "ratio" }, { key: "closeRate", label: "Close Rate", format: "percent" }] };
-  if (tableId === "design_consultant_performance") return { description: "Appointments, sold jobs, and revenue output by design consultant.", rows: report.dashboard?.designConsultantPerformance ?? report.breakdowns?.byDesignConsultant ?? [], columns: [{ key: "designConsultant", label: "Design Consultant" }, { key: "appointments", label: "Appointments" }, { key: "soldJobs", label: "Sold Jobs" }, { key: "revenue", label: "Revenue", format: "currency" }, { key: "closeRate", label: "Close Rate", format: "percent" }, { key: "averageJobSize", label: "Avg Job Size", format: "currency" }, { key: "revenuePerAppointment", label: "Revenue / Appt", format: "currency" }] };
-  if (tableId === "leads_by_source") return { description: "Source-level performance across leads, appointments, sold jobs, and revenue.", rows: report.dashboard?.leadsBySource ?? report.breakdowns?.byLeadSource ?? [], columns: [{ key: "source", label: "Source" }, { key: "leads", label: "Leads" }, { key: "issuedLeads", label: "Appointments" }, { key: "soldJobs", label: "Sold Jobs" }, { key: "revenue", label: "Revenue", format: "currency" }, { key: "closeRate", label: "Close Rate", format: "percent" }, { key: "netSalesPerLeadIssued", label: "NSLI", format: "currency" }] };
-  if (tableId === "jobs_sold_detail") return { description: "Inline sold-job drilldown with attributed source, consultant, project manager, and time to close.", rows: report.dashboard?.jobsSoldDetail ?? report.breakdowns?.jobsSoldDetail ?? [], columns: [{ key: "jobId", label: "Job ID" }, { key: "customer", label: "Customer" }, { key: "projectType", label: "Project Type" }, { key: "soldDate", label: "Sold Date" }, { key: "leadCreatedEastern", label: "Lead Created (ET)" }, { key: "timeToClose", label: "Time to Close" }, { key: "attributedSource", label: "Attributed Source" }, { key: "sourceBucket", label: "Source Bucket" }, { key: "designConsultant", label: "Design Consultant" }, { key: "projectManager", label: "Project Manager" }, { key: "revenue", label: "Revenue", format: "currency" }] };
+  if (tableId === "paid_channel_performance") return { description: "Spend, appointments, sold jobs, revenue, and efficiency by paid vendor alias.", rows: report.dashboard?.paidChannelPerformance ?? [], columns: [{ key: "name", label: "Name" }, { key: "spend", label: "Spend", format: "currency" }, { key: "leads", label: "Leads" }, { key: "issuedLeads", label: "Appointments" }, { key: "soldJobs", label: "Sold Jobs" }, { key: "revenue", label: "Revenue", format: "currency" }, { key: "costPerLead", label: "Cost / Lead", format: "currency" }, { key: "costPerIssuedLead", label: "Cost / Booked Appt", format: "currency" }, { key: "roas", label: "ROAS", format: "ratio" }, { key: "closeRate", label: "Close Rate", format: "percent" }] };
+  if (tableId === "design_consultant_performance") return { description: "Appointments, sold jobs, and revenue output by design consultant.", rows: report.dashboard?.designConsultantPerformance ?? [], columns: [{ key: "designConsultant", label: "Design Consultant" }, { key: "appointments", label: "Appointments" }, { key: "soldJobs", label: "Sold Jobs" }, { key: "revenue", label: "Revenue", format: "currency" }, { key: "closeRate", label: "Close Rate", format: "percent" }, { key: "averageJobSize", label: "Avg Job Size", format: "currency" }, { key: "revenuePerAppointment", label: "Revenue / Appt", format: "currency" }] };
+  if (tableId === "leads_by_source") return { description: "Source-level performance across leads, appointments, sold jobs, and revenue.", rows: report.dashboard?.leadsBySource ?? [], columns: [{ key: "source", label: "Source" }, { key: "leads", label: "Leads" }, { key: "issuedLeads", label: "Appointments" }, { key: "soldJobs", label: "Sold Jobs" }, { key: "revenue", label: "Revenue", format: "currency" }, { key: "closeRate", label: "Close Rate", format: "percent" }, { key: "netSalesPerLeadIssued", label: "NSLI", format: "currency" }] };
+  if (tableId === "jobs_sold_detail") return { description: "Inline sold-job drilldown with attributed source, consultant, project manager, and time to close.", rows: report.dashboard?.jobsSoldDetail ?? [], columns: [{ key: "jobId", label: "Job ID" }, { key: "customer", label: "Customer" }, { key: "projectType", label: "Project Type" }, { key: "soldDate", label: "Sold Date" }, { key: "leadCreatedEastern", label: "Lead Created (ET)" }, { key: "timeToClose", label: "Time to Close" }, { key: "attributedSource", label: "Attributed Source" }, { key: "sourceBucket", label: "Source Bucket" }, { key: "designConsultant", label: "Design Consultant" }, { key: "projectManager", label: "Project Manager" }, { key: "revenue", label: "Revenue", format: "currency" }] };
   if (tableId === "closing_outcomes") return { description: "Regex-based closing outcome scan for appointments that did not sell.", rows: report.dashboard?.closingOutcomes ?? report.breakdowns?.closingOutcomes ?? [], columns: [{ key: "reason", label: "Reason" }, { key: "jobs", label: "Jobs" }, { key: "examples", label: "Examples" }, { key: "description", label: "Description" }] };
   return { description: "Records that were not matched between CRM leads and jobs.", rows: [...((report.unmatched?.leads ?? []).slice(0, 50).map((lead: any) => ({ type: "lead", label: lead.name || lead.email || lead.id || "Unknown lead", reason: lead.reason || "Not matched" })) ?? []), ...((report.unmatched?.jobs ?? []).slice(0, 50).map((job: any) => ({ type: "job", label: job.jobNumber || job.customer || job.id || "Unknown job", reason: job.reason || "Not matched" })) ?? [])], columns: [{ key: "type", label: "Type" }, { key: "label", label: "Record" }, { key: "reason", label: "Reason" }] };
 }
@@ -562,6 +697,47 @@ function normalizeSections(sections?: any[]) {
   const merged = DEFAULT_SECTIONS.map((section) => ({ ...section, ...(incoming.get(section.id) ?? {}) }));
   for (const extra of sections) if (!merged.some((section) => section.id === extra.id)) merged.push(extra);
   return merged;
+}
+
+function defaultPreviewFilters(filters?: Array<{ key: string }>) {
+  return (filters ?? []).reduce(
+    (result, filter) => {
+      result[filter.key] = "";
+      return result;
+    },
+    { search: "" } as PreviewFilterState
+  );
+}
+
+function applyPreviewFilters(
+  rows: AnyRecord[],
+  filterDefinitions: Array<{ key: string }>,
+  filters: PreviewFilterState
+) {
+  const search = String(filters.search ?? "").trim().toLowerCase();
+
+  return rows.filter((row) => {
+    if (search) {
+      const haystack = Object.values(row)
+        .flatMap((value) => (Array.isArray(value) ? value : [value]))
+        .map((value) => String(value ?? "").toLowerCase())
+        .join(" ");
+      if (!haystack.includes(search)) return false;
+    }
+
+    for (const filter of filterDefinitions) {
+      const selected = String(filters[filter.key] ?? "").trim();
+      if (!selected) continue;
+      const rawValue = row[filter.key];
+      if (Array.isArray(rawValue)) {
+        if (!rawValue.map((value) => String(value ?? "").trim()).includes(selected)) return false;
+      } else if (String(rawValue ?? "").trim() !== selected) {
+        return false;
+      }
+    }
+
+    return true;
+  });
 }
 
 function bucketPatterns(ruleSet: any, bucketValue: string) {
