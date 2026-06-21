@@ -1,7 +1,9 @@
 import { matchRecords } from "./match.js";
+import { analyzeClosingOutcomes } from "./outcomes.js";
+import { matchesVendor, sourceBucket } from "./attribution.js";
+import { isSoldJob } from "./domain.js";
 import { normalizeJobTreadJobs, normalizeSpendRows, normalizeWindsorContacts } from "./normalize.js";
-import { isSoldJob, safeDivide, safeDivideOrNull } from "./domain.js";
-import { sourceBucket } from "./attribution.js";
+import { easternDateTime, timeToClose, timeToCloseDays } from "./timeToClose.js";
 import type { ContractorCondition, ContractorMetricDefinition, ContractorRuleSetRecord } from "./config";
 
 export function buildConfiguredMetricResults({
@@ -14,6 +16,72 @@ export function buildConfiguredMetricResults({
   spendRows = [],
 }: {
   ruleSet: ContractorRuleSetRecord;
+  report: any;
+  startDate: string;
+  endDate: string;
+  leads: any[];
+  jobs: any[];
+  spendRows: any[];
+}) {
+  const context = buildMetricEvaluationContext({
+    report,
+    startDate,
+    endDate,
+    leads,
+    jobs,
+    spendRows,
+  });
+  const results: Array<{
+    id: string;
+    name: string;
+    value: number | string | null;
+    displayType: string;
+    formula?: string | null;
+    source?: string | null;
+    provider?: string | null;
+    object?: string | null;
+    operation?: string | null;
+    field?: string | null;
+    dateField?: string | null;
+    description?: string | null;
+    conditions?: ContractorCondition[];
+  }> = [];
+
+  for (const definition of ruleSet.metricDefinitions) {
+    const value = evaluateMetricDefinition(definition, context);
+
+    if (typeof value === "number" && Number.isFinite(value)) {
+      context.baseValues[definition.id] = value;
+    }
+
+    results.push({
+      id: definition.id,
+      name: definition.name,
+      value: value ?? null,
+      displayType: definition.displayType,
+      formula: definition.formula ?? null,
+      source: definition.source ?? null,
+      provider: definition.provider ?? null,
+      object: definition.object ?? null,
+      operation: definition.operation,
+      field: definition.field ?? null,
+      dateField: definition.dateField ?? null,
+      description: definition.description ?? null,
+      conditions: definition.conditions ?? [],
+    });
+  }
+
+  return results;
+}
+
+export function buildMetricEvaluationContext({
+  report,
+  startDate,
+  endDate,
+  leads = [],
+  jobs = [],
+  spendRows = [],
+}: {
   report: any;
   startDate: string;
   endDate: string;
@@ -81,67 +149,239 @@ export function buildConfiguredMetricResults({
     revenue: match.job.revenue,
     appointmentDate: match.job.appointmentDate,
     soldDate: match.job.soldDate,
+    timeToCloseDays: timeToCloseDays({ leadCreatedDate: match.lead.createdDate, soldDate: match.job.soldDate }),
   }));
-  const baseValues = collectBaseMetricValues(report.metrics);
-  const results: Array<{
-    id: string;
-    name: string;
-    value: number | string | null;
-    displayType: string;
-    formula?: string | null;
-    source?: string | null;
-    provider?: string | null;
-    object?: string | null;
-    operation?: string | null;
-    field?: string | null;
-    dateField?: string | null;
-    description?: string | null;
-    conditions?: ContractorCondition[];
-  }> = [];
 
-  for (const definition of ruleSet.metricDefinitions) {
-    const predefined = definition.currentOutputPath ? readPath(report.metrics, definition.currentOutputPath.replace(/^metrics\./, "")) : undefined;
-    let value = predefined;
+  return {
+    startDate,
+    endDate,
+    baseValues: {},
+    rules: report.runtimeRules,
+    datasets: {
+      contacts: normalizedLeads,
+      jobs: normalizedJobs,
+      marketing_spend_rows: normalizedSpendRows,
+      matched_jobs: joinedRecords.filter((row) => row.appointmentDate),
+      matched_sold_jobs: joinedRecords.filter((row) => isSoldJob(row.job, report.runtimeRules) && row.job.inReportSold !== false),
+      sold_jobs: normalizedJobs.filter((job) => isSoldJob(job, report.runtimeRules) && job.inReportSold !== false),
+    },
+  };
+}
 
-    if (value === undefined) {
-      value = evaluateMetricDefinition(definition, {
-        startDate,
-        endDate,
-        baseValues,
-        rules: report.runtimeRules,
-        datasets: {
-          contacts: normalizedLeads,
-          jobs: normalizedJobs,
-          marketing_spend_rows: normalizedSpendRows,
-          matched_jobs: joinedRecords.filter((row) => row.appointmentDate),
-          matched_sold_jobs: joinedRecords.filter((row) => isSoldJob(row.job, report.runtimeRules)),
-          sold_jobs: normalizedJobs.filter((job) => isSoldJob(job, report.runtimeRules)),
-        },
-      });
-    }
+export function buildConfiguredDashboard({
+  ruleSet,
+  report,
+  context,
+}: {
+  ruleSet: ContractorRuleSetRecord;
+  report: any;
+  context: ReturnType<typeof buildMetricEvaluationContext>;
+}) {
+  const groupedRows = buildGroupedMetricRows(ruleSet, context);
+  return {
+    paidChannelPerformance: groupedRows.paid_channel_performance ?? [],
+    designConsultantPerformance: groupedRows.design_consultant_performance ?? [],
+    leadsBySource: groupedRows.leads_by_source ?? [],
+    jobsSoldDetail: buildJobsSoldDetail(context),
+    closingOutcomes: analyzeClosingOutcomes(
+      context.datasets.jobs.filter((job) => job.inReportAppointment !== false),
+      context.rules
+    ),
+    unmatchedRecords: {
+      leads: report.unmatched?.leads ?? [],
+      jobs: report.unmatched?.jobs ?? [],
+    },
+  };
+}
 
-    if (typeof value === "number" && Number.isFinite(value)) {
-      baseValues[definition.id] = value;
-    }
+function buildGroupedMetricRows(
+  ruleSet: ContractorRuleSetRecord,
+  context: {
+    startDate: string;
+    endDate: string;
+    rules: any;
+    datasets: Record<string, any[]>;
+  }
+) {
+  const metricsById = new Map(ruleSet.metricDefinitions.map((definition) => [definition.id, definition]));
+  const results: Record<string, any[]> = {};
 
-    results.push({
-      id: definition.id,
-      name: definition.name,
-      value: value ?? null,
-      displayType: definition.displayType,
-      formula: definition.formula ?? null,
-      source: definition.source ?? null,
-      provider: definition.provider ?? null,
-      object: definition.object ?? null,
-      operation: definition.operation,
-      field: definition.field ?? null,
-      dateField: definition.dateField ?? null,
-      description: definition.description ?? null,
-      conditions: definition.conditions ?? [],
+  for (const groupedSet of ruleSet.groupedMetricSets ?? []) {
+    const baseDataset = context.datasets[groupedSet.object] ?? [];
+    const groupValues = uniqueGroupValues(baseDataset, groupedSet.groupBy);
+    const rows = groupValues.map((groupValue) => {
+      const scopedContext = createGroupedContext(context, groupedSet.id, groupValue);
+      const metricValues = evaluateMetricIds(groupedSet.metricIds, metricsById, scopedContext);
+      return formatGroupedRow(groupedSet.id, groupValue, metricValues);
     });
+    results[groupedSet.id] = rows.filter(Boolean);
   }
 
   return results;
+}
+
+function createGroupedContext(
+  context: {
+    startDate: string;
+    endDate: string;
+    rules: any;
+    datasets: Record<string, any[]>;
+  },
+  groupedSetId: string,
+  groupValue: string
+) {
+  const datasets = Object.fromEntries(
+    Object.entries(context.datasets).map(([datasetKey, records]) => [
+      datasetKey,
+      records.filter((record) => matchesGroupedRecord(groupedSetId, groupValue, datasetKey, record, context.rules)),
+    ])
+  );
+
+  return {
+    startDate: context.startDate,
+    endDate: context.endDate,
+    rules: context.rules,
+    datasets,
+    baseValues: {},
+  };
+}
+
+function evaluateMetricIds(
+  metricIds: string[],
+  metricsById: Map<string, ContractorMetricDefinition>,
+  context: {
+    startDate: string;
+    endDate: string;
+    baseValues: Record<string, number>;
+    rules: any;
+    datasets: Record<string, any[]>;
+  }
+) {
+  const values: Record<string, number | string | null> = {};
+
+  for (const definition of metricsById.values()) {
+    const value = evaluateMetricDefinition(definition, context);
+    values[definition.id] = value ?? null;
+    if (typeof value === "number" && Number.isFinite(value)) {
+      context.baseValues[definition.id] = value;
+    }
+  }
+
+  return metricIds.reduce((result, metricId) => {
+    result[metricId] = values[metricId] ?? null;
+    return result;
+  }, {} as Record<string, number | string | null>);
+}
+
+function formatGroupedRow(groupedSetId: string, groupValue: string, metricValues: Record<string, number | string | null>) {
+  if (groupedSetId === "paid_channel_performance") {
+    return {
+      name: groupValue,
+      spend: numericMetric(metricValues.overall_spend),
+      leads: numericMetric(metricValues.paid_leads),
+      issuedLeads: numericMetric(metricValues.paid_appointments),
+      soldJobs: numericMetric(metricValues.paid_sold_jobs),
+      revenue: numericMetric(metricValues.paid_revenue),
+      costPerLead: nullableMetric(metricValues.cost_per_paid_lead),
+      costPerIssuedLead: nullableMetric(metricValues.cost_per_paid_appointment),
+      roas: nullableMetric(metricValues.paid_roas),
+      closeRate: nullableMetric(metricValues.paid_close_rate),
+    };
+  }
+  if (groupedSetId === "design_consultant_performance") {
+    return {
+      designConsultant: groupValue,
+      appointments: numericMetric(metricValues.overall_appointments),
+      soldJobs: numericMetric(metricValues.overall_sold_jobs),
+      revenue: numericMetric(metricValues.overall_revenue),
+      closeRate: nullableMetric(metricValues.overall_close_rate),
+      averageJobSize: nullableMetric(metricValues.average_ticket),
+      revenuePerAppointment: nullableMetric(metricValues.overall_nsli),
+    };
+  }
+  if (groupedSetId === "leads_by_source") {
+    return {
+      source: groupValue,
+      leads: numericMetric(metricValues.overall_leads),
+      issuedLeads: numericMetric(metricValues.overall_appointments),
+      soldJobs: numericMetric(metricValues.overall_sold_jobs),
+      revenue: numericMetric(metricValues.overall_revenue),
+      closeRate: nullableMetric(metricValues.overall_close_rate),
+      netSalesPerLeadIssued: nullableMetric(metricValues.overall_nsli),
+    };
+  }
+  if (groupedSetId === "closing_outcomes") {
+    return {
+      reason: groupValue,
+      jobs: numericMetric(metricValues.overall_appointments),
+      examples: [],
+      description: "Config-derived grouped outcome count.",
+    };
+  }
+  return null;
+}
+
+function buildJobsSoldDetail(context: {
+  datasets: Record<string, any[]>;
+  rules: any;
+}) {
+  return (context.datasets.sold_jobs ?? []).map((job) => {
+    const matchedRecord = (context.datasets.matched_sold_jobs ?? []).find((row) => row.job?.id === job.id);
+    const lead = matchedRecord?.lead;
+    const attributedSource = matchedRecord?.source || job.source;
+    return {
+      jobId: job.id,
+      customer: job.customer,
+      projectType: job.projectType,
+      soldDate: job.soldDate,
+      leadCreatedEastern: easternDateTime(lead?.createdDate, context.rules),
+      timeToClose: timeToClose({ leadCreatedDate: lead?.createdDate, soldDate: job.soldDate }),
+      attributedSource,
+      sourceBucket: sourceBucket({ ...job, source: attributedSource, campaign: matchedRecord?.campaign, notesSummary: job.notesSummary }, context.rules),
+      designConsultant: job.designConsultant,
+      projectManager: job.projectManager,
+      revenue: job.revenue,
+    };
+  });
+}
+
+function matchesGroupedRecord(groupedSetId: string, groupValue: string, datasetKey: string, record: any, rules: any) {
+  if (groupedSetId === "paid_channel_performance") {
+    if (datasetKey === "marketing_spend_rows") return String(record.vendor || "Unassigned") === groupValue;
+    return matchesVendor(groupValue, record.lead ?? record.job ?? record, rules);
+  }
+  if (groupedSetId === "design_consultant_performance") {
+    return String(readMetricField(record.job ?? record, "designConsultant") || "Unassigned") === groupValue;
+  }
+  if (groupedSetId === "leads_by_source") {
+    const sourceValue =
+      readMetricField(record.lead ?? record, "source") ||
+      readMetricField(record.job ?? record, "source") ||
+      readMetricField(record.lead ?? record, "campaign") ||
+      readMetricField(record.job ?? record, "campaign") ||
+      "Unassigned";
+    return String(sourceValue) === groupValue;
+  }
+  if (groupedSetId === "closing_outcomes") {
+    return String(readMetricField(record.job ?? record, "status") || "Unassigned") === groupValue;
+  }
+  return true;
+}
+
+function uniqueGroupValues(records: any[], field: string) {
+  return Array.from(
+    new Set(records.map((record) => String(readMetricField(record, field) || "Unassigned")).filter(Boolean))
+  ).sort((left, right) => left.localeCompare(right));
+}
+
+function numericMetric(value: number | string | null | undefined) {
+  const number = Number(value ?? 0);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function nullableMetric(value: number | string | null | undefined) {
+  const number = Number(value ?? 0);
+  return Number.isFinite(number) ? number : null;
 }
 
 function evaluateMetricDefinition(
@@ -272,40 +512,6 @@ function readMetricField(record: any, field?: string | null) {
   return field.split(".").reduce((current, key) => current?.[key], record);
 }
 
-function collectBaseMetricValues(metrics: any) {
-  return {
-    overall_spend: Number(metrics?.totals?.spend ?? 0),
-    overall_leads: Number(metrics?.totals?.leads ?? 0),
-    paid_leads: Number(metrics?.totals?.paidLeads ?? 0),
-    organic_leads: Number(metrics?.totals?.organicLeads ?? 0),
-    overall_appointments: Number(metrics?.totals?.issuedLeads ?? 0),
-    paid_appointments: Number(metrics?.totals?.paidIssuedLeads ?? 0),
-    organic_appointments: Number(metrics?.totals?.organicIssuedLeads ?? 0),
-    overall_sold_jobs: Number(metrics?.totals?.soldJobs ?? 0),
-    paid_sold_jobs: Number(metrics?.totals?.paidSoldJobs ?? 0),
-    organic_sold_jobs: Number(metrics?.totals?.organicSoldJobs ?? 0),
-    overall_revenue: Number(metrics?.totals?.revenue ?? 0),
-    paid_revenue: Number(metrics?.totals?.paidRevenue ?? 0),
-    organic_revenue: Number(metrics?.totals?.organicRevenue ?? 0),
-    net_sales: Number(metrics?.totals?.netSales ?? 0),
-    cost_per_paid_lead: Number(metrics?.totals?.costPerLead ?? 0),
-    cost_per_paid_appointment: Number(metrics?.totals?.costPerIssuedLead ?? 0),
-    overall_nsli: Number(metrics?.totals?.netSalesPerLeadIssued ?? 0),
-    paid_nsli: Number(metrics?.totals?.paidNetSalesPerLeadIssued ?? 0),
-    organic_nsli: Number(metrics?.totals?.organicNetSalesPerLeadIssued ?? 0),
-    paid_roas: Number(metrics?.totals?.roas ?? 0),
-    overall_close_rate: Number(metrics?.totals?.closeRate ?? 0),
-    paid_close_rate: Number(metrics?.totals?.paidCloseRate ?? 0),
-    organic_close_rate: Number(metrics?.totals?.organicCloseRate ?? 0),
-    average_ticket: Number(metrics?.totals?.averageJobSize ?? 0),
-    paid_average_ticket: Number(metrics?.totals?.paidAverageJobSize ?? 0),
-    organic_average_ticket: Number(metrics?.totals?.organicAverageJobSize ?? 0),
-    average_time_to_close: Number(metrics?.totals?.averageTimeToCloseDays ?? 0),
-    paid_average_time_to_close: Number(metrics?.totals?.paidAverageTimeToCloseDays ?? 0),
-    organic_average_time_to_close: Number(metrics?.totals?.organicAverageTimeToCloseDays ?? 0),
-  };
-}
-
 function evaluateFormula(formula: string, values: Record<string, number>) {
   const expression = String(formula ?? "").trim();
   if (!expression || !/^[a-z0-9_+\-*/().\s]+$/i.test(expression)) return null;
@@ -316,8 +522,4 @@ function evaluateFormula(formula: string, values: Record<string, number>) {
   } catch {
     return null;
   }
-}
-
-function readPath(value: any, path: string) {
-  return path.split(".").reduce((current, key) => current?.[key], value);
 }
