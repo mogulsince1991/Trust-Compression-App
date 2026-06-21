@@ -5,6 +5,7 @@ import { ArrowDown, ArrowUp, BarChart3, Database, Info, Link2, Loader2, Plus, Re
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
+import { createDefaultContractorRuleSet } from "@/lib/metrics/contractor/config";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 import styles from "./contractor-metrics-console.module.css";
 
@@ -209,9 +210,7 @@ export function ContractorMetricsWorkspace() {
       setRuleSets(nextRuleSets);
       const currentRuleSet = configJson.currentRuleSet ?? nextRuleSets[0] ?? null;
 
-      if (!currentRuleSet && !nextRuleSets.length) {
-        throw new Error("Contractor config returned no rule set.");
-      }
+      const fallbackRuleSet = currentRuleSet ?? createDefaultContractorRuleSet();
 
       setSelectedRuleSetId((current) => {
         if (current && nextRuleSets.some((entry: any) => entry.id === current)) return current;
@@ -223,10 +222,13 @@ export function ContractorMetricsWorkspace() {
           if (matchingRuleSet) return clone(matchingRuleSet);
         }
         if (currentRuleSet) return clone(currentRuleSet);
-        return current ?? null;
+        if (current) return current;
+        return clone(fallbackRuleSet);
       });
       setError("");
     } catch (nextError) {
+      setRuleSetDraft((current) => current ?? clone(createDefaultContractorRuleSet()));
+      setRuleSets((current) => (current.length ? current : [createDefaultContractorRuleSet()]));
       setError(nextError instanceof Error ? nextError.message : "Could not refresh contractor metrics workspace.");
     } finally {
       setWorking("");
