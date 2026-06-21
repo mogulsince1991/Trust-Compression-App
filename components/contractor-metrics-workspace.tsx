@@ -172,44 +172,65 @@ export function ContractorMetricsWorkspace() {
   async function refresh(nextWorkspaceId = workspaceId, token = session?.access_token) {
     if (!nextWorkspaceId || !token) return;
     setWorking((current) => current || "refresh");
-    const [accountsResponse, configResponse, reportRows, sourceRows] = await Promise.all([
-      fetch(`/api/connect/accounts?workspaceId=${encodeURIComponent(nextWorkspaceId)}`, { headers: { Authorization: `Bearer ${token}` } }),
-      fetch(`/api/metrics/contractor/config?workspaceId=${encodeURIComponent(nextWorkspaceId)}`, { headers: { Authorization: `Bearer ${token}` } }),
-      supabase
-        .from("contractor_reports")
-        .select("id,client_name,start_date,end_date,created_at,totals,breakdowns,detail,source_snapshot,rule_set_id")
-        .eq("workspace_id", nextWorkspaceId)
-        .order("created_at", { ascending: false })
-        .limit(8),
-      supabase
-        .from("contractor_data_sources")
-        .select("id,provider,display_name,status,last_synced_at,last_error,updated_at")
-        .eq("workspace_id", nextWorkspaceId)
-        .order("updated_at", { ascending: false }),
-    ]);
+    try {
+      const [accountsResponse, configResponse, reportRows, sourceRows] = await Promise.all([
+        fetch(`/api/connect/accounts?workspaceId=${encodeURIComponent(nextWorkspaceId)}`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`/api/metrics/contractor/config?workspaceId=${encodeURIComponent(nextWorkspaceId)}`, { headers: { Authorization: `Bearer ${token}` } }),
+        supabase
+          .from("contractor_reports")
+          .select("id,client_name,start_date,end_date,created_at,totals,breakdowns,detail,source_snapshot,rule_set_id")
+          .eq("workspace_id", nextWorkspaceId)
+          .order("created_at", { ascending: false })
+          .limit(8),
+        supabase
+          .from("contractor_data_sources")
+          .select("id,provider,display_name,status,last_synced_at,last_error,updated_at")
+          .eq("workspace_id", nextWorkspaceId)
+          .order("updated_at", { ascending: false }),
+      ]);
 
-    const accountsJson = await accountsResponse.json().catch(() => ({}));
-    const configJson = await configResponse.json().catch(() => ({}));
-    setAccounts(accountsJson.accounts ?? []);
-    setSources(sourceRows.data ?? []);
-    setReports(reportRows.data ?? []);
-    setFieldCatalog(configJson.fieldCatalog ?? {});
-    setDatasetCatalog(configJson.datasetCatalog ?? []);
-    const nextRuleSets = configJson.ruleSets ?? [];
-    setRuleSets(nextRuleSets);
-    const currentRuleSet = configJson.currentRuleSet ?? nextRuleSets[0] ?? null;
-    setSelectedRuleSetId((current) => {
-      if (current && nextRuleSets.some((entry: any) => entry.id === current)) return current;
-      return currentRuleSet?.id ?? null;
-    });
-    setRuleSetDraft((current) => {
-      if (current?.id) {
-        const matchingRuleSet = nextRuleSets.find((entry: any) => entry.id === current.id) ?? null;
-        if (matchingRuleSet) return clone(matchingRuleSet);
+      const accountsJson = await accountsResponse.json().catch(() => ({}));
+      const configJson = await configResponse.json().catch(() => ({}));
+
+      if (!accountsResponse.ok) {
+        throw new Error(accountsJson.error ?? "Could not load connected accounts.");
       }
-      return currentRuleSet ? clone(currentRuleSet) : null;
-    });
-    setWorking("");
+
+      if (!configResponse.ok) {
+        throw new Error(configJson.error ?? "Could not load contractor config.");
+      }
+
+      setAccounts(accountsJson.accounts ?? []);
+      setSources(sourceRows.data ?? []);
+      setReports(reportRows.data ?? []);
+      setFieldCatalog(configJson.fieldCatalog ?? {});
+      setDatasetCatalog(configJson.datasetCatalog ?? []);
+      const nextRuleSets = configJson.ruleSets ?? [];
+      setRuleSets(nextRuleSets);
+      const currentRuleSet = configJson.currentRuleSet ?? nextRuleSets[0] ?? null;
+
+      if (!currentRuleSet && !nextRuleSets.length) {
+        throw new Error("Contractor config returned no rule set.");
+      }
+
+      setSelectedRuleSetId((current) => {
+        if (current && nextRuleSets.some((entry: any) => entry.id === current)) return current;
+        return currentRuleSet?.id ?? current ?? null;
+      });
+      setRuleSetDraft((current) => {
+        if (current?.id) {
+          const matchingRuleSet = nextRuleSets.find((entry: any) => entry.id === current.id) ?? null;
+          if (matchingRuleSet) return clone(matchingRuleSet);
+        }
+        if (currentRuleSet) return clone(currentRuleSet);
+        return current ?? null;
+      });
+      setError("");
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not refresh contractor metrics workspace.");
+    } finally {
+      setWorking("");
+    }
   }
 
   async function postAction(url: string, state: string, body: AnyRecord) {
