@@ -111,7 +111,7 @@ async function fetchJobTreadRows(
   }
 
   return detailRows
-    .filter((row) => inOptionalDateRange(row.soldDate, startDate, endDate))
+    .filter((row) => matchesReportDateWindow(row, startDate, endDate))
     .slice(0, maxJobs);
 }
 
@@ -311,7 +311,7 @@ async function paveQuery({
 function normalizeJob(job: any) {
   const fields = customFieldMap(job.customFieldValues?.nodes ?? []);
   const documents = Array.isArray(job.documents?.nodes) ? job.documents.nodes : [];
-  const soldDate = approvedOrderSoldDate(documents);
+  const soldDate = firstField(fields, ["job_sold_date", "sold_date", "sale_date", "closed_won_date"]);
   const revenue =
     toNumber(job.projectedPriceWithTax ?? job.projectedPrice) ||
     revenueFromFields(fields);
@@ -324,7 +324,7 @@ function normalizeJob(job: any) {
     customer: job.location?.account?.name ?? job.name ?? null,
     email: firstField(fields, ["email", "customer_email"]),
     phone: firstField(fields, ["phone", "customer_phone"]),
-    appointmentDate: job.createdAt ?? soldDate,
+    appointmentDate: job.createdAt ?? null,
     createdAt: job.createdAt ?? null,
     closedOn: job.closedOn ?? null,
     soldDate,
@@ -454,6 +454,18 @@ function inOptionalDateRange(value: unknown, startDate: string, endDate: string)
     if (date > end) return false;
   }
   return true;
+}
+
+function matchesReportDateWindow(
+  row: { appointmentDate?: unknown; soldDate?: unknown },
+  startDate: string,
+  endDate: string
+) {
+  if (!startDate && !endDate) return true;
+  return (
+    inOptionalDateRange(row.appointmentDate, startDate, endDate) ||
+    inOptionalDateRange(row.soldDate, startDate, endDate)
+  );
 }
 
 async function safeJson(response: Response) {

@@ -161,7 +161,9 @@ export function buildMetricEvaluationContext({
       contacts: normalizedLeads,
       jobs: normalizedJobs,
       marketing_spend_rows: normalizedSpendRows,
-      matched_jobs: joinedRecords.filter((row) => row.appointmentDate),
+      matched_jobs: joinedRecords.filter(
+        (row) => row.appointmentDate && row.job?.inReportAppointment !== false
+      ),
       matched_sold_jobs: joinedRecords.filter((row) => isSoldJob(row.job, report.runtimeRules) && row.job.inReportSold !== false),
       sold_jobs: normalizedJobs.filter((job) => isSoldJob(job, report.runtimeRules) && job.inReportSold !== false),
     },
