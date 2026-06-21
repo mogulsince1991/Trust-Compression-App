@@ -18,6 +18,35 @@ export async function ensureDefaultContractorRuleSet(serviceSupabase: any, works
   if (error) throw error;
   if (existing) return normalizeStoredRuleSet(existing);
 
+  const { data: fallbackRows, error: fallbackError } = await serviceSupabase
+    .from("contractor_metric_rule_sets")
+    .select("*")
+    .eq("workspace_id", workspaceId)
+    .order("updated_at", { ascending: false })
+    .limit(1);
+
+  if (fallbackError) throw fallbackError;
+
+  const fallback = fallbackRows?.[0] ?? null;
+  if (fallback) {
+    await serviceSupabase
+      .from("contractor_metric_rule_sets")
+      .update({ is_default: false, updated_by: userId ?? null })
+      .eq("workspace_id", workspaceId)
+      .eq("is_default", true);
+
+    const { data: promoted, error: promoteError } = await serviceSupabase
+      .from("contractor_metric_rule_sets")
+      .update({ is_default: true, updated_by: userId ?? null })
+      .eq("workspace_id", workspaceId)
+      .eq("id", fallback.id)
+      .select("*")
+      .single();
+
+    if (promoteError) throw promoteError;
+    return normalizeStoredRuleSet(promoted);
+  }
+
   const draft = createDefaultContractorRuleSet();
   const { data, error: insertError } = await serviceSupabase
     .from("contractor_metric_rule_sets")
@@ -25,7 +54,32 @@ export async function ensureDefaultContractorRuleSet(serviceSupabase: any, works
     .select("*")
     .single();
 
-  if (insertError) throw insertError;
+  if (insertError) {
+    const { data: conflictedRows, error: conflictReadError } = await serviceSupabase
+      .from("contractor_metric_rule_sets")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .eq("slug", draft.slug)
+      .order("updated_at", { ascending: false })
+      .limit(1);
+
+    if (conflictReadError) throw conflictReadError;
+
+    const conflicted = conflictedRows?.[0] ?? null;
+    if (!conflicted) throw insertError;
+
+    const { data: promoted, error: promoteError } = await serviceSupabase
+      .from("contractor_metric_rule_sets")
+      .update({ is_default: true, updated_by: userId ?? null })
+      .eq("workspace_id", workspaceId)
+      .eq("id", conflicted.id)
+      .select("*")
+      .single();
+
+    if (promoteError) throw promoteError;
+    return normalizeStoredRuleSet(promoted);
+  }
+
   return normalizeStoredRuleSet(data);
 }
 
