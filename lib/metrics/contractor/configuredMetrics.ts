@@ -183,10 +183,12 @@ export function buildConfiguredDashboard({
     designConsultantPerformance: groupedRows.design_consultant_performance ?? [],
     leadsBySource: groupedRows.leads_by_source ?? [],
     jobsSoldDetail: buildJobsSoldDetail(context),
-    closingOutcomes: analyzeClosingOutcomes(
-      context.datasets.jobs.filter((job) => job.inReportAppointment !== false),
-      context.rules
-    ),
+    closingOutcomes:
+      groupedRows.closing_outcomes ??
+      analyzeClosingOutcomes(
+        context.datasets.jobs.filter((job) => job.inReportAppointment !== false),
+        context.rules
+      ),
     unmatchedRecords: {
       leads: report.unmatched?.leads ?? [],
       jobs: report.unmatched?.jobs ?? [],
