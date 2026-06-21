@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { fetchGoHighLevelSnapshot } from "../../../../../lib/integrations/contractor/gohighlevel";
 import { fetchJobTreadSnapshot } from "../../../../../lib/integrations/contractor/jobtread";
-import { buildConfiguredMetricResults } from "../../../../../lib/metrics/contractor/configuredMetrics";
+import {
+  buildConfiguredDashboard,
+  buildConfiguredMetricResults,
+  buildMetricEvaluationContext,
+} from "../../../../../lib/metrics/contractor/configuredMetrics";
 import { buildReport } from "../../../../../lib/metrics/contractor/report.js";
 import { getContractorRuleSet } from "../../../../../lib/server/contractor-rule-sets";
 import { toRuntimeMetricRules } from "../../../../../lib/metrics/contractor/config";
@@ -212,6 +216,14 @@ async function generateReportPayload({ userSupabase, serviceSupabase, workspaceI
   });
 
   report.runtimeRules = runtimeRules;
+  const metricContext = buildMetricEvaluationContext({
+    report,
+    startDate,
+    endDate,
+    leads: liveLeads.map(toConfiguredLeadRow),
+    jobs: liveJobs.map(toConfiguredJobRow),
+    spendRows: spendRows ?? [],
+  });
   const configuredMetrics = buildConfiguredMetricResults({
     ruleSet,
     report,
@@ -251,7 +263,7 @@ async function generateReportPayload({ userSupabase, serviceSupabase, workspaceI
     configuredMetrics,
     unmatched: report.unmatched,
     detail: report.detail,
-    dashboard: buildDashboardSnapshot(report),
+    dashboard: buildConfiguredDashboard({ ruleSet, report, context: metricContext }),
     sourceSnapshot,
   };
 }
@@ -301,20 +313,6 @@ function toConfiguredJobRow(row) {
     source: row.source ?? null,
     campaign: row.campaign ?? null,
     notes_summary: row.notesSummary ?? null,
-  };
-}
-
-function buildDashboardSnapshot(report) {
-  return {
-    paidChannelPerformance: report.metrics.byVendor ?? [],
-    designConsultantPerformance: report.metrics.byDesignConsultant ?? [],
-    leadsBySource: report.metrics.byLeadSource ?? [],
-    jobsSoldDetail: report.metrics.jobsSoldDetail ?? [],
-    closingOutcomes: report.metrics.closingOutcomes ?? [],
-    unmatchedRecords: {
-      leads: report.unmatched?.leads ?? [],
-      jobs: report.unmatched?.jobs ?? [],
-    },
   };
 }
 
