@@ -558,9 +558,19 @@ function mergeMetricDefinitions(
     if (!stored) return definition;
     return {
       ...definition,
-      name: stored.name ?? definition.name,
-      description: stored.description ?? definition.description,
+      ...stored,
+      id: definition.id,
+      source: stored.source ?? stored.provider ?? definition.source,
+      provider: stored.provider ?? definition.provider,
+      object: stored.object ?? definition.object,
+      operation: stored.operation ?? definition.operation,
+      field: stored.field ?? definition.field,
+      dateField: stored.dateField ?? definition.dateField,
+      conditions: Array.isArray(stored.conditions) ? stored.conditions : definition.conditions,
+      formula: stored.formula ?? definition.formula,
       displayType: stored.displayType ?? definition.displayType,
+      currentOutputPath: stored.currentOutputPath ?? definition.currentOutputPath,
+      description: stored.description ?? definition.description,
     };
   });
   const customDefinitions = storedDefinitions.filter((definition) => definition?.id && !defaultsById.has(definition.id));

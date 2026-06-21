@@ -195,10 +195,20 @@ export function ContractorMetricsWorkspace() {
     setReports(reportRows.data ?? []);
     setFieldCatalog(configJson.fieldCatalog ?? {});
     setDatasetCatalog(configJson.datasetCatalog ?? []);
-    setRuleSets(configJson.ruleSets ?? []);
-    const currentRuleSet = configJson.currentRuleSet ?? configJson.ruleSets?.[0] ?? null;
-    setSelectedRuleSetId((current) => current ?? currentRuleSet?.id ?? null);
-    setRuleSetDraft((current) => current ?? clone(currentRuleSet));
+    const nextRuleSets = configJson.ruleSets ?? [];
+    setRuleSets(nextRuleSets);
+    const currentRuleSet = configJson.currentRuleSet ?? nextRuleSets[0] ?? null;
+    setSelectedRuleSetId((current) => {
+      if (current && nextRuleSets.some((entry: any) => entry.id === current)) return current;
+      return currentRuleSet?.id ?? null;
+    });
+    setRuleSetDraft((current) => {
+      if (current?.id) {
+        const matchingRuleSet = nextRuleSets.find((entry: any) => entry.id === current.id) ?? null;
+        if (matchingRuleSet) return clone(matchingRuleSet);
+      }
+      return currentRuleSet ? clone(currentRuleSet) : null;
+    });
     setWorking("");
   }
 
