@@ -6,12 +6,14 @@ const DEFAULT_MAX_JOBS = 5000;
 
 export async function fetchJobTreadSnapshot(
   account: any,
-  options?: { limit?: number; maxPages?: number; startDate?: string; endDate?: string }
+  options?: { limit?: number; maxPages?: number; startDate?: string; endDate?: string; filterToWindow?: boolean }
 ) {
   const jobs = await fetchJobTreadRows(account, {
     limit: options?.limit ?? DEFAULT_MAX_JOBS,
     maxPages: options?.maxPages,
-    includeAllRows: true,
+    startDate: options?.startDate,
+    endDate: options?.endDate,
+    includeAllRows: options?.filterToWindow !== true,
   });
   const metadata = account.metadata ?? {};
   const baseUrl = normalizeBaseUrl(

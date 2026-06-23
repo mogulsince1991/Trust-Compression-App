@@ -180,7 +180,7 @@ async function generateReportPayload({ userSupabase, serviceSupabase, workspaceI
           return {
             provider: "gohighlevel",
             accountLabel,
-            snapshot: await fetchGoHighLevelSnapshotWithFallback(account, { startDate, endDate }),
+            snapshot: await fetchChunkedGoHighLevelSnapshot(account, { startDate, endDate }),
             error: null,
           };
         } catch (error) {
@@ -199,12 +199,7 @@ async function generateReportPayload({ userSupabase, serviceSupabase, workspaceI
           return {
             provider: "jobtread",
             accountLabel,
-            snapshot: await fetchJobTreadSnapshot(account, {
-              startDate,
-              endDate,
-              limit: 5000,
-              maxPages: 60,
-            }),
+            snapshot: await fetchChunkedJobTreadSnapshot(account, { startDate, endDate }),
             error: null,
           };
         } catch (error) {
@@ -312,24 +307,113 @@ function toUploadedSpendRow(row) {
   };
 }
 
+async function fetchChunkedGoHighLevelSnapshot(account, { startDate, endDate }) {
+  const windows = splitDateRangeIntoMonthlyWindows(startDate, endDate);
+  const leads = [];
+  let settings = null;
+  let displayName = account.account_label ?? "GoHighLevel";
+  let externalAccountId = null;
+
+  for (const window of windows) {
+    const snapshot = await fetchGoHighLevelSnapshotWithFallback(account, window);
+    displayName = snapshot.displayName ?? displayName;
+    externalAccountId = snapshot.externalAccountId ?? externalAccountId;
+    settings = snapshot.settings ?? settings;
+    leads.push(...(snapshot.leads ?? []));
+  }
+
+  return {
+    displayName,
+    externalAccountId,
+    leads: dedupeRows(leads, (row) => row.id ?? `${row.email ?? ""}:${row.phone ?? ""}:${row.createdDate ?? ""}`),
+    jobs: [],
+    spendRows: [],
+    settings,
+  };
+}
+
+async function fetchChunkedJobTreadSnapshot(account, { startDate, endDate }) {
+  const windows = splitDateRangeIntoMonthlyWindows(startDate, endDate);
+  const jobs = [];
+  let settings = null;
+  let displayName = account.account_label ?? "JobTread";
+  let externalAccountId = null;
+
+  for (const window of windows) {
+    const snapshot = await fetchJobTreadSnapshot(account, {
+      ...window,
+      limit: 1500,
+      maxPages: 20,
+      filterToWindow: true,
+    });
+    displayName = snapshot.displayName ?? displayName;
+    externalAccountId = snapshot.externalAccountId ?? externalAccountId;
+    settings = snapshot.settings ?? settings;
+    jobs.push(...(snapshot.jobs ?? []));
+  }
+
+  return {
+    displayName,
+    externalAccountId,
+    leads: [],
+    jobs: dedupeRows(jobs, (row) => row.jobId ?? row.id ?? row.jobNumber),
+    spendRows: [],
+    settings,
+  };
+}
+
 async function fetchGoHighLevelSnapshotWithFallback(account, { startDate, endDate }) {
   try {
     return await fetchGoHighLevelSnapshot(account, {
       startDate,
       endDate,
-      limit: 5000,
-      scanLimit: 10000,
-      maxPages: 100,
+      limit: 1000,
+      scanLimit: 2000,
+      maxPages: 20,
     });
   } catch (primaryError) {
     return await fetchGoHighLevelSnapshot(account, {
       startDate,
       endDate,
-      limit: 2000,
-      scanLimit: 2000,
-      maxPages: 20,
+      limit: 500,
+      scanLimit: 1000,
+      maxPages: 10,
     });
   }
+}
+
+function splitDateRangeIntoMonthlyWindows(startDate, endDate) {
+  const windows = [];
+  const start = new Date(`${startDate}T00:00:00Z`);
+  const end = new Date(`${endDate}T00:00:00Z`);
+  let cursor = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
+
+  while (cursor <= end) {
+    const windowStart = cursor < start ? start : cursor;
+    const windowEnd = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 0));
+    const boundedEnd = windowEnd > end ? end : windowEnd;
+    windows.push({
+      startDate: toIsoDate(windowStart),
+      endDate: toIsoDate(boundedEnd),
+    });
+    cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1));
+  }
+
+  return windows;
+}
+
+function dedupeRows(rows, keyFn) {
+  const deduped = [];
+  const seen = new Set();
+
+  for (const row of rows) {
+    const key = keyFn(row);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(row);
+  }
+
+  return deduped;
 }
 
 function toConfiguredLeadRow(row) {
