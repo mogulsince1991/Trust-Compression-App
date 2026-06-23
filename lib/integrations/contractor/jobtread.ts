@@ -1,8 +1,8 @@
 const DEFAULT_JOBTREAD_API_BASE_URL = "https://api.jobtread.com";
 const DEFAULT_JOBTREAD_PAVE_PATH = "/pave";
 const DEFAULT_PAGE_SIZE = 100;
-const DEFAULT_MAX_PAGES = 60;
-const DEFAULT_MAX_JOBS = 5000;
+const DEFAULT_MAX_PAGES = 80;
+const DEFAULT_MAX_JOBS = 10000;
 
 export async function fetchJobTreadSnapshot(
   account: any,
@@ -319,10 +319,19 @@ async function paveQuery({
 function normalizeJob(job: any) {
   const fields = customFieldMap(job.customFieldValues?.nodes ?? []);
   const documents = Array.isArray(job.documents?.nodes) ? job.documents.nodes : [];
-  const soldDate = firstField(fields, ["job_sold_date", "sold_date", "date_sold", "sale_date", "contract_signed_date", "closed_won_date"]);
+  const soldDate = firstField(fields, [
+    "job_sold_date",
+    "job_sold",
+    "sold_date",
+    "date_sold",
+    "sale_date",
+    "contract_signed_date",
+    "closed_won_date",
+  ]);
   const revenue =
     toNumber(job.projectedPriceWithTax ?? job.projectedPrice) ||
-    revenueFromFields(fields);
+    revenueFromFields(fields) ||
+    revenueFromApprovedOrders(documents);
   const status = firstField(fields, ["status", "job_status", "appointment_result"]) ?? statusFromDocuments(documents);
 
   return {
@@ -379,6 +388,12 @@ function revenueFromFields(fields: Record<string, string>) {
   return toNumber(firstField(fields, ["revenue", "contract_amount", "sold_price", "contract_value", "net_sales", "approved_orders"]));
 }
 
+function revenueFromApprovedOrders(documents: any[]) {
+  return approvedOrderDocuments(documents).reduce((total, doc) => {
+    return total + toNumber(doc?.priceWithTax ?? doc?.price);
+  }, 0);
+}
+
 function approvedOrderSoldDate(documents: any[]) {
   const dates = approvedOrderDocuments(documents)
     .map((doc) => normalizeDocumentDate(doc?.closedAt))
@@ -422,7 +437,17 @@ function notesFromFields(fields: Record<string, string>) {
 function stringifyValue(value: any) {
   if (value == null) return null;
   if (typeof value === "object") {
-    return value.value ?? value.name ?? value.label ?? JSON.stringify(value);
+    return (
+      value.value ??
+      value.name ??
+      value.label ??
+      value.date ??
+      value.datetime ??
+      value.iso ??
+      value.amount ??
+      value.text ??
+      JSON.stringify(value)
+    );
   }
   return String(value);
 }

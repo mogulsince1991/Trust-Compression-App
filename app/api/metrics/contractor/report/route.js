@@ -342,8 +342,8 @@ async function fetchChunkedJobTreadSnapshot(account, { startDate, endDate }) {
   for (const window of windows) {
     const snapshot = await fetchJobTreadSnapshot(account, {
       ...window,
-      limit: 1500,
-      maxPages: 20,
+      limit: 10000,
+      maxPages: 80,
       filterToWindow: true,
     });
     displayName = snapshot.displayName ?? displayName;
