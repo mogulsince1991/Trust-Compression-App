@@ -178,7 +178,13 @@ async function generateReportPayload({ userSupabase, serviceSupabase, workspaceI
         return {
           provider: "gohighlevel",
           accountLabel: account.account_label ?? "GoHighLevel",
-          snapshot: await fetchGoHighLevelSnapshot(account, { startDate, endDate, limit: 2000, maxPages: 20 }),
+          snapshot: await fetchGoHighLevelSnapshot(account, {
+            startDate,
+            endDate,
+            limit: 5000,
+            scanLimit: 10000,
+            maxPages: 100,
+          }),
         };
       }
 
