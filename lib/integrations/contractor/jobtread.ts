@@ -1,8 +1,8 @@
 const DEFAULT_JOBTREAD_API_BASE_URL = "https://api.jobtread.com";
 const DEFAULT_JOBTREAD_PAVE_PATH = "/pave";
 const DEFAULT_PAGE_SIZE = 100;
-const DEFAULT_MAX_PAGES = 10;
-const DEFAULT_MAX_JOBS = 1000;
+const DEFAULT_MAX_PAGES = 25;
+const DEFAULT_MAX_JOBS = 2500;
 
 export async function fetchJobTreadSnapshot(
   account: any,
@@ -10,8 +10,7 @@ export async function fetchJobTreadSnapshot(
 ) {
   const jobs = await fetchJobTreadRows(account, {
     limit: options?.limit ?? DEFAULT_MAX_JOBS,
-    startDate: options?.startDate,
-    endDate: options?.endDate,
+    includeAllRows: true,
   });
   const metadata = account.metadata ?? {};
   const baseUrl = normalizeBaseUrl(
@@ -38,7 +37,10 @@ export async function fetchJobTreadPreview(
   account: any,
   options?: { limit?: number; startDate?: string; endDate?: string }
 ) {
-  const rows = await fetchJobTreadRows(account, options);
+  const rows = await fetchJobTreadRows(account, {
+    ...options,
+    includeAllRows: false,
+  });
 
   return {
     provider: "jobtread",
@@ -80,7 +82,7 @@ export async function fetchJobTreadPreview(
 
 async function fetchJobTreadRows(
   account: any,
-  options?: { limit?: number; startDate?: string; endDate?: string }
+  options?: { limit?: number; startDate?: string; endDate?: string; includeAllRows?: boolean }
 ) {
   const metadata = account.metadata ?? {};
   const grantKey = String(account.access_token ?? "").trim();
@@ -98,6 +100,7 @@ async function fetchJobTreadRows(
   const maxJobs = clampPositiveInteger(options?.limit, DEFAULT_MAX_JOBS);
   const startDate = String(options?.startDate ?? "").trim();
   const endDate = String(options?.endDate ?? "").trim();
+  const includeAllRows = options?.includeAllRows === true;
 
   const organizationId = await getOrganizationId({ baseUrl, pavePath, grantKey });
   const jobs = await listJobs({ baseUrl, pavePath, grantKey, organizationId, pageSize, maxPages, maxJobs });
@@ -110,9 +113,11 @@ async function fetchJobTreadRows(
     }
   }
 
-  return detailRows
-    .filter((row) => matchesReportDateWindow(row, startDate, endDate))
-    .slice(0, maxJobs);
+  const rows = includeAllRows
+    ? detailRows
+    : detailRows.filter((row) => matchesReportDateWindow(row, startDate, endDate));
+
+  return rows.slice(0, maxJobs);
 }
 
 async function getOrganizationId({
