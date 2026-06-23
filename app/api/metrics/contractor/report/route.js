@@ -192,7 +192,12 @@ async function generateReportPayload({ userSupabase, serviceSupabase, workspaceI
         return {
           provider: "jobtread",
           accountLabel: account.account_label ?? "JobTread",
-          snapshot: await fetchJobTreadSnapshot(account, { startDate, endDate, limit: 1000 }),
+          snapshot: await fetchJobTreadSnapshot(account, {
+            startDate,
+            endDate,
+            limit: 5000,
+            maxPages: 60,
+          }),
         };
       }
 

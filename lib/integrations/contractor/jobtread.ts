@@ -1,15 +1,16 @@
 const DEFAULT_JOBTREAD_API_BASE_URL = "https://api.jobtread.com";
 const DEFAULT_JOBTREAD_PAVE_PATH = "/pave";
 const DEFAULT_PAGE_SIZE = 100;
-const DEFAULT_MAX_PAGES = 25;
-const DEFAULT_MAX_JOBS = 2500;
+const DEFAULT_MAX_PAGES = 60;
+const DEFAULT_MAX_JOBS = 5000;
 
 export async function fetchJobTreadSnapshot(
   account: any,
-  options?: { limit?: number; startDate?: string; endDate?: string }
+  options?: { limit?: number; maxPages?: number; startDate?: string; endDate?: string }
 ) {
   const jobs = await fetchJobTreadRows(account, {
     limit: options?.limit ?? DEFAULT_MAX_JOBS,
+    maxPages: options?.maxPages,
     includeAllRows: true,
   });
   const metadata = account.metadata ?? {};
@@ -35,7 +36,7 @@ export async function fetchJobTreadSnapshot(
 
 export async function fetchJobTreadPreview(
   account: any,
-  options?: { limit?: number; startDate?: string; endDate?: string }
+  options?: { limit?: number; maxPages?: number; startDate?: string; endDate?: string }
 ) {
   const rows = await fetchJobTreadRows(account, {
     ...options,
@@ -82,7 +83,7 @@ export async function fetchJobTreadPreview(
 
 async function fetchJobTreadRows(
   account: any,
-  options?: { limit?: number; startDate?: string; endDate?: string; includeAllRows?: boolean }
+  options?: { limit?: number; maxPages?: number; startDate?: string; endDate?: string; includeAllRows?: boolean }
 ) {
   const metadata = account.metadata ?? {};
   const grantKey = String(account.access_token ?? "").trim();
@@ -96,7 +97,7 @@ async function fetchJobTreadRows(
   );
   const pavePath = String(metadata.pavePath ?? process.env.JOBTREAD_PAVE_PATH ?? DEFAULT_JOBTREAD_PAVE_PATH);
   const pageSize = clampPositiveInteger(metadata.pageSize, DEFAULT_PAGE_SIZE);
-  const maxPages = clampPositiveInteger(metadata.maxPages, DEFAULT_MAX_PAGES);
+  const maxPages = clampPositiveInteger(options?.maxPages ?? metadata.maxPages, DEFAULT_MAX_PAGES);
   const maxJobs = clampPositiveInteger(options?.limit, DEFAULT_MAX_JOBS);
   const startDate = String(options?.startDate ?? "").trim();
   const endDate = String(options?.endDate ?? "").trim();
