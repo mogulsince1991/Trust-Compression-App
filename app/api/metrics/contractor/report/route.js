@@ -175,30 +175,46 @@ async function generateReportPayload({ userSupabase, serviceSupabase, workspaceI
   const liveSnapshots = await Promise.all(
     (connectedAccounts ?? []).map(async (account) => {
       if (account.provider === "ghl" || account.provider === "gohighlevel") {
-        return {
-          provider: "gohighlevel",
-          accountLabel: account.account_label ?? "GoHighLevel",
-          snapshot: await fetchGoHighLevelSnapshot(account, {
-            startDate,
-            endDate,
-            limit: 5000,
-            scanLimit: 10000,
-            maxPages: 100,
-          }),
-        };
+        const accountLabel = account.account_label ?? "GoHighLevel";
+        try {
+          return {
+            provider: "gohighlevel",
+            accountLabel,
+            snapshot: await fetchGoHighLevelSnapshotWithFallback(account, { startDate, endDate }),
+            error: null,
+          };
+        } catch (error) {
+          return {
+            provider: "gohighlevel",
+            accountLabel,
+            snapshot: null,
+            error: error instanceof Error ? error.message : "GoHighLevel contact sync failed.",
+          };
+        }
       }
 
       if (account.provider === "jobtread") {
-        return {
-          provider: "jobtread",
-          accountLabel: account.account_label ?? "JobTread",
-          snapshot: await fetchJobTreadSnapshot(account, {
-            startDate,
-            endDate,
-            limit: 5000,
-            maxPages: 60,
-          }),
-        };
+        const accountLabel = account.account_label ?? "JobTread";
+        try {
+          return {
+            provider: "jobtread",
+            accountLabel,
+            snapshot: await fetchJobTreadSnapshot(account, {
+              startDate,
+              endDate,
+              limit: 5000,
+              maxPages: 60,
+            }),
+            error: null,
+          };
+        } catch (error) {
+          return {
+            provider: "jobtread",
+            accountLabel,
+            snapshot: null,
+            error: error instanceof Error ? error.message : "JobTread sync failed.",
+          };
+        }
       }
 
       return null;
@@ -245,8 +261,11 @@ async function generateReportPayload({ userSupabase, serviceSupabase, workspaceI
     spendRows: spendRows ?? [],
   });
   const snapshotSources = liveSnapshots
-    .filter(Boolean)
+    .filter((entry) => entry?.snapshot)
     .map((entry) => `${entry.accountLabel} (${entry.provider})`);
+  const accountErrors = liveSnapshots
+    .filter((entry) => entry?.error)
+    .map((entry) => `${entry.accountLabel} (${entry.provider}): ${entry.error}`);
   const sourceSnapshot = {
     leadRows: liveLeads.length,
     jobRows: liveJobs.length,
@@ -257,6 +276,7 @@ async function generateReportPayload({ userSupabase, serviceSupabase, workspaceI
     ruleSetId: ruleSet.id ?? null,
     ruleSetVersion: ruleSet.version,
     liveConnectedAccounts: snapshotSources,
+    accountErrors,
   };
 
   return {
@@ -290,6 +310,26 @@ function toUploadedSpendRow(row) {
     trackable: row.trackable,
     sourceFile: row.source_file,
   };
+}
+
+async function fetchGoHighLevelSnapshotWithFallback(account, { startDate, endDate }) {
+  try {
+    return await fetchGoHighLevelSnapshot(account, {
+      startDate,
+      endDate,
+      limit: 5000,
+      scanLimit: 10000,
+      maxPages: 100,
+    });
+  } catch (primaryError) {
+    return await fetchGoHighLevelSnapshot(account, {
+      startDate,
+      endDate,
+      limit: 2000,
+      scanLimit: 2000,
+      maxPages: 20,
+    });
+  }
 }
 
 function toConfiguredLeadRow(row) {
