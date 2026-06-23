@@ -2,5 +2,9 @@
   "15192": {
     "soldDate": "2026-06-01",
     "reason": "Manual override: JobTread UI shows Keely Johnson closed/sold on June 1, but the read-only API does not expose Job Sold Date for this job."
+  },
+  "15285": {
+    "soldDate": "2026-06-17",
+    "reason": "Manual override: JobTread UI shows Damon Jeffries closed/sold on June 17, but the API payload did not expose a sold date for this job."
   }
 }
