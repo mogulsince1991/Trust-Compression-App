@@ -311,7 +311,7 @@ async function paveQuery({
 function normalizeJob(job: any) {
   const fields = customFieldMap(job.customFieldValues?.nodes ?? []);
   const documents = Array.isArray(job.documents?.nodes) ? job.documents.nodes : [];
-  const soldDate = firstField(fields, ["job_sold_date", "sold_date", "sale_date", "closed_won_date"]);
+  const soldDate = firstField(fields, ["job_sold_date", "sold_date", "date_sold", "sale_date", "contract_signed_date", "closed_won_date"]);
   const revenue =
     toNumber(job.projectedPriceWithTax ?? job.projectedPrice) ||
     revenueFromFields(fields);

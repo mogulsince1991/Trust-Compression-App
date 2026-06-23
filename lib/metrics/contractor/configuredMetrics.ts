@@ -399,7 +399,10 @@ function evaluateMetricDefinition(
   }
 ) {
   const dataset = context.datasets[definition.object] ?? [];
-  const filtered = dataset.filter((record) => recordMatchesConditions(record, definition.conditions ?? [], context));
+  const filtered = dataset.filter((record) => {
+    if (!recordMatchesDateField(record, definition, context)) return false;
+    return recordMatchesConditions(record, definition.conditions ?? [], context);
+  });
 
   if (definition.operation === "count") return filtered.length;
   if (definition.operation === "sum") return filtered.reduce((total, row) => total + Number(readMetricField(row, definition.field) ?? 0), 0);
@@ -413,6 +416,16 @@ function evaluateMetricDefinition(
   }
 
   return null;
+}
+
+function recordMatchesDateField(
+  record: any,
+  definition: ContractorMetricDefinition,
+  context: { startDate: string; endDate: string }
+) {
+  if (!definition.dateField) return true;
+  const rawValue = readMetricField(record, definition.dateField);
+  return compareBetween(rawValue, [`${context.startDate}T00:00:00`, `${context.endDate}T23:59:59`]);
 }
 
 function recordMatchesConditions(
