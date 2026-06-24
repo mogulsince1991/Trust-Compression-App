@@ -11,12 +11,14 @@ import {
   RefreshCw,
   Route,
   Search,
+  UserRound,
 } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { LinkTrackingView, MetricsView } from "@/components/trust-app-attribution-ui";
 import { JourneyTray, JourneysView, LibraryConfigurator } from "@/components/trust-app-library-ui";
+import { SocialProfilesView } from "@/components/trust-app-social-profiles";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 import {
   buildOptions,
@@ -33,6 +35,8 @@ import {
   type JourneyViewRow,
   type LibraryFilters,
   type MetricsState,
+  type SocialProfileDraft,
+  type SocialProfileRow,
   type SourceRow,
   type TrackingDraft,
   type TrackingIdentityRow,
@@ -43,7 +47,7 @@ import {
 } from "@/components/trust-app-shared";
 
 type RoleId = "libraryManager" | "salesRep" | "owner" | "prospect";
-type ViewId = "sources" | "library" | "tracking" | "journeys" | "metrics";
+type ViewId = "sources" | "library" | "socialProfiles" | "tracking" | "journeys" | "metrics";
 
 const emptyDraft: JourneyDraft = {
   title: "",
@@ -68,6 +72,15 @@ const emptyTrackingDraft: TrackingDraft = {
   title: "",
   destinationUrl: "",
   journeyId: ""
+};
+
+const emptySocialProfileDraft: SocialProfileDraft = {
+  platform: "instagram",
+  profileUrl: "",
+  username: "",
+  displayName: "",
+  avatarUrl: "",
+  businessProfileLabel: "",
 };
 
 const roles: Record<RoleId, { label: string; title: string; description: string; view: ViewId; placeholder: string }> = {
@@ -115,7 +128,9 @@ export function TrustAppIngestion() {
   const [folders, setFolders] = useState<FolderRow[]>([]);
   const [contacts, setContacts] = useState<ContactRow[]>([]);
   const [tracking, setTracking] = useState<TrackingState>({ links: [], events: [], identities: [] });
+  const [socialProfiles, setSocialProfiles] = useState<SocialProfileRow[]>([]);
   const [selected, setSelected] = useState<DbVideo | null>(null);
+  const [selectedSocialProfileId, setSelectedSocialProfileId] = useState<string | null>(null);
   const [selectedJourneyId, setSelectedJourneyId] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<MetricsState>({ views: [] });
   const [query, setQuery] = useState("");
@@ -126,6 +141,7 @@ export function TrustAppIngestion() {
   const [draftVideos, setDraftVideos] = useState<DbVideo[]>([]);
   const [draft, setDraft] = useState<JourneyDraft>(emptyDraft);
   const [trackingDraft, setTrackingDraft] = useState<TrackingDraft>(emptyTrackingDraft);
+  const [socialProfileDraft, setSocialProfileDraft] = useState<SocialProfileDraft>(emptySocialProfileDraft);
   const [journeyWorking, setJourneyWorking] = useState(false);
   const [trackingWorking, setTrackingWorking] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
@@ -160,6 +176,7 @@ export function TrustAppIngestion() {
         setFolders([]);
         setContacts([]);
         setTracking({ links: [], events: [], identities: [] });
+        setSocialProfiles([]);
         setSelected(null);
         setMetrics({ views: [] });
       }
@@ -250,6 +267,18 @@ export function TrustAppIngestion() {
     setTracking({ links: result.links ?? [], events: result.events ?? [], identities: result.identities ?? [] });
   }
 
+  async function loadSocialProfiles(nextWorkspaceId = workspaceId) {
+    if (!session || !nextWorkspaceId) return;
+    const response = await fetch(`/api/social-profiles?workspaceId=${encodeURIComponent(nextWorkspaceId)}`, {
+      headers: { Authorization: `Bearer ${session.access_token}` }
+    });
+    if (!response.ok) return;
+    const result = (await response.json()) as { profiles?: Array<Record<string, any>> };
+    const nextProfiles = (result.profiles ?? []).map(mapSocialProfileRow);
+    setSocialProfiles(nextProfiles);
+    setSelectedSocialProfileId((current) => current && nextProfiles.some((profile) => profile.id === current) ? current : nextProfiles[0]?.id ?? null);
+  }
+
   async function loadMetrics(nextWorkspaceId = workspaceId, nextJourneys = journeys) {
     if (!supabase || !nextWorkspaceId) return;
     const journeyIds = nextJourneys.map((journey) => journey.id);
@@ -262,7 +291,7 @@ export function TrustAppIngestion() {
   }
 
   async function refreshWorkspace(nextWorkspaceId = workspaceId) {
-    await Promise.all([loadVideos(nextWorkspaceId), loadSources(nextWorkspaceId), loadContacts(nextWorkspaceId)]);
+    await Promise.all([loadVideos(nextWorkspaceId), loadSources(nextWorkspaceId), loadContacts(nextWorkspaceId), loadSocialProfiles(nextWorkspaceId)]);
     const [nextJourneys] = await Promise.all([loadJourneys(nextWorkspaceId), loadTracking(nextWorkspaceId)]);
     await loadMetrics(nextWorkspaceId, nextJourneys ?? []);
   }
@@ -506,6 +535,94 @@ export function TrustAppIngestion() {
     }
   }
 
+  async function saveSocialProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!workspaceId || !session) return;
+
+    setWorking(true);
+    setNotice("");
+    setError("");
+
+    try {
+      const response = await fetch("/api/social-profiles", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          workspaceId,
+          ...socialProfileDraft,
+          analyze: true,
+        })
+      });
+      const result = (await response.json()) as { profile?: Record<string, any>; mode?: string; error?: string };
+      if (!response.ok || !result.profile) throw new Error(result.error ?? "Could not save the social profile.");
+
+      const nextProfile = mapSocialProfileRow(result.profile);
+      setSelectedSocialProfileId(nextProfile.id);
+      setSocialProfileDraft(emptySocialProfileDraft);
+      setNotice(result.mode === "updated" ? "Saved profile updated and re-analyzed." : "Social profile saved and analyzed.");
+      await loadSocialProfiles(workspaceId);
+      setView("socialProfiles");
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not save the social profile.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function analyzeSocialProfile(profile: SocialProfileRow) {
+    if (!workspaceId || !session) return;
+
+    setWorking(true);
+    setNotice("");
+    setError("");
+
+    try {
+      const response = await fetch(`/api/social-profiles/${profile.id}/analyze`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ workspaceId })
+      });
+      const result = (await response.json()) as { profile?: Record<string, any>; error?: string };
+      if (!response.ok || !result.profile) throw new Error(result.error ?? "Could not analyze the saved profile.");
+      setSelectedSocialProfileId(profile.id);
+      setNotice(`Re-ran analysis for ${profile.displayName || profile.username || profile.platform}.`);
+      await loadSocialProfiles(workspaceId);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not analyze the saved profile.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function removeSocialProfile(profile: SocialProfileRow) {
+    if (!workspaceId || !session) return;
+
+    setWorking(true);
+    setNotice("");
+    setError("");
+
+    try {
+      const response = await fetch(`/api/social-profiles/${profile.id}?workspaceId=${encodeURIComponent(workspaceId)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      });
+      const result = (await response.json()) as { ok?: boolean; error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Could not remove the saved profile.");
+      setNotice("Saved profile removed.");
+      await loadSocialProfiles(workspaceId);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not remove the saved profile.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
   function chooseRole(nextRole: RoleId) {
     setRoleId(nextRole);
     setView(roles[nextRole].view);
@@ -531,6 +648,7 @@ export function TrustAppIngestion() {
         <nav className="side-nav">
           <button className={view === "library" ? "icon-button is-active" : "icon-button"} onClick={() => setView("library")} aria-label="Library" title="Library"><Clapperboard /><span>Library</span></button>
           <button className={view === "sources" ? "icon-button is-active" : "icon-button"} onClick={() => setView("sources")} aria-label="Sources" title="Sources"><Import /><span>Sources</span></button>
+          <button className={view === "socialProfiles" ? "icon-button is-active" : "icon-button"} onClick={() => setView("socialProfiles")} aria-label="Social Profiles" title="Social Profiles"><UserRound /><span>Social Profiles</span></button>
           <button className={view === "tracking" ? "icon-button is-active" : "icon-button"} onClick={() => setView("tracking")} aria-label="Link tracking" title="Link tracking"><Link2 /><span>Links</span></button>
           <button className={view === "metrics" ? "icon-button is-active" : "icon-button"} onClick={() => setView("metrics")} aria-label="Sales metrics" title="Metrics"><BarChart3 /><span>Metrics</span></button>
           <button className={view === "journeys" ? "icon-button is-active" : "icon-button"} onClick={newJourney} aria-label="Journeys" title="Journeys"><Route /><span>Journeys</span></button>
@@ -551,6 +669,22 @@ export function TrustAppIngestion() {
 
         {view === "sources" && <SourcesView sources={sources} importing={working} onImport={importSource} onReimport={reimportSource} />}
         {view === "library" && <LibraryConfigurator videos={visibleVideos} selected={selected} saving={working} options={options} onSelect={setSelected} onAdd={addToJourney} onArchive={archiveVideo} onSaveContext={saveVideoContext} />}
+        {view === "socialProfiles" && (
+          <SocialProfilesView
+            draft={socialProfileDraft}
+            profiles={socialProfiles}
+            selectedProfileId={selectedSocialProfileId}
+            working={working}
+            onDraftChange={setSocialProfileDraft}
+            onSave={saveSocialProfile}
+            onAnalyze={analyzeSocialProfile}
+            onViewReport={(profile) => {
+              setSelectedSocialProfileId(profile.id);
+              setView("socialProfiles");
+            }}
+            onRemove={removeSocialProfile}
+          />
+        )}
         {view === "tracking" && <LinkTrackingView draft={trackingDraft} journeys={journeys} tracking={tracking} working={trackingWorking} onDraftChange={setTrackingDraft} onCreate={createTrackingLink} />}
         {view === "metrics" && <MetricsView metrics={metrics} videos={videos} sources={sources} journeys={journeys} contacts={contacts} tracking={tracking} />}
         {view === "journeys" && <JourneysView journeys={journeys} folders={folders} draftVideos={draftVideos} groups={smartGroups} videos={visibleVideos} shareUrl={shareUrl} onEdit={editJourney} onAdd={addToJourney} />}
@@ -615,4 +749,24 @@ function FilterSelect({ label, value, options, labels, onChange }: { label: stri
 
 function SimpleGate({ title, body, onBack }: { title: string; body: string; onBack: () => void }) {
   return <main className="role-gate"><button className="text-button" onClick={onBack}>Back</button><section className="gate-intro"><span>Setup</span><h1>{title}</h1><p>{body}</p></section></main>;
+}
+
+function mapSocialProfileRow(row: Record<string, any>): SocialProfileRow {
+  return {
+    id: String(row.id),
+    workspaceId: String(row.workspace_id),
+    userId: row.user_id ?? null,
+    businessProfileId: row.business_profile_id ?? null,
+    businessProfileLabel: row.business_profile_label ?? null,
+    platform: row.platform ?? "other",
+    username: row.username ?? null,
+    profileUrl: row.profile_url ?? null,
+    profileKey: row.profile_key ?? "",
+    displayName: row.display_name ?? null,
+    avatarUrl: row.avatar_url ?? null,
+    latestCachedMetrics: row.latest_cached_metrics ?? null,
+    lastAnalyzedAt: row.last_analyzed_at ?? null,
+    createdAt: row.created_at ?? null,
+    updatedAt: row.updated_at ?? null,
+  };
 }

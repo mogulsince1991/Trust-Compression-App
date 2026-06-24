@@ -609,7 +609,8 @@ div {
 }
 
 .sources-grid,
-.journey-workspace {
+.journey-workspace,
+.social-profiles-shell {
   display: grid;
   grid-template-columns: minmax(0, 1.25fr) 340px;
   gap: 16px;
@@ -654,14 +655,102 @@ div {
   gap: 12px;
 }
 
+.social-profile-card-list,
+.social-profiles-column {
+  display: grid;
+  gap: 16px;
+}
+
 .source-card,
 .saved-journey,
 .tracking-link-card,
-.smart-group {
+.smart-group,
+.social-profile-card,
+.social-profiles-panel,
+.social-profile-report {
   padding: 16px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.03);
+}
+
+.social-profile-card.is-active {
+  border-color: var(--line-strong);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.social-profile-card,
+.social-profile-card-top,
+.social-profile-card-meta,
+.social-profile-report,
+.social-profile-report-top,
+.social-profile-form,
+.social-profile-actions,
+.social-profile-overview,
+.social-profile-signal-grid {
+  display: grid;
+}
+
+.social-profile-card {
+  gap: 14px;
+}
+
+.social-profile-card-top {
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.social-profile-badge,
+.social-profile-report-mark {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.social-profile-card-top p,
+.social-profile-report-top p {
+  color: var(--text-muted);
+  word-break: break-word;
+}
+
+.social-profile-card-meta {
+  gap: 6px;
+}
+
+.social-profile-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.social-profile-report {
+  gap: 18px;
+}
+
+.social-profile-report-top {
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+}
+
+.social-profile-report-top h2 {
+  margin: 0 0 8px;
+  font-size: clamp(28px, 3vw, 38px);
+  line-height: 1;
+  font-weight: 500;
+}
+
+.social-profile-overview {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.social-profile-signal-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .source-card {
@@ -1430,7 +1519,9 @@ div {
   .tracking-link-detail-grid,
   .tracking-signal-grid,
   .smart-groups,
-  .smart-strip {
+  .smart-strip,
+  .social-profile-overview,
+  .social-profile-signal-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -1459,7 +1550,7 @@ div {
 
   .side-nav {
     width: 100%;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(6, 1fr);
   }
 
   .icon-button {
@@ -1488,7 +1579,10 @@ div {
   .brief-grid,
   .auth-actions,
   .tray-actions,
-  .tracking-link-header {
+  .tracking-link-header,
+  .social-profile-actions,
+  .social-profiles-shell,
+  .social-profile-report-top {
     grid-template-columns: 1fr;
   }
 
@@ -1501,6 +1595,10 @@ div {
     right: 12px;
     left: 12px;
     width: auto;
+  }
+
+  .social-profile-card-top {
+    grid-template-columns: auto minmax(0, 1fr);
   }
 
   .auth-card {

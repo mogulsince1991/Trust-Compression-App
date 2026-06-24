@@ -129,6 +129,33 @@ export type TrackingState = {
   identities: TrackingIdentityRow[];
 };
 
+export type SocialProfileRow = {
+  id: string;
+  workspaceId: string;
+  userId: string | null;
+  businessProfileId: string | null;
+  businessProfileLabel: string | null;
+  platform: string;
+  username: string | null;
+  profileUrl: string | null;
+  profileKey: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  latestCachedMetrics: Record<string, any> | null;
+  lastAnalyzedAt: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
+export type SocialProfileDraft = {
+  platform: string;
+  profileUrl: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string;
+  businessProfileLabel: string;
+};
+
 export type TrackingLinkSummary = {
   link: TrackingLinkRow;
   redirects: number;
