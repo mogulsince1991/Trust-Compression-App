@@ -688,7 +688,10 @@ div {
 .social-profile-actions,
 .social-profile-overview,
 .social-profile-signal-grid,
-.social-metric-card {
+.social-metric-card,
+.social-report-sections,
+.social-report-row-list,
+.social-report-row {
   display: grid;
 }
 
@@ -733,6 +736,13 @@ div {
   min-width: 0;
 }
 
+.social-profile-summary {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
 .social-profile-report-top {
   grid-template-columns: auto minmax(0, 1fr);
   gap: 14px;
@@ -755,6 +765,44 @@ div {
 .social-profile-signal-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
+}
+
+.social-report-sections {
+  gap: 12px;
+}
+
+.social-report-section {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.social-report-row-list {
+  gap: 10px;
+}
+
+.social-report-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.social-report-row:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.social-report-row span {
+  color: var(--text-muted);
+}
+
+.social-report-row strong {
+  max-width: 28ch;
+  text-align: right;
+  word-break: break-word;
 }
 
 .social-profile-signal-grid > div,

@@ -681,6 +681,7 @@ export function TrustAppIngestion() {
             onViewReport={(profile) => {
               setSelectedSocialProfileId(profile.id);
               setView("socialProfiles");
+              setNotice(`Opened saved report for ${profile.displayName || profile.username || profile.platform}.`);
             }}
             onRemove={removeSocialProfile}
           />

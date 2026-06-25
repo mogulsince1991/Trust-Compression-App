@@ -71,6 +71,8 @@ export function buildProfileMetricsCache(profile: {
   latestCachedMetrics?: Record<string, any> | null;
 }) {
   const previous = profile.latestCachedMetrics ?? {};
+  const previousReport = isRecord(previous.report) ? previous.report : null;
+  const now = new Date().toISOString();
   return {
     ...previous,
     identity: {
@@ -81,8 +83,32 @@ export function buildProfileMetricsCache(profile: {
       businessProfileLabel: profile.businessProfileLabel,
     },
     status: "saved",
-    refreshedAt: new Date().toISOString(),
+    refreshedAt: now,
     connectorReady: false,
+    report:
+      previousReport ??
+      {
+        title: profile.displayName || profile.username || "Saved social profile",
+        summary: "This profile is saved and ready to reuse. Live social metrics are not connected yet, so the report is showing the saved identity and cache status only.",
+        overview: [
+          { id: "followers", label: "Followers", value: null, format: "number", detail: "Not captured yet." },
+          { id: "avg_views", label: "Avg views", value: null, format: "number", detail: "Not captured yet." },
+          { id: "engagement_rate", label: "Engagement rate", value: null, format: "percent", detail: "Not captured yet." },
+          { id: "posts_analyzed", label: "Posts analyzed", value: 0, format: "number", detail: "No connector data ingested yet." },
+        ],
+        sections: [
+          {
+            id: "status",
+            title: "Saved profile status",
+            rows: [
+              { label: "Platform", value: profile.platform },
+              { label: "Username", value: profile.username || "Missing" },
+              { label: "Business profile", value: profile.businessProfileLabel || "Unassigned" },
+              { label: "Cache refreshed", value: now },
+            ],
+          },
+        ],
+      },
   };
 }
 
@@ -93,6 +119,41 @@ export function parseMetricSnapshot(metrics: Record<string, any> | null | undefi
     refreshedAt: typeof metrics?.refreshedAt === "string" ? metrics.refreshedAt : null,
     displayName: typeof identity.displayName === "string" ? identity.displayName : null,
     businessProfileLabel: typeof identity.businessProfileLabel === "string" ? identity.businessProfileLabel : null,
+  };
+}
+
+export function readSocialProfileReport(metrics: Record<string, any> | null | undefined) {
+  const report = isRecord(metrics?.report) ? metrics?.report : {};
+  const overview = Array.isArray(report.overview) ? report.overview : [];
+  const sections = Array.isArray(report.sections) ? report.sections : [];
+
+  return {
+    title: typeof report.title === "string" ? report.title : "Profile report",
+    summary:
+      typeof report.summary === "string"
+        ? report.summary
+        : "No structured profile report is available yet.",
+    overview: overview
+      .filter(isRecord)
+      .map((item) => ({
+        id: String(item.id ?? item.label ?? cryptoSafeId()),
+        label: String(item.label ?? "Metric"),
+        value: item.value ?? null,
+        format: typeof item.format === "string" ? item.format : "text",
+        detail: typeof item.detail === "string" ? item.detail : "",
+      })),
+    sections: sections
+      .filter(isRecord)
+      .map((section) => ({
+        id: String(section.id ?? section.title ?? cryptoSafeId()),
+        title: String(section.title ?? "Section"),
+        rows: Array.isArray(section.rows)
+          ? section.rows.filter(isRecord).map((row) => ({
+              label: String(row.label ?? "Label"),
+              value: row.value ?? null,
+            }))
+          : [],
+      })),
   };
 }
 
@@ -198,4 +259,12 @@ function hasKnownHost(platform: SupportedSocialPlatform, host: string) {
 function cleanText(value: string | null | undefined) {
   const text = String(value ?? "").trim();
   return text ? text : null;
+}
+
+function isRecord(value: unknown): value is Record<string, any> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function cryptoSafeId() {
+  return Math.random().toString(36).slice(2, 10);
 }
