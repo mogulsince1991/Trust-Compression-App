@@ -687,7 +687,8 @@ div {
 .social-profile-form,
 .social-profile-actions,
 .social-profile-overview,
-.social-profile-signal-grid {
+.social-profile-signal-grid,
+.social-metric-card {
   display: grid;
 }
 
@@ -729,12 +730,14 @@ div {
 
 .social-profile-report {
   gap: 18px;
+  min-width: 0;
 }
 
 .social-profile-report-top {
   grid-template-columns: auto minmax(0, 1fr);
   gap: 14px;
   align-items: center;
+  min-width: 0;
 }
 
 .social-profile-report-top h2 {
@@ -742,6 +745,7 @@ div {
   font-size: clamp(28px, 3vw, 38px);
   line-height: 1;
   font-weight: 500;
+  word-break: break-word;
 }
 
 .social-profile-overview {
@@ -751,6 +755,50 @@ div {
 .social-profile-signal-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
+}
+
+.social-profile-signal-grid > div,
+.social-profile-card-top > div:last-child,
+.social-profile-report-top > div:last-child {
+  min-width: 0;
+}
+
+.social-profile-signal-grid strong,
+.social-profile-card strong,
+.social-profile-report strong {
+  word-break: break-word;
+}
+
+.social-metric-card {
+  gap: 10px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.social-metric-card span {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.social-metric-card strong {
+  display: block;
+  min-width: 0;
+  font-family: var(--sans);
+  font-size: clamp(16px, 1.8vw, 22px);
+  line-height: 1.15;
+  font-weight: 600;
+}
+
+.social-metric-card p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
 }
 
 .source-card {
