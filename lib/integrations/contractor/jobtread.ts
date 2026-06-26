@@ -320,11 +320,7 @@ async function paveQuery({
 function normalizeJob(job: any) {
   const fields = customFieldMap(job.customFieldValues?.nodes ?? []);
   const documents = Array.isArray(job.documents?.nodes) ? job.documents.nodes : [];
-  const soldDate = firstField(fields, [
-    "job_sold_date",
-    "sold_date",
-    "date_sold",
-  ]);
+  const soldDate = readSoldDate(fields);
   const revenue =
     toNumber(job.projectedPriceWithTax ?? job.projectedPrice) ||
     revenueFromFields(fields) ||
@@ -352,6 +348,19 @@ function normalizeJob(job: any) {
     campaign: firstField(fields, ["campaign", "utm_campaign"]),
     notesSummary: notesFromFields(fields),
   };
+}
+
+function readSoldDate(fields: Record<string, string>) {
+  const direct = firstField(fields, ["job_sold_date", "job_sold", "sold_date", "date_sold", "sale_date"]);
+  if (direct) return direct;
+
+  const fallbackKey = Object.keys(fields).find((key) => {
+    if (!/sold/.test(key)) return false;
+    if (!/date|day/.test(key)) return false;
+    return Boolean(fields[key]);
+  });
+
+  return fallbackKey ? fields[fallbackKey] : null;
 }
 
 function customFieldMap(nodes: any[]) {
