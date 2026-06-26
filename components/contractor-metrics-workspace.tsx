@@ -190,8 +190,8 @@ export function ContractorMetricsWorkspace() {
           .order("updated_at", { ascending: false }),
       ]);
 
-      const accountsJson = await accountsResponse.json().catch(() => ({}));
-      const configJson = await configResponse.json().catch(() => ({}));
+      const accountsJson = await parseJsonResponse(accountsResponse, "Could not load connected accounts.");
+      const configJson = await parseJsonResponse(configResponse, "Could not load contractor config.");
 
       if (!accountsResponse.ok) {
         throw new Error(accountsJson.error ?? "Could not load connected accounts.");
@@ -246,7 +246,7 @@ export function ContractorMetricsWorkspace() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify(body),
       });
-      const result = await response.json().catch(() => ({}));
+      const result = await parseJsonResponse(response, "Request failed.");
       if (!response.ok) throw new Error(result.error ?? "Request failed.");
       setNotice(
         state.startsWith("sync-")
@@ -279,7 +279,7 @@ export function ContractorMetricsWorkspace() {
           compareToPreviousPeriod: (ruleSetDraft.settings?.comparisonMode ?? "previous_period") === "previous_period",
         }),
       });
-      const result = await response.json();
+      const result = await parseJsonResponse(response, "Could not generate contractor report.");
       if (!response.ok) throw new Error(result.error ?? "Could not generate contractor report.");
       setPreview({ ...result, ruleSet: ruleSetDraft });
       setNotice("Contractor report generated.");
@@ -303,7 +303,7 @@ export function ContractorMetricsWorkspace() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({ workspaceId, ruleSet: ruleSetDraft }),
       });
-      const result = await response.json();
+      const result = await parseJsonResponse(response, "Could not save contractor report config.");
       if (!response.ok || !result.ruleSet) throw new Error(result.error ?? "Could not save contractor report config.");
       setRuleSetDraft(clone(result.ruleSet));
       setNotice("Workspace report config saved.");
@@ -333,7 +333,7 @@ export function ContractorMetricsWorkspace() {
           endDate: requestState.endDate || undefined,
         }),
       });
-      const result = await response.json().catch(() => ({}));
+      const result = await parseJsonResponse(response, "Could not preview source rows.");
       if (!response.ok) throw new Error(result.error ?? "Could not preview source rows.");
       setPreviews((current) => ({ ...current, [connectedAccountId]: result }));
       setPreviewFilters((current) => ({
@@ -925,6 +925,19 @@ export function ContractorMetricsWorkspace() {
       ) : null}
     </main>
   );
+}
+
+async function parseJsonResponse(response: Response, fallbackMessage: string) {
+  const raw = await response.text();
+  if (!raw) return {};
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {
+      error: raw.trim() || fallbackMessage,
+    };
+  }
 }
 
 function Gate({ title, body }: { title: string; body: string }) {

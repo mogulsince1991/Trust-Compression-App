@@ -333,32 +333,21 @@ async function fetchChunkedGoHighLevelSnapshot(account, { startDate, endDate }) 
 }
 
 async function fetchChunkedJobTreadSnapshot(account, { startDate, endDate }) {
-  const windows = splitDateRangeIntoMonthlyWindows(startDate, endDate);
-  const jobs = [];
-  let settings = null;
-  let displayName = account.account_label ?? "JobTread";
-  let externalAccountId = null;
-
-  for (const window of windows) {
-    const snapshot = await fetchJobTreadSnapshot(account, {
-      ...window,
-      limit: 10000,
-      maxPages: 80,
-      filterToWindow: true,
-    });
-    displayName = snapshot.displayName ?? displayName;
-    externalAccountId = snapshot.externalAccountId ?? externalAccountId;
-    settings = snapshot.settings ?? settings;
-    jobs.push(...(snapshot.jobs ?? []));
-  }
+  const snapshot = await fetchJobTreadSnapshot(account, {
+    startDate,
+    endDate,
+    limit: 25000,
+    maxPages: 250,
+    filterToWindow: true,
+  });
 
   return {
-    displayName,
-    externalAccountId,
+    displayName: snapshot.displayName ?? account.account_label ?? "JobTread",
+    externalAccountId: snapshot.externalAccountId ?? null,
     leads: [],
-    jobs: dedupeRows(jobs, (row) => row.jobId ?? row.id ?? row.jobNumber),
+    jobs: dedupeRows(snapshot.jobs ?? [], (row) => row.jobId ?? row.id ?? row.jobNumber),
     spendRows: [],
-    settings,
+    settings: snapshot.settings ?? null,
   };
 }
 

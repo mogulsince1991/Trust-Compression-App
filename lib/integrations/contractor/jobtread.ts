@@ -1,8 +1,9 @@
 const DEFAULT_JOBTREAD_API_BASE_URL = "https://api.jobtread.com";
 const DEFAULT_JOBTREAD_PAVE_PATH = "/pave";
 const DEFAULT_PAGE_SIZE = 100;
-const DEFAULT_MAX_PAGES = 80;
-const DEFAULT_MAX_JOBS = 10000;
+const DEFAULT_MAX_PAGES = 250;
+const DEFAULT_MAX_JOBS = 25000;
+const DEFAULT_CUSTOM_FIELD_PAGE_SIZE = 200;
 
 export async function fetchJobTreadSnapshot(
   account: any,
@@ -251,7 +252,7 @@ async function getJobDetail({
           },
         },
         customFieldValues: {
-          $: { size: 50 },
+          $: { size: DEFAULT_CUSTOM_FIELD_PAGE_SIZE },
           nodes: {
             value: {},
             customField: {
@@ -321,12 +322,8 @@ function normalizeJob(job: any) {
   const documents = Array.isArray(job.documents?.nodes) ? job.documents.nodes : [];
   const soldDate = firstField(fields, [
     "job_sold_date",
-    "job_sold",
     "sold_date",
     "date_sold",
-    "sale_date",
-    "contract_signed_date",
-    "closed_won_date",
   ]);
   const revenue =
     toNumber(job.projectedPriceWithTax ?? job.projectedPrice) ||
