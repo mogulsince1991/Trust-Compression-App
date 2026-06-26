@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { buildLiveSocialProfileCache } from "@/lib/social-profile-analysis";
 import { buildProfileMetricsCache, normalizeSocialProfile } from "@/lib/social-profiles";
 import { requireWorkspaceAccess } from "@/lib/server/route-auth";
 
@@ -53,6 +54,11 @@ export async function POST(request: Request) {
 
     if (existingError) throw existingError;
 
+    const importedExternalIds =
+      normalized.platform === "youtube"
+        ? await listImportedYoutubeExternalIds(serviceSupabase, workspaceId)
+        : [];
+
     const payload = {
       workspace_id: workspaceId,
       user_id: user.id,
@@ -65,13 +71,15 @@ export async function POST(request: Request) {
       avatar_url: normalized.avatarUrl,
       last_analyzed_at: analyze ? new Date().toISOString() : existing?.last_analyzed_at ?? null,
       latest_cached_metrics: analyze
-        ? buildProfileMetricsCache({
+        ? await buildLiveSocialProfileCache({
             platform: normalized.platform,
             profileUrl: normalized.profileUrl,
             username: normalized.username,
             displayName: normalized.displayName,
+            avatarUrl: normalized.avatarUrl,
             businessProfileLabel: normalized.businessProfileLabel,
             latestCachedMetrics: existing?.latest_cached_metrics ?? null,
+            importedExternalIds,
           })
         : existing?.latest_cached_metrics ?? {},
       updated_at: new Date().toISOString(),
@@ -92,4 +100,16 @@ export async function POST(request: Request) {
     const status = typeof error === "object" && error && "status" in error ? Number(error.status) : 400;
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not save social profile." }, { status });
   }
+}
+
+async function listImportedYoutubeExternalIds(serviceSupabase: any, workspaceId: string) {
+  const { data } = await serviceSupabase
+    .from("videos")
+    .select("external_id")
+    .eq("workspace_id", workspaceId)
+    .eq("source_platform", "youtube")
+    .not("external_id", "is", null)
+    .limit(1000);
+
+  return (data ?? []).map((row: Record<string, any>) => String(row.external_id ?? "")).filter(Boolean);
 }

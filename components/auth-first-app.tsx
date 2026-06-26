@@ -13,7 +13,15 @@ function getAuthRedirectUrl() {
   return `${window.location.origin}/auth/callback`;
 }
 
-export function AuthFirstApp() {
+type AppView = "sources" | "library" | "socialProfiles" | "tracking" | "journeys" | "metrics";
+
+export function AuthFirstApp({
+  initialView = "library",
+  initialSocialProfileReportId = null,
+}: {
+  initialView?: AppView;
+  initialSocialProfileReportId?: string | null;
+} = {}) {
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -116,7 +124,7 @@ export function AuthFirstApp() {
   }
 
   if (loading) return <main className="role-gate"><Loader2 className="spin" /><h1>Opening workspace.</h1></main>;
-  if (session) return <TrustAppIngestion />;
+  if (session) return <TrustAppIngestion initialView={initialView} initialSocialProfileReportId={initialSocialProfileReportId} />;
 
   return (
     <main className="role-gate auth-first-screen">

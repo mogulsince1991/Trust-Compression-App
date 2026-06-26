@@ -71,7 +71,6 @@ export function buildProfileMetricsCache(profile: {
   latestCachedMetrics?: Record<string, any> | null;
 }) {
   const previous = profile.latestCachedMetrics ?? {};
-  const previousReport = isRecord(previous.report) ? previous.report : null;
   const now = new Date().toISOString();
   return {
     ...previous,
@@ -82,43 +81,67 @@ export function buildProfileMetricsCache(profile: {
       displayName: profile.displayName,
       businessProfileLabel: profile.businessProfileLabel,
     },
-    status: "saved",
+    status: profile.platform === "youtube" ? "youtube_pending" : "identity_only",
     refreshedAt: now,
     connectorReady: false,
-    report:
-      previousReport ??
-      {
-        title: profile.displayName || profile.username || "Saved social profile",
-        summary: "This profile is saved and ready to reuse. Live social metrics are not connected yet, so the report is showing the saved identity and cache status only.",
-        overview: [
-          { id: "followers", label: "Followers", value: null, format: "number", detail: "Not captured yet." },
-          { id: "avg_views", label: "Avg views", value: null, format: "number", detail: "Not captured yet." },
-          { id: "engagement_rate", label: "Engagement rate", value: null, format: "percent", detail: "Not captured yet." },
-          { id: "posts_analyzed", label: "Posts analyzed", value: 0, format: "number", detail: "No connector data ingested yet." },
-        ],
-        sections: [
-          {
-            id: "status",
-            title: "Saved profile status",
-            rows: [
-              { label: "Platform", value: profile.platform },
-              { label: "Username", value: profile.username || "Missing" },
-              { label: "Business profile", value: profile.businessProfileLabel || "Unassigned" },
-              { label: "Cache refreshed", value: now },
-            ],
-          },
-        ],
-      },
+    capabilities: {
+      live: false,
+      sourceLabel: profile.platform === "youtube" ? "Waiting for analysis" : "Saved identity only",
+      sourceNote:
+        profile.platform === "youtube"
+          ? "Analyze this profile to build a founder-useful YouTube report."
+          : "This platform is saved for reuse, but live analytics are not connected yet.",
+    },
+    report: {
+      kind: "identity_profile_report",
+      title: profile.displayName || profile.username || "Saved social profile",
+      summary:
+        profile.platform === "youtube"
+          ? "This YouTube profile is saved and ready. Run analysis to turn it into a real content and import report."
+          : "This profile is saved and ready to reuse. Live analytics are not connected for this platform yet.",
+      sourceLabel: profile.platform === "youtube" ? "Waiting for analysis" : "Saved identity only",
+      sourceNote:
+        profile.platform === "youtube"
+          ? "No live YouTube report has been generated yet."
+          : "Only the profile identity is available right now.",
+      overview: [
+        { id: "platform", label: "Platform", value: profile.platform, format: "text", detail: "Saved profile platform." },
+        { id: "username", label: "Username", value: profile.username || "Missing", format: "text", detail: "Normalized handle stored for reuse." },
+        { id: "business_profile", label: "Business profile", value: profile.businessProfileLabel || "Unassigned", format: "text", detail: "Saved client or business label." },
+        { id: "state", label: "Status", value: profile.platform === "youtube" ? "Ready to analyze" : "Saved", format: "text", detail: "No live report is cached yet." },
+      ],
+      sections: [
+        {
+          id: "status",
+          title: "Saved profile status",
+          rows: [
+            { label: "Platform", value: profile.platform },
+            { label: "Username", value: profile.username || "Missing" },
+            { label: "Business profile", value: profile.businessProfileLabel || "Unassigned" },
+            { label: "Cache refreshed", value: now },
+          ],
+        },
+      ],
+      topVideos: [],
+      recommendations: [],
+      contentGaps: [],
+    },
   };
 }
 
 export function parseMetricSnapshot(metrics: Record<string, any> | null | undefined) {
   const identity = metrics?.identity ?? {};
+  const capabilities = isRecord(metrics?.capabilities) ? metrics.capabilities : {};
+  const report = isRecord(metrics?.report) ? metrics.report : {};
   return {
     status: String(metrics?.status ?? "saved"),
     refreshedAt: typeof metrics?.refreshedAt === "string" ? metrics.refreshedAt : null,
     displayName: typeof identity.displayName === "string" ? identity.displayName : null,
     businessProfileLabel: typeof identity.businessProfileLabel === "string" ? identity.businessProfileLabel : null,
+    sourceLabel: typeof capabilities.sourceLabel === "string" ? capabilities.sourceLabel : null,
+    sourceNote: typeof capabilities.sourceNote === "string" ? capabilities.sourceNote : null,
+    live: Boolean(capabilities.live),
+    summary: typeof report.summary === "string" ? report.summary : null,
   };
 }
 
@@ -126,13 +149,21 @@ export function readSocialProfileReport(metrics: Record<string, any> | null | un
   const report = isRecord(metrics?.report) ? metrics?.report : {};
   const overview = Array.isArray(report.overview) ? report.overview : [];
   const sections = Array.isArray(report.sections) ? report.sections : [];
+  const topVideos = Array.isArray(report.topVideos) ? report.topVideos : [];
+  const recommendations = Array.isArray(report.recommendations) ? report.recommendations : [];
+  const contentGaps = Array.isArray(report.contentGaps) ? report.contentGaps : [];
+  const channelSnapshot = isRecord(report.channelSnapshot) ? report.channelSnapshot : null;
 
   return {
+    kind: typeof report.kind === "string" ? report.kind : "identity_profile_report",
     title: typeof report.title === "string" ? report.title : "Profile report",
     summary:
       typeof report.summary === "string"
         ? report.summary
         : "No structured profile report is available yet.",
+    sourceLabel: typeof report.sourceLabel === "string" ? report.sourceLabel : "",
+    sourceNote: typeof report.sourceNote === "string" ? report.sourceNote : "",
+    channelSnapshot,
     overview: overview
       .filter(isRecord)
       .map((item) => ({
@@ -154,7 +185,58 @@ export function readSocialProfileReport(metrics: Record<string, any> | null | un
             }))
           : [],
       })),
+    topVideos: topVideos.filter(isRecord).map((item) => ({
+      id: String(item.id ?? cryptoSafeId()),
+      title: String(item.title ?? "Untitled video"),
+      publishedAt: typeof item.publishedAt === "string" ? item.publishedAt : null,
+      viewCount: item.viewCount ?? null,
+      likeCount: item.likeCount ?? null,
+      commentCount: item.commentCount ?? null,
+      category: String(item.category ?? "Unknown"),
+      stage: String(item.stage ?? "Unknown"),
+      trustTheme: String(item.trustTheme ?? "Unknown"),
+      thumbnailUrl: typeof item.thumbnailUrl === "string" ? item.thumbnailUrl : null,
+      sourceUrl: typeof item.sourceUrl === "string" ? item.sourceUrl : null,
+      imported: Boolean(item.imported),
+      recommendationReason: typeof item.recommendationReason === "string" ? item.recommendationReason : "",
+    })),
+    recommendations: recommendations.filter(isRecord).map((item) => ({
+      id: String(item.id ?? cryptoSafeId()),
+      title: String(item.title ?? "Untitled video"),
+      publishedAt: typeof item.publishedAt === "string" ? item.publishedAt : null,
+      viewCount: item.viewCount ?? null,
+      category: String(item.category ?? "Unknown"),
+      stage: String(item.stage ?? "Unknown"),
+      trustTheme: String(item.trustTheme ?? "Unknown"),
+      thumbnailUrl: typeof item.thumbnailUrl === "string" ? item.thumbnailUrl : null,
+      sourceUrl: typeof item.sourceUrl === "string" ? item.sourceUrl : null,
+      imported: Boolean(item.imported),
+      reason: typeof item.reason === "string" ? item.reason : "",
+      score: item.score ?? null,
+    })),
+    contentGaps: contentGaps.filter(isRecord).map((item) => ({
+      id: String(item.id ?? cryptoSafeId()),
+      title: String(item.title ?? "Content gap"),
+      status: String(item.status ?? "unknown"),
+      count: item.count ?? 0,
+      detail: typeof item.detail === "string" ? item.detail : "",
+    })),
   };
+}
+
+export function socialProfileStatusLabel(status: string | null | undefined) {
+  switch (status) {
+    case "youtube_live_api":
+      return "YouTube report ready";
+    case "youtube_limited_rss":
+      return "Limited RSS report";
+    case "youtube_pending":
+      return "Ready to analyze";
+    case "identity_only":
+      return "Saved identity only";
+    default:
+      return "Saved profile";
+  }
 }
 
 function normalizePlatform(value: string): SupportedSocialPlatform {

@@ -1,8 +1,8 @@
 "use client";
 
-import { ExternalLink, Facebook, Instagram, Linkedin, Loader2, RefreshCw, Trash2, UserRound, Youtube } from "lucide-react";
+import { ArrowUpRight, ExternalLink, Facebook, Instagram, Linkedin, Loader2, RefreshCw, Trash2, UserRound, Youtube } from "lucide-react";
 import type { FormEvent } from "react";
-import { parseMetricSnapshot, readSocialProfileReport } from "@/lib/social-profiles";
+import { parseMetricSnapshot, socialProfileStatusLabel } from "@/lib/social-profiles";
 import { formatDateTime, type SocialProfileDraft, type SocialProfileRow } from "@/components/trust-app-shared";
 
 const PLATFORM_OPTIONS = [
@@ -38,7 +38,6 @@ export function SocialProfilesView({
 }) {
   const selected = profiles.find((profile) => profile.id === selectedProfileId) ?? profiles[0] ?? null;
   const snapshot = selected ? parseMetricSnapshot(selected.latestCachedMetrics) : null;
-  const report = selected ? readSocialProfileReport(selected.latestCachedMetrics) : null;
 
   return (
     <section className="social-profiles-shell">
@@ -111,7 +110,7 @@ export function SocialProfilesView({
                     </div>
                   </div>
                   <div className="social-profile-card-meta">
-                    <small>{profile.businessProfileLabel || "No business profile label"}</small>
+                    <small>{socialProfileStatusLabel(parseMetricSnapshot(profile.latestCachedMetrics).status)}</small>
                     <small>{profile.lastAnalyzedAt ? `Last analyzed ${formatDateTime(profile.lastAnalyzedAt)}` : "Not analyzed yet"}</small>
                   </div>
                   <div className="tracking-link-button-row social-profile-actions">
@@ -143,38 +142,26 @@ export function SocialProfilesView({
 
       <section className="recommendation-board social-profiles-report-board">
         <div className="mini-head">
-          <span>Profile report</span>
-          <strong>{selected ? "Cached snapshot" : "Select a profile"}</strong>
+          <span>Profile snapshot</span>
+          <strong>{selected ? socialProfileStatusLabel(snapshot?.status) : "Select a profile"}</strong>
         </div>
         {selected ? (
-          <div className="social-profile-report">
+          <div className="social-profile-report social-profile-snapshot-panel">
             <div className="social-profile-report-top">
               <div className="social-profile-report-mark">{iconForPlatform(selected.platform)}</div>
               <div>
-                <h2>{report?.title || selected.displayName || selected.username || "Saved profile"}</h2>
+                <h2>{selected.displayName || selected.username || "Saved profile"}</h2>
                 <p>{selected.profileUrl || "No profile URL stored"}</p>
               </div>
             </div>
-            <p className="social-profile-summary">{report?.summary}</p>
-            {report?.overview?.length ? (
-              <div className="tracking-overview tracking-overview-compact social-profile-overview">
-                {report.overview.map((metric) => (
-                  <MetricStat
-                    key={metric.id}
-                    label={metric.label}
-                    value={formatMetricValue(metric.value, metric.format)}
-                    detail={metric.detail}
-                  />
-                ))}
-              </div>
-            ) : null}
+            <p className="social-profile-summary">{snapshot?.summary || snapshot?.sourceNote || "Save a profile and open the dedicated report to see what content is working and what should be imported."}</p>
             <div className="tracking-overview tracking-overview-compact social-profile-overview">
-              <MetricStat label="Platform" value={platformLabel(selected.platform)} detail="Saved workspace platform label." />
-              <MetricStat label="Username" value={selected.username ? `@${selected.username.replace(/^@+/, "")}` : "Missing"} detail="Normalized handle stored for reuse." />
+              <MetricStat label="Status" value={socialProfileStatusLabel(snapshot?.status)} detail="What kind of report data is currently available." />
+              <MetricStat label="Data source" value={snapshot?.sourceLabel || "Saved profile"} detail="How this snapshot was generated." />
               <MetricStat label="Business profile" value={selected.businessProfileLabel || "Unassigned"} detail="Connected client or business profile label." />
+              <MetricStat label="Handle" value={selected.username ? `@${selected.username.replace(/^@+/, "")}` : "Missing"} detail="Normalized handle stored for reuse." />
+              <MetricStat label="Last analyzed" value={formatDateTime(selected.lastAnalyzedAt) ?? "Not yet"} detail="Most recent report refresh." />
               <MetricStat label="Added" value={formatDateTime(selected.createdAt) ?? "Unknown"} detail="Date the profile was first saved." />
-              <MetricStat label="Last analyzed" value={formatDateTime(selected.lastAnalyzedAt) ?? "Not yet"} detail="Most recent reuse/analysis timestamp." />
-              <MetricStat label="Cached status" value={snapshot?.status ?? "saved"} detail="Current cached analysis state." />
             </div>
             <div className="tracking-signal-grid social-profile-signal-grid">
               <div>
@@ -190,43 +177,23 @@ export function SocialProfilesView({
                 <strong>{formatDateTime(snapshot?.refreshedAt ?? null) ?? "Waiting for first analysis"}</strong>
               </div>
             </div>
-            {report?.sections?.length ? (
-              <div className="social-report-sections">
-                {report.sections.map((section) => (
-                  <section className="social-report-section" key={section.id}>
-                    <div className="mini-head">
-                      <span>{section.title}</span>
-                      <strong>{section.rows.length} rows</strong>
-                    </div>
-                    {section.rows.length ? (
-                      <div className="social-report-row-list">
-                        {section.rows.map((row, index) => (
-                          <article className="social-report-row" key={`${section.id}-${index}`}>
-                            <span>{row.label}</span>
-                            <strong>{String(row.value ?? "Unavailable")}</strong>
-                          </article>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="metric-empty">No rows saved for this section yet.</p>
-                    )}
-                  </section>
-                ))}
-              </div>
-            ) : null}
-            {selected.avatarUrl ? (
-              <a className="text-link" href={selected.avatarUrl} target="_blank" rel="noreferrer">
-                View avatar asset
-              </a>
-            ) : (
-              <p className="metric-empty">No avatar URL saved for this profile yet.</p>
-            )}
+            <div className="social-snapshot-actions">
+              <button className="wide-action compact" type="button" onClick={() => onViewReport(selected)}>
+                <ArrowUpRight />
+                View full report
+              </button>
+              <button className="text-button compact" type="button" onClick={() => onAnalyze(selected)} disabled={working}>
+                {working ? <Loader2 className="spin" /> : <RefreshCw />}
+                Refresh snapshot
+              </button>
+            </div>
+            {selected.avatarUrl ? <a className="text-link" href={selected.avatarUrl} target="_blank" rel="noreferrer">View avatar asset</a> : null}
           </div>
         ) : (
           <div className="tracking-empty-state social-profile-empty-state">
-            <span>Profile report</span>
+            <span>Profile snapshot</span>
             <h3>Select a saved profile.</h3>
-            <p>Use View Report on any saved profile to inspect the cached profile details and rerun analysis when needed.</p>
+            <p>Choose a saved profile to inspect its saved state, then open the full report for the founder-facing YouTube analysis view.</p>
           </div>
         )}
       </section>
@@ -254,23 +221,4 @@ function iconForPlatform(platform: string) {
 
 function platformLabel(platform: string) {
   return platform.charAt(0).toUpperCase() + platform.slice(1).replace(/_/g, " ");
-}
-
-function formatMetricValue(value: unknown, format: string) {
-  if (value == null || value === "") return "Unavailable";
-  const number = Number(value);
-
-  if (format === "percent" && Number.isFinite(number)) {
-    return `${number}%`;
-  }
-
-  if (format === "currency" && Number.isFinite(number)) {
-    return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(number);
-  }
-
-  if (format === "number" && Number.isFinite(number)) {
-    return new Intl.NumberFormat("en-US").format(number);
-  }
-
-  return String(value);
 }
