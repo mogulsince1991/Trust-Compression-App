@@ -13,6 +13,8 @@ type SendRequest = {
     email?: string;
     phone?: string;
     company?: string;
+    crmSource?: string;
+    externalId?: string;
   };
 };
 
@@ -51,16 +53,29 @@ export async function POST(request: Request, { params }: RouteContext) {
 
 async function upsertContact(supabase: ReturnType<typeof createUserSupabaseClient>, workspaceId: string, userId: string, contact: NonNullable<SendRequest["contact"]>) {
   const email = contact.email?.trim().toLowerCase() || null;
+  const crmSource = contact.crmSource?.trim().toLowerCase() || "manual";
+  const externalId = contact.externalId?.trim() || null;
   const payload = {
     workspace_id: workspaceId,
     name: contact.name?.trim() || null,
     email,
     phone: contact.phone?.trim() || null,
     company: contact.company?.trim() || null,
-    crm_source: "manual",
+    crm_source: crmSource,
+    external_id: externalId,
     created_by: userId,
     updated_at: new Date().toISOString()
   };
+
+  if (crmSource && externalId) {
+    const { data, error } = await supabase
+      .from("contacts")
+      .upsert(payload, { onConflict: "workspace_id,crm_source,external_id" })
+      .select("id")
+      .single();
+    if (error || !data) throw new Error(error?.message ?? "Could not save CRM contact.");
+    return data.id as string;
+  }
 
   if (email) {
     const { data, error } = await supabase.from("contacts").upsert(payload, { onConflict: "workspace_id,email" }).select("id").single();

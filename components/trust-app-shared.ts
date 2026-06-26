@@ -51,6 +51,13 @@ export type ContactRow = {
   email: string | null;
   company: string | null;
   phone: string | null;
+  crmSource?: string | null;
+  externalId?: string | null;
+  sourceLabel?: string | null;
+  detailLabel?: string | null;
+  contactRecordId?: string | null;
+  status?: string | null;
+  soldDate?: string | null;
 };
 
 export type JourneyViewRow = {

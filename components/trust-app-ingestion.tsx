@@ -11,11 +11,14 @@ import {
   RefreshCw,
   Route,
   Search,
+  Trash2,
   UserRound,
 } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
+import { useRouter } from "next/navigation";
+import { SocialProfileReportPage } from "@/components/social-profile-report-page";
 import { LinkTrackingView, MetricsView } from "@/components/trust-app-attribution-ui";
 import { JourneyTray, JourneysView, LibraryConfigurator } from "@/components/trust-app-library-ui";
 import { SocialProfilesView } from "@/components/trust-app-social-profiles";
@@ -114,12 +117,28 @@ const roles: Record<RoleId, { label: string; title: string; description: string;
   }
 };
 
+const viewTitles: Record<ViewId, string> = {
+  library: "Trust Library",
+  sources: "Sources",
+  socialProfiles: "Social Profiles",
+  tracking: "Link Tracking",
+  journeys: "Journeys",
+  metrics: "Metrics"
+};
+
 const noMagicLinkEmails = new Set(["admin@unmarked.media"]);
 
-export function TrustAppIngestion() {
+export function TrustAppIngestion({
+  initialView = "library",
+  initialSocialProfileReportId = null,
+}: {
+  initialView?: ViewId;
+  initialSocialProfileReportId?: string | null;
+} = {}) {
+  const router = useRouter();
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const [roleId, setRoleId] = useState<RoleId | null>("libraryManager");
-  const [view, setView] = useState<ViewId>("library");
+  const [view, setView] = useState<ViewId>(initialView);
   const [session, setSession] = useState<Session | null>(null);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [videos, setVideos] = useState<DbVideo[]>([]);
@@ -131,6 +150,7 @@ export function TrustAppIngestion() {
   const [socialProfiles, setSocialProfiles] = useState<SocialProfileRow[]>([]);
   const [selected, setSelected] = useState<DbVideo | null>(null);
   const [selectedSocialProfileId, setSelectedSocialProfileId] = useState<string | null>(null);
+  const [socialProfileReportId, setSocialProfileReportId] = useState<string | null>(initialSocialProfileReportId);
   const [selectedJourneyId, setSelectedJourneyId] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<MetricsState>({ views: [] });
   const [query, setQuery] = useState("");
@@ -154,6 +174,8 @@ export function TrustAppIngestion() {
   const visibleVideos = useMemo(() => filterVideos(videos, query, filters), [videos, query, filters]);
   const smartGroups = useMemo(() => buildSmartGroups(visibleVideos), [visibleVideos]);
   const showCommandSearch = view === "library";
+  const pageTitle = viewTitles[view];
+  const selectedReportProfile = socialProfileReportId ? socialProfiles.find((profile) => profile.id === socialProfileReportId) ?? null : null;
 
   useEffect(() => {
     if (!supabase) {
@@ -252,9 +274,16 @@ export function TrustAppIngestion() {
   }
 
   async function loadContacts(nextWorkspaceId = workspaceId) {
-    if (!supabase || !nextWorkspaceId) return;
-    const { data } = await supabase.from("contacts").select("id,name,email,company,phone").eq("workspace_id", nextWorkspaceId).order("updated_at", { ascending: false }).limit(100);
-    setContacts((data ?? []) as ContactRow[]);
+    if (!session || !nextWorkspaceId) return;
+    const response = await fetch(`/api/journey-contacts?workspaceId=${encodeURIComponent(nextWorkspaceId)}`, {
+      headers: { Authorization: `Bearer ${session.access_token}` }
+    });
+    if (!response.ok) {
+      setContacts([]);
+      return;
+    }
+    const result = (await response.json()) as { contacts?: ContactRow[] };
+    setContacts(result.contacts ?? []);
   }
 
   async function loadTracking(nextWorkspaceId = workspaceId) {
@@ -308,6 +337,29 @@ export function TrustAppIngestion() {
   async function reimportSource(source: SourceRow) {
     if (!workspaceId) return;
     await runImportRequest(`/api/sources/${source.id}/reimport`, { workspaceId });
+  }
+
+  async function deleteSource(source: SourceRow) {
+    if (!workspaceId || !session) return;
+    if (!window.confirm(`Remove ${source.account_label ?? formatPlatformLabel(source.platform)} from connected sources? Imported videos will stay in the library.`)) return;
+
+    setWorking(true);
+    setNotice("");
+    setError("");
+    try {
+      const response = await fetch(`/api/sources/${source.id}?workspaceId=${encodeURIComponent(workspaceId)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      });
+      const result = (await response.json()) as { ok?: boolean; error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Could not delete that source.");
+      setNotice("Source removed. Imported videos remain in the library.");
+      await refreshWorkspace(workspaceId);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not delete that source.");
+    } finally {
+      setWorking(false);
+    }
   }
 
   async function runImportRequest(url: string, body: Record<string, unknown>, onSuccess?: () => void) {
@@ -477,7 +529,7 @@ export function TrustAppIngestion() {
     }
   }
 
-  async function createContactShare(contact: { contactId?: string; name?: string; email?: string; company?: string }) {
+  async function createContactShare(contact: { contactId?: string; name?: string; email?: string; company?: string; phone?: string; crmSource?: string; externalId?: string }) {
     if (!workspaceId || !session || !selectedJourneyId) return;
     setJourneyWorking(true);
     setError("");
@@ -485,7 +537,20 @@ export function TrustAppIngestion() {
       const response = await fetch(`/api/journeys/${selectedJourneyId}/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ workspaceId, contactId: contact.contactId, contact: contact.contactId ? undefined : { name: contact.name, email: contact.email, company: contact.company } })
+        body: JSON.stringify({
+          workspaceId,
+          contactId: contact.contactId,
+          contact: contact.contactId
+            ? undefined
+            : {
+                name: contact.name,
+                email: contact.email,
+                company: contact.company,
+                phone: contact.phone,
+                crmSource: contact.crmSource,
+                externalId: contact.externalId
+              }
+        })
       });
       const result = (await response.json()) as { shareUrl?: string; error?: string };
       if (!response.ok || !result.shareUrl) throw new Error(result.error ?? "Could not create contact link.");
@@ -614,10 +679,45 @@ export function TrustAppIngestion() {
       });
       const result = (await response.json()) as { ok?: boolean; error?: string };
       if (!response.ok) throw new Error(result.error ?? "Could not remove the saved profile.");
+      if (socialProfileReportId === profile.id) {
+        setSocialProfileReportId(null);
+        router.push("/");
+      }
       setNotice("Saved profile removed.");
       await loadSocialProfiles(workspaceId);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Could not remove the saved profile.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function importSocialProfile(profile: SocialProfileRow, mode: "channel" | "video", videoId?: string) {
+    if (!workspaceId || !session) return;
+
+    setWorking(true);
+    setNotice("");
+    setError("");
+
+    try {
+      const response = await fetch(`/api/social-profiles/${profile.id}/import`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ workspaceId, mode, videoId })
+      });
+      const result = (await response.json()) as {
+        result?: { imported?: number; updated?: number; skippedDuplicates?: number; duplicateCandidates?: number };
+        error?: string;
+      };
+      if (!response.ok || !result.result) throw new Error(result.error ?? "Could not import from that social profile.");
+      setNotice(`Imported ${result.result.imported ?? 0}, updated ${result.result.updated ?? 0}, skipped ${result.result.skippedDuplicates ?? 0}, flagged ${result.result.duplicateCandidates ?? 0}.`);
+      await refreshWorkspace(workspaceId);
+      await analyzeSocialProfile(profile);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not import from that social profile.");
     } finally {
       setWorking(false);
     }
@@ -631,9 +731,24 @@ export function TrustAppIngestion() {
   }
 
   function goHome() {
+    setSocialProfileReportId(null);
+    router.push("/");
     setView("library");
     setNotice("");
     setError("");
+  }
+
+  function openSocialProfileReport(profile: SocialProfileRow) {
+    setSelectedSocialProfileId(profile.id);
+    setSocialProfileReportId(profile.id);
+    setView("socialProfiles");
+    router.push(`/social-profiles/${profile.id}`);
+  }
+
+  function closeSocialProfileReport() {
+    setSocialProfileReportId(null);
+    setView("socialProfiles");
+    router.push("/");
   }
 
   if (!roleId || !role) return <RoleGate onChoose={chooseRole} />;
@@ -648,7 +763,7 @@ export function TrustAppIngestion() {
         <nav className="side-nav">
           <button className={view === "library" ? "icon-button is-active" : "icon-button"} onClick={() => setView("library")} aria-label="Library" title="Library"><Clapperboard /><span>Library</span></button>
           <button className={view === "sources" ? "icon-button is-active" : "icon-button"} onClick={() => setView("sources")} aria-label="Sources" title="Sources"><Import /><span>Sources</span></button>
-          <button className={view === "socialProfiles" ? "icon-button is-active" : "icon-button"} onClick={() => setView("socialProfiles")} aria-label="Social Profiles" title="Social Profiles"><UserRound /><span>Social Profiles</span></button>
+          <button className={view === "socialProfiles" ? "icon-button is-active" : "icon-button"} onClick={() => { setView("socialProfiles"); setSocialProfileReportId(null); router.push("/"); }} aria-label="Social Profiles" title="Social Profiles"><UserRound /><span>Social Profiles</span></button>
           <button className={view === "tracking" ? "icon-button is-active" : "icon-button"} onClick={() => setView("tracking")} aria-label="Link tracking" title="Link tracking"><Link2 /><span>Links</span></button>
           <button className={view === "metrics" ? "icon-button is-active" : "icon-button"} onClick={() => setView("metrics")} aria-label="Sales metrics" title="Metrics"><BarChart3 /><span>Metrics</span></button>
           <button className={view === "journeys" ? "icon-button is-active" : "icon-button"} onClick={newJourney} aria-label="Journeys" title="Journeys"><Route /><span>Journeys</span></button>
@@ -658,7 +773,7 @@ export function TrustAppIngestion() {
 
       <main className="stage">
         <header className="command-bar">
-          <div className="brand-line"><span>{role.label}</span><strong>Trust Library</strong></div>
+          <div className="brand-line"><span>{role.label}</span><strong>{pageTitle}</strong></div>
           {showCommandSearch ? <label className="command-search"><Search /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={role.placeholder} /></label> : <div className="command-spacer" aria-hidden="true" />}
         </header>
 
@@ -667,9 +782,19 @@ export function TrustAppIngestion() {
         <section className="role-context is-quiet"><span>{role.label}</span><h2>{role.title}</h2><p>{role.description}</p></section>
         {(notice || error) && <p style={{ margin: "0 6px 18px", color: error ? "#ffd4d4" : "#d8d1c5" }}>{error || notice}</p>}
 
-        {view === "sources" && <SourcesView sources={sources} importing={working} onImport={importSource} onReimport={reimportSource} />}
+        {view === "sources" && <SourcesView sources={sources} importing={working} onImport={importSource} onReimport={reimportSource} onDelete={deleteSource} />}
         {view === "library" && <LibraryConfigurator videos={visibleVideos} selected={selected} saving={working} options={options} onSelect={setSelected} onAdd={addToJourney} onArchive={archiveVideo} onSaveContext={saveVideoContext} />}
-        {view === "socialProfiles" && (
+        {view === "socialProfiles" && socialProfileReportId && (
+          <SocialProfileReportPage
+            profile={selectedReportProfile}
+            working={working}
+            onBack={closeSocialProfileReport}
+            onRefresh={() => selectedReportProfile ? analyzeSocialProfile(selectedReportProfile) : undefined}
+            onImportChannel={() => selectedReportProfile ? importSocialProfile(selectedReportProfile, "channel") : undefined}
+            onImportVideo={(videoId) => selectedReportProfile ? importSocialProfile(selectedReportProfile, "video", videoId) : undefined}
+          />
+        )}
+        {view === "socialProfiles" && !socialProfileReportId && (
           <SocialProfilesView
             draft={socialProfileDraft}
             profiles={socialProfiles}
@@ -678,20 +803,15 @@ export function TrustAppIngestion() {
             onDraftChange={setSocialProfileDraft}
             onSave={saveSocialProfile}
             onAnalyze={analyzeSocialProfile}
-            onViewReport={(profile) => {
-              setSelectedSocialProfileId(profile.id);
-              setView("socialProfiles");
-              setNotice(`Opened saved report for ${profile.displayName || profile.username || profile.platform}.`);
-            }}
+            onViewReport={openSocialProfileReport}
             onRemove={removeSocialProfile}
           />
         )}
         {view === "tracking" && <LinkTrackingView draft={trackingDraft} journeys={journeys} tracking={tracking} working={trackingWorking} onDraftChange={setTrackingDraft} onCreate={createTrackingLink} />}
         {view === "metrics" && <MetricsView metrics={metrics} videos={videos} sources={sources} journeys={journeys} contacts={contacts} tracking={tracking} />}
         {view === "journeys" && <JourneysView journeys={journeys} folders={folders} draftVideos={draftVideos} groups={smartGroups} videos={visibleVideos} shareUrl={shareUrl} onEdit={editJourney} onAdd={addToJourney} />}
+        {isInternal && <JourneyTray draft={draft} videos={draftVideos} working={journeyWorking} shareUrl={shareUrl} contacts={contacts} selectedJourneyId={selectedJourneyId} options={options} onDraftChange={setDraft} onGenerate={generateJourney} onPublish={publishJourney} onMove={moveDraftVideo} onRemove={removeFromJourney} onCreateContactShare={createContactShare} />}
       </main>
-
-      {isInternal && <JourneyTray draft={draft} videos={draftVideos} working={journeyWorking} shareUrl={shareUrl} contacts={contacts} selectedJourneyId={selectedJourneyId} options={options} onDraftChange={setDraft} onGenerate={generateJourney} onPublish={publishJourney} onMove={moveDraftVideo} onRemove={removeFromJourney} onCreateContactShare={createContactShare} />}
     </div>
   );
 }
@@ -736,8 +856,8 @@ function AuthGate({ role, supabase, onBack }: { role: (typeof roles)[RoleId]; su
   return <main className="role-gate"><button className="text-button" onClick={onBack}>Back</button><section className="gate-intro"><span>{role.label}</span><h1>Sign in.</h1><p>{role.description}</p></section><form className="prospect-brief" onSubmit={sendMagicLink}><div className="brief-grid"><label className="wide-field"><span>Email</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@company.com" required /></label><label className="wide-field"><span>Password</span><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Password login" minLength={6} /></label></div><button className="wide-action" disabled={sending}>{sending ? <Loader2 className="spin" /> : <ArrowUpRight />}Send magic link</button><button className="text-button" type="button" disabled={sending || !email || password.length < 6} onClick={signInWithPassword} style={{ marginTop: 12 }}>Sign in with password</button>{message && <p style={{ border: "1px solid rgba(255,255,255,.16)", color: isError ? "#ffd4d4" : "#e9e2d6", marginTop: 16, padding: "14px 16px" }}>{message}</p>}</form></main>;
 }
 
-function SourcesView({ sources, importing, onImport, onReimport }: { sources: SourceRow[]; importing: boolean; onImport: (event: FormEvent<HTMLFormElement>) => void; onReimport: (source: SourceRow) => void }) {
-  return <section className="sources-grid"><section className="browse"><div className="collection-top"><div><span>Sources</span><h1>Import public video sources</h1></div><p>YouTube works now. Public Drive folders work when GOOGLE_DRIVE_API_KEY is set in Vercel.</p></div><form className="prospect-brief" onSubmit={onImport}><div className="brief-grid"><label className="wide-field"><span>Public source URL</span><input name="sourceUrl" required placeholder="YouTube channel, playlist, video, or public Drive folder URL" /></label></div><button className="wide-action" disabled={importing}>{importing ? <Loader2 className="spin" /> : <Import />}Import source</button></form></section><aside className="source-panel"><div className="mini-head"><span>Connected sources</span><strong>{sources.length}</strong></div><div className="source-list">{sources.map((source) => <article className="source-card" key={source.id}><div className="source-card-copy"><div className="source-card-heading"><span>{formatPlatformLabel(source.platform)}</span><strong>{source.account_label ?? formatPlatformLabel(source.platform)}</strong></div><div className="source-card-meta"><small>{formatSourceStatus(source.status)}</small><small>{source.last_synced_at ? `Updated ${formatDateTime(source.last_synced_at)}` : "Waiting for first sync"}</small></div>{source.error && <p>{source.error}</p>}<div className="source-stats"><div><small>Imported</small><strong>{String(source.metadata?.imported ?? 0)}</strong></div><div><small>Updated</small><strong>{String(source.metadata?.updated ?? 0)}</strong></div><div><small>Flagged</small><strong>{String(source.metadata?.duplicateCandidates ?? 0)}</strong></div></div></div><button className="icon-mini" disabled={importing} onClick={() => onReimport(source)} aria-label="Reimport source"><RefreshCw /></button></article>)}</div></aside></section>;
+function SourcesView({ sources, importing, onImport, onReimport, onDelete }: { sources: SourceRow[]; importing: boolean; onImport: (event: FormEvent<HTMLFormElement>) => void; onReimport: (source: SourceRow) => void; onDelete: (source: SourceRow) => void }) {
+  return <section className="sources-grid"><section className="browse"><div className="collection-top"><div><span>Sources</span><h1>Import public video sources</h1></div><p>YouTube works now. Public Drive folders work when GOOGLE_DRIVE_API_KEY is set in Vercel.</p></div><form className="prospect-brief" onSubmit={onImport}><div className="brief-grid"><label className="wide-field"><span>Public source URL</span><input name="sourceUrl" required placeholder="YouTube channel, playlist, video, or public Drive folder URL" /></label></div><button className="wide-action" disabled={importing}>{importing ? <Loader2 className="spin" /> : <Import />}Import source</button></form></section><aside className="source-panel"><div className="mini-head"><span>Connected sources</span><strong>{sources.length}</strong></div><div className="source-list">{sources.map((source) => <article className="source-card" key={source.id}><div className="source-card-copy"><div className="source-card-heading"><span>{formatPlatformLabel(source.platform)}</span><strong>{source.account_label ?? formatPlatformLabel(source.platform)}</strong></div><div className="source-card-meta"><small>{formatSourceStatus(source.status)}</small><small>{source.last_synced_at ? `Updated ${formatDateTime(source.last_synced_at)}` : "Waiting for first sync"}</small></div>{source.error && <p>{source.error}</p>}<div className="source-stats"><div><small>Imported</small><strong>{String(source.metadata?.imported ?? 0)}</strong></div><div><small>Updated</small><strong>{String(source.metadata?.updated ?? 0)}</strong></div><div><small>Flagged</small><strong>{String(source.metadata?.duplicateCandidates ?? 0)}</strong></div></div></div><div className="source-card-actions"><button className="icon-mini" disabled={importing} onClick={() => onReimport(source)} aria-label="Reimport source"><RefreshCw /></button><button className="icon-mini danger" disabled={importing} onClick={() => onDelete(source)} aria-label="Delete source"><Trash2 /></button></div></article>)}</div></aside></section>;
 }
 
 function LibraryFiltersBar({ filters, options, onChange }: { filters: LibraryFilters; options: ReturnType<typeof buildOptions>; onChange: (filters: LibraryFilters) => void }) {

@@ -155,17 +155,26 @@ export function JourneyTray({
   onPublish: () => void;
   onMove: (videoId: string, direction: -1 | 1) => void;
   onRemove: (videoId: string) => void;
-  onCreateContactShare: (contact: { contactId?: string; name?: string; email?: string; company?: string }) => void;
+  onCreateContactShare: (contact: {
+    contactId?: string;
+    name?: string;
+    email?: string;
+    company?: string;
+    phone?: string;
+    crmSource?: string;
+    externalId?: string;
+  }) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [contactId, setContactId] = useState("");
-  const [contact, setContact] = useState({ name: "", email: "", company: "" });
+  const [contact, setContact] = useState({ name: "", email: "", company: "", phone: "" });
+  const selectedContact = contacts.find((item) => item.id === contactId) ?? null;
 
   return (
     <aside className={open ? "journey-tray is-open" : "journey-tray"}>
       <button className="tray-tab" onClick={() => setOpen((current) => !current)}>
         <Route />
-        <span>{videos.length} in journey</span>
+        <span>{open ? "Close journey builder" : `${videos.length} in journey`}</span>
       </button>
       <div className="tray-body">
         <Datalists options={options} />
@@ -235,18 +244,43 @@ export function JourneyTray({
               <option value="">New contact</option>
               {contacts.map((item) => (
                 <option value={item.id} key={item.id}>
-                  {item.name || item.email || "Unnamed"}
+                  {formatContactOption(item)}
                 </option>
               ))}
             </select>
+            {selectedContact && (
+              <small className="contact-share-detail">
+                {[selectedContact.sourceLabel, selectedContact.detailLabel, selectedContact.status].filter(Boolean).join(" • ")}
+              </small>
+            )}
             {!contactId && (
               <>
                 <input value={contact.name} onChange={(event) => setContact({ ...contact, name: event.target.value })} placeholder="Contact name" />
                 <input value={contact.email} onChange={(event) => setContact({ ...contact, email: event.target.value })} placeholder="email@company.com" />
+                <input value={contact.phone} onChange={(event) => setContact({ ...contact, phone: event.target.value })} placeholder="Phone" />
                 <input value={contact.company} onChange={(event) => setContact({ ...contact, company: event.target.value })} placeholder="Company" />
               </>
             )}
-            <button className="seed-button" disabled={working} onClick={() => onCreateContactShare(contactId ? { contactId } : contact)}>
+            <button
+              className="seed-button"
+              disabled={working}
+              onClick={() =>
+                onCreateContactShare(
+                  selectedContact
+                    ? selectedContact.contactRecordId
+                      ? { contactId: selectedContact.contactRecordId }
+                      : {
+                          name: selectedContact.name ?? undefined,
+                          email: selectedContact.email ?? undefined,
+                          company: selectedContact.company ?? undefined,
+                          phone: selectedContact.phone ?? undefined,
+                          crmSource: selectedContact.crmSource ?? undefined,
+                          externalId: selectedContact.externalId ?? undefined
+                        }
+                    : contact
+                )
+              }
+            >
               <Send />
               Create link
             </button>
@@ -260,6 +294,12 @@ export function JourneyTray({
       </div>
     </aside>
   );
+}
+
+function formatContactOption(contact: ContactRow) {
+  const primary = contact.name || contact.email || contact.phone || "Unnamed";
+  const secondary = [contact.sourceLabel, contact.detailLabel].filter(Boolean).join(" • ");
+  return secondary ? `${primary} — ${secondary}` : primary;
 }
 
 function BottomPlayer({

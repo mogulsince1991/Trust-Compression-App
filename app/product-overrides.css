@@ -18,10 +18,6 @@
   font-size: 15px;
 }
 
-.side-nav button[aria-label="Journeys"] {
-  display: none !important;
-}
-
 select,
 select option,
 .filter-select select,
@@ -415,7 +411,7 @@ textarea::placeholder {
   }
 
   .app .brand-line {
-    display: none;
+    display: block;
   }
 
   .library-player-dock {
