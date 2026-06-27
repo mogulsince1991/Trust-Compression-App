@@ -870,7 +870,7 @@ export function ContractorMetricsWorkspace() {
               </form>
             </ConnectionCard>
 
-            <ConnectionCard title="JobTread" description="Store the JobTread Pave grant key server-side for the reporting workspace. The key should match the working local reporting app and typically starts with grant_.">
+            <ConnectionCard title="JobTread" description="Store the JobTread grant key server-side for the reporting workspace. This is not your JobTread password.">
               <form className={styles.formGrid} onSubmit={(event: FormEvent<HTMLFormElement>) => { event.preventDefault(); void postAction("/api/connect/jobtread", "connect-jobtread", { workspaceId, accountLabel: jobtread.accountLabel, apiToken: jobtread.apiToken, externalAccountId: jobtread.externalAccountId || undefined, apiBaseUrl: jobtread.apiBaseUrl }); setJobtread((current) => ({ ...current, apiToken: "" })); }}>
                 <Field label="Account label" value={jobtread.accountLabel} onChange={(value) => setJobtread((current) => ({ ...current, accountLabel: value }))} />
                 <Field label="External account ID" value={jobtread.externalAccountId} onChange={(value) => setJobtread((current) => ({ ...current, externalAccountId: value }))} />

@@ -95,11 +95,6 @@ async function fetchJobTreadRows(
   if (!grantKey) {
     throw new Error("JobTread grant key is missing. Reconnect the account.");
   }
-  if (!looksLikeGrantKey(grantKey)) {
-    throw new Error(
-      "The saved JobTread credential does not look like a Pave grant key. Reconnect JobTread with the grant key used by the working local reporting app."
-    );
-  }
 
   const baseUrl = normalizeBaseUrl(
     String(metadata.apiBaseUrl ?? process.env.JOBTREAD_API_BASE_URL ?? DEFAULT_JOBTREAD_API_BASE_URL)
@@ -536,31 +531,13 @@ function matchesReportDateWindow(
 }
 
 async function safeJson(response: Response) {
-  const text = await response.text();
   try {
-    return text ? JSON.parse(text) : null;
+    return await response.json();
   } catch {
-    return text ? { raw: text } : null;
+    return null;
   }
 }
 
 function readProviderError(payload: any, fallback: string) {
-  return (
-    payload?.message ||
-    payload?.error?.message ||
-    payload?.error ||
-    payload?.errors?.[0]?.message ||
-    sanitizeProviderRaw(payload?.raw) ||
-    fallback
-  );
-}
-
-function sanitizeProviderRaw(value: unknown) {
-  const raw = String(value ?? "").trim();
-  if (!raw) return null;
-  return raw.slice(0, 280);
-}
-
-function looksLikeGrantKey(value: string) {
-  return /^grant[_-]/i.test(String(value ?? "").trim());
+  return payload?.message || payload?.error?.message || payload?.error || payload?.errors?.[0]?.message || fallback;
 }

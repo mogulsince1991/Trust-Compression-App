@@ -28,8 +28,6 @@ export async function POST(request: Request) {
     const externalAccountId =
       body.externalAccountId?.trim() || new URL(apiBaseUrl).hostname || "jobtread";
 
-    await verifyJobTreadGrantKey({ apiBaseUrl, grantKey: apiToken });
-
     const { data, error } = await serviceSupabase
       .from("connected_accounts")
       .upsert(
@@ -45,7 +43,7 @@ export async function POST(request: Request) {
           scope: "open_api",
           status: "connected",
           metadata: {
-            authMode: "grant_key",
+            authMode: "api_token",
             apiBaseUrl,
             jobsPath: body.jobsPath?.trim() || "/jobs",
             authHeaderName: body.authHeaderName?.trim() || "Authorization",
@@ -72,54 +70,4 @@ export async function POST(request: Request) {
 function normalizeUrl(value: string) {
   const url = new URL(value);
   return url.toString().endsWith("/") ? url.toString() : `${url.toString()}/`;
-}
-
-async function verifyJobTreadGrantKey({
-  apiBaseUrl,
-  grantKey,
-}: {
-  apiBaseUrl: string;
-  grantKey: string;
-}) {
-  if (!/^grant[_-]/i.test(grantKey)) {
-    throw new Error("That JobTread credential does not look like a Pave grant key. Use the same grant key format as the working local reporting app.");
-  }
-
-  const requestUrl = new URL("/pave", apiBaseUrl);
-  const response = await fetch(requestUrl.toString(), {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      query: {
-        currentGrant: {
-          id: {},
-        },
-        $: {
-          grantKey,
-        },
-      },
-    }),
-    cache: "no-store",
-  });
-
-  const text = await response.text();
-  let payload: any = null;
-  try {
-    payload = text ? JSON.parse(text) : null;
-  } catch {
-    payload = text ? { raw: text } : null;
-  }
-
-  if (!response.ok || !payload?.currentGrant?.id) {
-    const detail =
-      payload?.message ||
-      payload?.error?.message ||
-      payload?.errors?.[0]?.message ||
-      payload?.raw ||
-      "JobTread rejected this grant key.";
-    throw new Error(`Could not verify the JobTread grant key. ${String(detail).slice(0, 220)}`);
-  }
 }
