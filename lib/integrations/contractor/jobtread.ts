@@ -284,6 +284,18 @@ async function getJobDetail({
         location: {
           account: {
             name: {},
+            primaryContact: {
+              name: {},
+            },
+            customFieldValues: {
+              $: { size: DEFAULT_CUSTOM_FIELD_PAGE_SIZE },
+              nodes: {
+                value: {},
+                customField: {
+                  name: {},
+                },
+              },
+            },
           },
         },
         customFieldValues: {
@@ -356,21 +368,25 @@ async function paveQuery({
 
 function normalizeJob(job: any) {
   const fields = customFieldMap(job.customFieldValues?.nodes ?? []);
+  const accountFields = customFieldMap(job.location?.account?.customFieldValues?.nodes ?? []);
   const documents = Array.isArray(job.documents?.nodes) ? job.documents.nodes : [];
-  const soldDate = readSoldDate(fields);
+  const soldDate = readSoldDate(fields, documents);
   const revenue =
+    revenueFromApprovedOrders(documents) ||
     toNumber(job.projectedPriceWithTax ?? job.projectedPrice) ||
     revenueFromFields(fields) ||
-    revenueFromApprovedOrders(documents);
-  const status = firstField(fields, ["status", "job_status", "appointment_result"]) ?? statusFromDocuments(documents);
+    revenueFromFields(accountFields);
+  const jobStatus = firstField(fields, ["status", "job_status", "appointment_result"]);
+  const customerStatus = firstField(accountFields, ["customer_status", "status"]);
+  const status = jobStatus ?? customerStatus ?? statusFromDocuments(documents);
 
   return {
     id: job.id ?? null,
     jobId: job.id ?? null,
     jobNumber: job.number ?? null,
     customer: job.location?.account?.name ?? job.name ?? null,
-    email: firstField(fields, ["email", "customer_email"]),
-    phone: firstField(fields, ["phone", "customer_phone"]),
+    email: firstField(fields, ["email", "customer_email"]) ?? firstField(accountFields, ["email", "customer_email"]),
+    phone: firstField(fields, ["phone", "customer_phone"]) ?? firstField(accountFields, ["phone", "customer_phone"]),
     appointmentDate: job.createdAt ?? null,
     createdAt: job.createdAt ?? null,
     closedOn: job.closedOn ?? null,
@@ -381,13 +397,15 @@ function normalizeJob(job: any) {
     netSales: revenue,
     designConsultant: firstField(fields, ["project_design_consultant", "design_consultant", "estimator", "sales_rep", "salesperson", "sales_person", "consultant"]),
     projectManager: firstField(fields, ["project_manager"]),
-    source: firstField(fields, ["source", "lead_source", "ghl_source", "marketing_source"]),
-    campaign: firstField(fields, ["campaign", "utm_campaign"]),
-    notesSummary: notesFromFields(fields),
+    source:
+      firstField(fields, ["source", "lead_source", "ghl_source", "marketing_source"]) ??
+      firstField(accountFields, ["lead_source", "source", "customer_lead_source", "marketing_source"]),
+    campaign: firstField(fields, ["campaign", "utm_campaign"]) ?? firstField(accountFields, ["campaign", "utm_campaign"]),
+    notesSummary: notesFromFields({ ...accountFields, ...fields }),
   };
 }
 
-function readSoldDate(fields: Record<string, string>) {
+function readSoldDate(fields: Record<string, string>, documents: any[]) {
   const direct = firstField(fields, ["job_sold_date", "job_sold", "sold_date", "date_sold", "sale_date"]);
   if (direct) return direct;
 
@@ -397,7 +415,9 @@ function readSoldDate(fields: Record<string, string>) {
     return Boolean(fields[key]);
   });
 
-  return fallbackKey ? fields[fallbackKey] : null;
+  if (fallbackKey) return fields[fallbackKey];
+
+  return soldDateFromApprovedOrders(documents);
 }
 
 function customFieldMap(nodes: any[]) {
@@ -435,6 +455,15 @@ function revenueFromApprovedOrders(documents: any[]) {
   return approvedOrderDocuments(documents).reduce((total, doc) => {
     return total + toNumber(doc?.priceWithTax ?? doc?.price ?? doc?.amountPaid);
   }, 0);
+}
+
+function soldDateFromApprovedOrders(documents: any[]) {
+  const dates = approvedOrderDocuments(documents)
+    .map((doc) => String(doc?.closedAt ?? doc?.signedAt ?? doc?.issueDate ?? "").trim())
+    .filter(Boolean)
+    .sort();
+
+  return dates[0] ?? null;
 }
 
 function approvedOrderDocuments(documents: any[]) {
