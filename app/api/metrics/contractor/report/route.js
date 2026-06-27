@@ -180,7 +180,11 @@ async function generateReportPayload({ userSupabase, serviceSupabase, workspaceI
           return {
             provider: "gohighlevel",
             accountLabel,
-            snapshot: await fetchChunkedGoHighLevelSnapshot(account, { startDate, endDate }),
+            snapshot: await fetchChunkedGoHighLevelSnapshot(account, {
+              startDate,
+              endDate,
+              timeZone: runtimeRules?.timezone,
+            }),
             error: null,
           };
         } catch (error) {
@@ -199,7 +203,11 @@ async function generateReportPayload({ userSupabase, serviceSupabase, workspaceI
           return {
             provider: "jobtread",
             accountLabel,
-            snapshot: await fetchChunkedJobTreadSnapshot(account, { startDate, endDate }),
+            snapshot: await fetchChunkedJobTreadSnapshot(account, {
+              startDate,
+              endDate,
+              timeZone: runtimeRules?.timezone,
+            }),
             error: null,
           };
         } catch (error) {
@@ -307,7 +315,7 @@ function toUploadedSpendRow(row) {
   };
 }
 
-async function fetchChunkedGoHighLevelSnapshot(account, { startDate, endDate }) {
+async function fetchChunkedGoHighLevelSnapshot(account, { startDate, endDate, timeZone }) {
   const windows = splitDateRangeIntoMonthlyWindows(startDate, endDate);
   const leads = [];
   let settings = null;
@@ -315,7 +323,7 @@ async function fetchChunkedGoHighLevelSnapshot(account, { startDate, endDate }) 
   let externalAccountId = null;
 
   for (const window of windows) {
-    const snapshot = await fetchGoHighLevelSnapshotWithFallback(account, window);
+    const snapshot = await fetchGoHighLevelSnapshotWithFallback(account, { ...window, timeZone });
     displayName = snapshot.displayName ?? displayName;
     externalAccountId = snapshot.externalAccountId ?? externalAccountId;
     settings = snapshot.settings ?? settings;
@@ -332,11 +340,12 @@ async function fetchChunkedGoHighLevelSnapshot(account, { startDate, endDate }) 
   };
 }
 
-async function fetchChunkedJobTreadSnapshot(account, { startDate, endDate }) {
+async function fetchChunkedJobTreadSnapshot(account, { startDate, endDate, timeZone }) {
   const fetchBounds = recommendJobTreadFetchBounds(startDate, endDate);
   const snapshot = await fetchJobTreadSnapshot(account, {
     startDate,
     endDate,
+    timeZone,
     limit: fetchBounds.limit,
     maxPages: fetchBounds.maxPages,
     filterToWindow: true,
@@ -367,11 +376,12 @@ function recommendJobTreadFetchBounds(startDate, endDate) {
   return { limit: 9000, maxPages: 90 };
 }
 
-async function fetchGoHighLevelSnapshotWithFallback(account, { startDate, endDate }) {
+async function fetchGoHighLevelSnapshotWithFallback(account, { startDate, endDate, timeZone }) {
   try {
     return await fetchGoHighLevelSnapshot(account, {
       startDate,
       endDate,
+      timeZone,
       limit: 1000,
       scanLimit: 2000,
       maxPages: 20,
@@ -380,6 +390,7 @@ async function fetchGoHighLevelSnapshotWithFallback(account, { startDate, endDat
     return await fetchGoHighLevelSnapshot(account, {
       startDate,
       endDate,
+      timeZone,
       limit: 500,
       scanLimit: 1000,
       maxPages: 10,

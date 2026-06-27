@@ -1,3 +1,5 @@
+import { dateKeyInTimeZone } from "@/lib/metrics/contractor/domain.js";
+
 const DEFAULT_GHL_API_BASE_URL = "https://services.leadconnectorhq.com";
 const DEFAULT_GHL_CONTACTS_PATH = "/contacts/";
 const DEFAULT_GHL_VERSION = "2021-07-28";
@@ -7,7 +9,7 @@ const DEFAULT_MAX_PAGES = 100;
 
 export async function fetchGoHighLevelSnapshot(
   account: any,
-  options?: { limit?: number; maxPages?: number; startDate?: string; endDate?: string; scanLimit?: number }
+  options?: { limit?: number; maxPages?: number; startDate?: string; endDate?: string; scanLimit?: number; timeZone?: string }
 ) {
   const leads = await fetchGoHighLevelContacts(account, {
     limit: options?.limit ?? DEFAULT_OUTPUT_LIMIT,
@@ -41,7 +43,7 @@ export async function fetchGoHighLevelSnapshot(
 
 export async function fetchGoHighLevelPreview(
   account: any,
-  options?: { limit?: number; maxPages?: number; startDate?: string; endDate?: string }
+  options?: { limit?: number; maxPages?: number; startDate?: string; endDate?: string; timeZone?: string }
 ) {
   const rows = await fetchGoHighLevelContacts(account, {
     ...options,
@@ -73,7 +75,7 @@ export async function fetchGoHighLevelPreview(
 
 async function fetchGoHighLevelContacts(
   account: any,
-  options?: { limit?: number; maxPages?: number; startDate?: string; endDate?: string; scanLimit?: number; includeAllRows?: boolean }
+  options?: { limit?: number; maxPages?: number; startDate?: string; endDate?: string; scanLimit?: number; includeAllRows?: boolean; timeZone?: string }
 ) {
   const metadata = account.metadata ?? {};
   const accessToken = String(account.access_token ?? "").trim();
@@ -100,6 +102,7 @@ async function fetchGoHighLevelContacts(
   const maxPages = clampPositiveInteger(options?.maxPages, DEFAULT_MAX_PAGES);
   const startDate = String(options?.startDate ?? "").trim();
   const endDate = String(options?.endDate ?? "").trim();
+  const timeZone = String(options?.timeZone ?? "America/New_York");
   const includeAllRows = options?.includeAllRows === true;
 
   for (let iteration = 0; iteration < maxPages && leads.length < scanLimit; iteration += 1) {
@@ -144,8 +147,8 @@ async function fetchGoHighLevelContacts(
   }
 
   const filteredLeads = includeAllRows
-    ? leads.filter((lead: any) => inOptionalDateRange(lead.createdDate, startDate, endDate))
-    : leads.filter((lead: any) => inOptionalDateRange(lead.createdDate, startDate, endDate));
+    ? leads.filter((lead: any) => inOptionalDateRange(lead.createdDate, startDate, endDate, timeZone))
+    : leads.filter((lead: any) => inOptionalDateRange(lead.createdDate, startDate, endDate, timeZone));
   return filteredLeads.slice(0, limit);
 }
 
@@ -164,19 +167,11 @@ function clampPositiveInteger(value: unknown, fallback: number) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function inOptionalDateRange(value: unknown, startDate: string, endDate: string) {
+function inOptionalDateRange(value: unknown, startDate: string, endDate: string, timeZone: string) {
   if (!startDate && !endDate) return true;
-  const date = new Date(String(value ?? ""));
-  if (Number.isNaN(date.getTime())) return false;
-  if (startDate) {
-    const start = new Date(`${startDate}T00:00:00`);
-    if (date < start) return false;
-  }
-  if (endDate) {
-    const end = new Date(`${endDate}T23:59:59`);
-    if (date > end) return false;
-  }
-  return true;
+  const actual = dateKeyInTimeZone(value, timeZone);
+  if (!actual) return false;
+  return (!startDate || actual >= startDate) && (!endDate || actual <= endDate);
 }
 
 function extractArray(payload: any, paths: string[]) {

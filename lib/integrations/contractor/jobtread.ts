@@ -1,3 +1,5 @@
+import { dateKeyInTimeZone } from "@/lib/metrics/contractor/domain.js";
+
 const DEFAULT_JOBTREAD_API_BASE_URL = "https://api.jobtread.com";
 const DEFAULT_JOBTREAD_PAVE_PATH = "/pave";
 const DEFAULT_PAGE_SIZE = 100;
@@ -18,7 +20,7 @@ export async function verifyJobTreadConnection(account: any) {
 
 export async function fetchJobTreadSnapshot(
   account: any,
-  options?: { limit?: number; maxPages?: number; startDate?: string; endDate?: string; filterToWindow?: boolean }
+  options?: { limit?: number; maxPages?: number; startDate?: string; endDate?: string; filterToWindow?: boolean; timeZone?: string }
 ) {
   const jobs = await fetchJobTreadRows(account, {
     limit: options?.limit ?? DEFAULT_MAX_JOBS,
@@ -50,7 +52,7 @@ export async function fetchJobTreadSnapshot(
 
 export async function fetchJobTreadPreview(
   account: any,
-  options?: { limit?: number; maxPages?: number; startDate?: string; endDate?: string }
+  options?: { limit?: number; maxPages?: number; startDate?: string; endDate?: string; timeZone?: string }
 ) {
   const rows = await fetchJobTreadRows(account, {
     ...options,
@@ -97,7 +99,7 @@ export async function fetchJobTreadPreview(
 
 async function fetchJobTreadRows(
   account: any,
-  options?: { limit?: number; maxPages?: number; startDate?: string; endDate?: string; includeAllRows?: boolean }
+  options?: { limit?: number; maxPages?: number; startDate?: string; endDate?: string; includeAllRows?: boolean; timeZone?: string }
 ) {
   const metadata = account.metadata ?? {};
   const { baseUrl, pavePath, grantKey } = resolveJobTreadConnection(account);
@@ -106,6 +108,7 @@ async function fetchJobTreadRows(
   const maxJobs = clampPositiveInteger(options?.limit, DEFAULT_MAX_JOBS);
   const startDate = String(options?.startDate ?? "").trim();
   const endDate = String(options?.endDate ?? "").trim();
+  const timeZone = String(options?.timeZone ?? "America/New_York");
   const includeAllRows = options?.includeAllRows === true;
 
   const organizationId = await getOrganizationId({ baseUrl, pavePath, grantKey });
@@ -118,7 +121,7 @@ async function fetchJobTreadRows(
 
   const rows = includeAllRows
     ? detailRows
-    : detailRows.filter((row) => matchesReportDateWindow(row, startDate, endDate));
+    : detailRows.filter((row) => matchesReportDateWindow(row, startDate, endDate, timeZone));
 
   return rows.slice(0, maxJobs);
 }
@@ -507,31 +510,23 @@ function clampPositiveInteger(value: unknown, fallback: number) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function inOptionalDateRange(value: unknown, startDate: string, endDate: string) {
+function inOptionalDateRange(value: unknown, startDate: string, endDate: string, timeZone: string) {
   if (!startDate && !endDate) return true;
-  if (!value) return false;
-  const date = new Date(String(value));
-  if (Number.isNaN(date.getTime())) return false;
-  if (startDate) {
-    const start = new Date(`${startDate}T00:00:00`);
-    if (date < start) return false;
-  }
-  if (endDate) {
-    const end = new Date(`${endDate}T23:59:59`);
-    if (date > end) return false;
-  }
-  return true;
+  const actual = dateKeyInTimeZone(value, timeZone);
+  if (!actual) return false;
+  return (!startDate || actual >= startDate) && (!endDate || actual <= endDate);
 }
 
 function matchesReportDateWindow(
   row: { appointmentDate?: unknown; soldDate?: unknown },
   startDate: string,
-  endDate: string
+  endDate: string,
+  timeZone: string
 ) {
   if (!startDate && !endDate) return true;
   return (
-    inOptionalDateRange(row.appointmentDate, startDate, endDate) ||
-    inOptionalDateRange(row.soldDate, startDate, endDate)
+    inOptionalDateRange(row.appointmentDate, startDate, endDate, timeZone) ||
+    inOptionalDateRange(row.soldDate, startDate, endDate, timeZone)
   );
 }
 

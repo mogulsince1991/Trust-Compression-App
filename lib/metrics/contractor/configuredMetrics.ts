@@ -123,7 +123,7 @@ export function buildMetricEvaluationContext({
       campaign: row.campaign,
       notesSummary: row.notes_summary,
     })),
-    { startDate, endDate }
+    { startDate, endDate, rules: report.runtimeRules }
   );
   const normalizedSpendRows = normalizeSpendRows(
     spendRows.map((row) => ({
@@ -136,7 +136,7 @@ export function buildMetricEvaluationContext({
       trackable: row.trackable,
       sourceFile: row.source_file,
     })),
-    { startDate, endDate }
+    { startDate, endDate, timeZone: report.runtimeRules?.timezone }
   );
 
   const attributionMatches = matchRecords(normalizedLeads, normalizedJobs).matched;
