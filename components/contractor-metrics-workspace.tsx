@@ -106,6 +106,7 @@ export function ContractorMetricsWorkspace() {
   const [jobtread, setJobtread] = useState(EMPTY_JOBTREAD);
 
   const activeReport = preview ?? fromStoredReport(reports[0] ?? null, ruleSetDraft);
+  const activeReportSource = preview ? "Live API response" : activeReport ? "Saved report snapshot" : null;
   const sections = normalizeSections(ruleSetDraft?.settings?.dashboardSections);
   const metrics = ruleSetDraft?.metricDefinitions ?? [];
   const metricMap = Object.fromEntries((activeReport?.configuredMetrics ?? []).map((metric: any) => [metric.id, metric]));
@@ -576,6 +577,10 @@ export function ContractorMetricsWorkspace() {
                     <strong>{ruleSetDraft.name}</strong>
                     <small>{startDate} to {endDate}</small>
                     <small>{activeReport?.createdAt ? `Generated ${formatDateTime(activeReport.createdAt)}` : "Live report ready to run."}</small>
+                  </div>
+                  <div className={styles.reportRow}>
+                    <small>{activeReportSource}</small>
+                    {activeReport?.reportId ? <small>Report ID {activeReport.reportId}</small> : null}
                   </div>
                   <div className={styles.reportRow}>
                     <small>
