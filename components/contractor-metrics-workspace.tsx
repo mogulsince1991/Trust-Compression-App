@@ -577,6 +577,21 @@ export function ContractorMetricsWorkspace() {
                     <small>{startDate} to {endDate}</small>
                     <small>{activeReport?.createdAt ? `Generated ${formatDateTime(activeReport.createdAt)}` : "Live report ready to run."}</small>
                   </div>
+                  <div className={styles.reportRow}>
+                    <small>
+                      Source rows: {String(activeReport.sourceSnapshot?.leadRows ?? 0)} leads / {String(activeReport.sourceSnapshot?.jobRows ?? 0)} jobs / {String(activeReport.sourceSnapshot?.spendRows ?? 0)} spend
+                    </small>
+                    <small>{String(activeReport.sourceSnapshot?.generatedFrom ?? "Live fetch")}</small>
+                  </div>
+                  {Array.isArray(activeReport.sourceSnapshot?.accountErrors) && activeReport.sourceSnapshot.accountErrors.length ? (
+                    <div className={styles.summaryList}>
+                      {activeReport.sourceSnapshot.accountErrors.map((entry: string, index: number) => (
+                        <div key={`account-error-${index}`} className={styles.summaryRow}>
+                          <span className={styles.rowError}>{entry}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
             </Panel>

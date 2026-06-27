@@ -333,11 +333,12 @@ async function fetchChunkedGoHighLevelSnapshot(account, { startDate, endDate }) 
 }
 
 async function fetchChunkedJobTreadSnapshot(account, { startDate, endDate }) {
+  const fetchBounds = recommendJobTreadFetchBounds(startDate, endDate);
   const snapshot = await fetchJobTreadSnapshot(account, {
     startDate,
     endDate,
-    limit: 25000,
-    maxPages: 250,
+    limit: fetchBounds.limit,
+    maxPages: fetchBounds.maxPages,
     filterToWindow: true,
   });
 
@@ -349,6 +350,21 @@ async function fetchChunkedJobTreadSnapshot(account, { startDate, endDate }) {
     spendRows: [],
     settings: snapshot.settings ?? null,
   };
+}
+
+function recommendJobTreadFetchBounds(startDate, endDate) {
+  const totalDays = inclusiveDayCount(startDate, endDate);
+
+  if (totalDays <= 45) {
+    return { limit: 1500, maxPages: 15 };
+  }
+  if (totalDays <= 120) {
+    return { limit: 3000, maxPages: 30 };
+  }
+  if (totalDays <= 370) {
+    return { limit: 6000, maxPages: 60 };
+  }
+  return { limit: 9000, maxPages: 90 };
 }
 
 async function fetchGoHighLevelSnapshotWithFallback(account, { startDate, endDate }) {
@@ -450,6 +466,13 @@ function previousPeriodRange(startDate, endDate) {
     startDate: toIsoDate(previousStart),
     endDate: toIsoDate(previousEnd),
   };
+}
+
+function inclusiveDayCount(startDate, endDate) {
+  const start = new Date(`${startDate}T00:00:00Z`);
+  const end = new Date(`${endDate}T00:00:00Z`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
+  return Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1);
 }
 
 function toIsoDate(value) {

@@ -4,6 +4,7 @@ const DEFAULT_PAGE_SIZE = 100;
 const DEFAULT_MAX_PAGES = 250;
 const DEFAULT_MAX_JOBS = 25000;
 const DEFAULT_CUSTOM_FIELD_PAGE_SIZE = 200;
+const DETAIL_BATCH_SIZE = 8;
 
 export async function fetchJobTreadSnapshot(
   account: any,
@@ -108,20 +109,33 @@ async function fetchJobTreadRows(
 
   const organizationId = await getOrganizationId({ baseUrl, pavePath, grantKey });
   const jobs = await listJobs({ baseUrl, pavePath, grantKey, organizationId, pageSize, maxPages, maxJobs });
-  const detailRows = [];
-
-  for (const job of jobs) {
+  const detailRows = await mapInBatches(jobs, DETAIL_BATCH_SIZE, async (job) => {
     const detail = await getJobDetail({ baseUrl, pavePath, grantKey, jobId: job.id });
-    if (detail?.job) {
-      detailRows.push({ ...normalizeJob(detail.job), organizationId });
-    }
-  }
+    if (!detail?.job) return null;
+    return { ...normalizeJob(detail.job), organizationId };
+  });
 
   const rows = includeAllRows
     ? detailRows
     : detailRows.filter((row) => matchesReportDateWindow(row, startDate, endDate));
 
   return rows.slice(0, maxJobs);
+}
+
+async function mapInBatches<T, R>(items: T[], batchSize: number, mapper: (item: T) => Promise<R | null>) {
+  const results: R[] = [];
+
+  for (let index = 0; index < items.length; index += batchSize) {
+    const batch = items.slice(index, index + batchSize);
+    const mapped = await Promise.all(batch.map((item) => mapper(item)));
+    for (const entry of mapped) {
+      if (entry != null) {
+        results.push(entry);
+      }
+    }
+  }
+
+  return results;
 }
 
 async function getOrganizationId({
