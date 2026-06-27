@@ -396,7 +396,7 @@ function revenueFromFields(fields: Record<string, string>) {
 
 function revenueFromApprovedOrders(documents: any[]) {
   return approvedOrderDocuments(documents).reduce((total, doc) => {
-    return total + toNumber(doc?.priceWithTax ?? doc?.price);
+    return total + toNumber(doc?.priceWithTax ?? doc?.price ?? doc?.amountPaid);
   }, 0);
 }
 
@@ -460,6 +460,15 @@ function stringifyValue(value: any) {
 
 function toNumber(value: unknown) {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    for (const key of ["amount", "value", "total", "price", "priceWithTax", "amountPaid"]) {
+      if (key in record) {
+        const parsed = toNumber(record[key]);
+        if (parsed) return parsed;
+      }
+    }
+  }
   const number = Number(String(value ?? "").replace(/[$,]/g, ""));
   return Number.isFinite(number) ? number : 0;
 }
