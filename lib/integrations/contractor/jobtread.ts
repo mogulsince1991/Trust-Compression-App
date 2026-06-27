@@ -6,6 +6,16 @@ const DEFAULT_MAX_JOBS = 25000;
 const DEFAULT_CUSTOM_FIELD_PAGE_SIZE = 200;
 const DETAIL_BATCH_SIZE = 8;
 
+export async function verifyJobTreadConnection(account: any) {
+  const config = resolveJobTreadConnection(account);
+  const organizationId = await getOrganizationId(config);
+  return {
+    organizationId,
+    baseUrl: config.baseUrl,
+    pavePath: config.pavePath,
+  };
+}
+
 export async function fetchJobTreadSnapshot(
   account: any,
   options?: { limit?: number; maxPages?: number; startDate?: string; endDate?: string; filterToWindow?: boolean }
@@ -90,16 +100,7 @@ async function fetchJobTreadRows(
   options?: { limit?: number; maxPages?: number; startDate?: string; endDate?: string; includeAllRows?: boolean }
 ) {
   const metadata = account.metadata ?? {};
-  const grantKey = String(account.access_token ?? "").trim();
-
-  if (!grantKey) {
-    throw new Error("JobTread grant key is missing. Reconnect the account.");
-  }
-
-  const baseUrl = normalizeBaseUrl(
-    String(metadata.apiBaseUrl ?? process.env.JOBTREAD_API_BASE_URL ?? DEFAULT_JOBTREAD_API_BASE_URL)
-  );
-  const pavePath = String(metadata.pavePath ?? process.env.JOBTREAD_PAVE_PATH ?? DEFAULT_JOBTREAD_PAVE_PATH);
+  const { baseUrl, pavePath, grantKey } = resolveJobTreadConnection(account);
   const pageSize = clampPositiveInteger(metadata.pageSize, DEFAULT_PAGE_SIZE);
   const maxPages = clampPositiveInteger(options?.maxPages ?? metadata.maxPages, DEFAULT_MAX_PAGES);
   const maxJobs = clampPositiveInteger(options?.limit, DEFAULT_MAX_JOBS);
@@ -120,6 +121,23 @@ async function fetchJobTreadRows(
     : detailRows.filter((row) => matchesReportDateWindow(row, startDate, endDate));
 
   return rows.slice(0, maxJobs);
+}
+
+function resolveJobTreadConnection(account: any) {
+  const metadata = account?.metadata ?? {};
+  const grantKey = String(account?.access_token ?? "").trim();
+
+  if (!grantKey) {
+    throw new Error("JobTread grant key is missing. Reconnect the account.");
+  }
+
+  return {
+    baseUrl: normalizeBaseUrl(
+      String(metadata.apiBaseUrl ?? process.env.JOBTREAD_API_BASE_URL ?? DEFAULT_JOBTREAD_API_BASE_URL)
+    ),
+    pavePath: String(metadata.pavePath ?? process.env.JOBTREAD_PAVE_PATH ?? DEFAULT_JOBTREAD_PAVE_PATH),
+    grantKey,
+  };
 }
 
 async function mapInBatches<T, R>(items: T[], batchSize: number, mapper: (item: T) => Promise<R | null>) {
@@ -305,6 +323,7 @@ async function paveQuery({
   query: Record<string, any>;
 }) {
   const requestUrl = new URL(pavePath, baseUrl);
+  let rawText = "";
   const response = await fetch(requestUrl.toString(), {
     method: "POST",
     headers: {
@@ -323,9 +342,10 @@ async function paveQuery({
     cache: "no-store",
   });
 
-  const payload = await safeJson(response);
+  rawText = await response.text();
+  const payload = safeJson(rawText);
   if (!response.ok) {
-    throw new Error(readProviderError(payload, "JobTread Pave sync failed."));
+    throw new Error(readProviderError(payload, rawText, "JobTread Pave sync failed."));
   }
 
   return payload;
@@ -530,14 +550,22 @@ function matchesReportDateWindow(
   );
 }
 
-async function safeJson(response: Response) {
+function safeJson(value: string) {
   try {
-    return await response.json();
+    return JSON.parse(value);
   } catch {
     return null;
   }
 }
 
-function readProviderError(payload: any, fallback: string) {
-  return payload?.message || payload?.error?.message || payload?.error || payload?.errors?.[0]?.message || fallback;
+function readProviderError(payload: any, rawText: string, fallback: string) {
+  const text = String(rawText ?? "").trim();
+  return (
+    payload?.message ||
+    payload?.error?.message ||
+    payload?.error ||
+    payload?.errors?.[0]?.message ||
+    (text && text.length <= 300 ? text : null) ||
+    fallback
+  );
 }
