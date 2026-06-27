@@ -3,7 +3,7 @@ const DEFAULT_JOBTREAD_PAVE_PATH = "/pave";
 const DEFAULT_PAGE_SIZE = 100;
 const DEFAULT_MAX_PAGES = 250;
 const DEFAULT_MAX_JOBS = 25000;
-const DEFAULT_CUSTOM_FIELD_PAGE_SIZE = 200;
+const DEFAULT_CUSTOM_FIELD_PAGE_SIZE = 100;
 const DETAIL_BATCH_SIZE = 8;
 
 export async function verifyJobTreadConnection(account: any) {
