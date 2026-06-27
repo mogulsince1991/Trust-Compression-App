@@ -354,7 +354,7 @@ async function paveQuery({
 function normalizeJob(job: any) {
   const fields = customFieldMap(job.customFieldValues?.nodes ?? []);
   const documents = Array.isArray(job.documents?.nodes) ? job.documents.nodes : [];
-  const soldDate = readSoldDate(fields) || approvedOrderSoldDate(documents);
+  const soldDate = readSoldDate(fields);
   const revenue =
     toNumber(job.projectedPriceWithTax ?? job.projectedPrice) ||
     revenueFromFields(fields) ||
@@ -434,14 +434,6 @@ function revenueFromApprovedOrders(documents: any[]) {
   }, 0);
 }
 
-function approvedOrderSoldDate(documents: any[]) {
-  const dates = approvedOrderDocuments(documents)
-    .map((doc) => normalizeDocumentDate(doc?.closedAt))
-    .filter(Boolean)
-    .sort();
-  return dates[0] ?? null;
-}
-
 function approvedOrderDocuments(documents: any[]) {
   return documents.filter((doc) => isApprovedCustomerOrder(doc));
 }
@@ -457,13 +449,6 @@ function isApprovedCustomerOrder(doc: any) {
 function statusFromDocuments(documents: any[]) {
   if (approvedOrderDocuments(documents).length) return "Sold";
   return "Open";
-}
-
-function normalizeDocumentDate(value: any) {
-  if (!value) return null;
-  const date = new Date(String(value));
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toISOString().slice(0, 10);
 }
 
 function notesFromFields(fields: Record<string, string>) {
