@@ -379,11 +379,13 @@ function normalizeJob(job: any) {
   const documents = Array.isArray(job.documents?.nodes) ? job.documents.nodes : [];
   const { soldDate: directSoldDate, soldDateSource } = readSoldDate(fields);
   const approvedOrderSoldDate = soldDateFromApprovedOrders(documents);
-  const revenue =
-    revenueFromApprovedOrders(documents) ||
-    toNumber(job.projectedPriceWithTax ?? job.projectedPrice) ||
-    revenueFromFields(fields) ||
-    revenueFromFields(accountFields);
+  const approvedOrderRevenueMax = revenueFromApprovedOrdersMax(documents);
+  const approvedOrderRevenueSum = revenueFromApprovedOrdersSum(documents);
+  const projectedRevenue = toNumber(job.projectedPrice ?? null);
+  const projectedRevenueWithTax = toNumber(job.projectedPriceWithTax ?? null);
+  const customFieldRevenue = approvedOrdersFromFields(fields);
+  const accountFieldRevenue = approvedOrdersFromFields(accountFields);
+  const revenue = customFieldRevenue || accountFieldRevenue || 0;
   const jobStatus = firstField(fields, ["status", "job_status", "appointment_result"]);
   const customerStatus = firstField(accountFields, ["customer_status", "status"]);
   const status = jobStatus ?? customerStatus ?? statusFromDocuments(documents);
@@ -406,6 +408,17 @@ function normalizeJob(job: any) {
     projectType: firstField(fields, ["job_type_category", "project_type", "job_type", "category", "type"]),
     revenue,
     netSales: revenue,
+    approvedOrderRevenueMax,
+    approvedOrderRevenueSum,
+    projectedRevenue,
+    projectedRevenueWithTax,
+    customFieldRevenue,
+    accountFieldRevenue,
+    approvedOrderDocumentCount: approvedOrderDocuments(documents).length,
+    approvedOrderAmounts: approvedOrderDocuments(documents)
+      .map((doc) => toNumber(doc?.priceWithTax ?? doc?.price ?? doc?.amountPaid))
+      .filter((value) => value > 0)
+      .join(", "),
     designConsultant: firstField(fields, ["project_design_consultant", "design_consultant", "estimator", "sales_rep", "salesperson", "sales_person", "consultant"]),
     projectManager: firstField(fields, ["project_manager"]),
     source:
@@ -462,10 +475,24 @@ function revenueFromFields(fields: Record<string, string>) {
   return toNumber(firstField(fields, ["revenue", "contract_amount", "sold_price", "contract_value", "net_sales", "approved_orders"]));
 }
 
+function approvedOrdersFromFields(fields: Record<string, string>) {
+  return toNumber(firstField(fields, ["approved_orders"]));
+}
+
 function revenueFromApprovedOrders(documents: any[]) {
+  return revenueFromApprovedOrdersMax(documents);
+}
+
+function revenueFromApprovedOrdersMax(documents: any[]) {
   return approvedOrderDocuments(documents).reduce((largest, doc) => {
     const amount = toNumber(doc?.priceWithTax ?? doc?.price ?? doc?.amountPaid);
     return amount > largest ? amount : largest;
+  }, 0);
+}
+
+function revenueFromApprovedOrdersSum(documents: any[]) {
+  return approvedOrderDocuments(documents).reduce((total, doc) => {
+    return total + toNumber(doc?.priceWithTax ?? doc?.price ?? doc?.amountPaid);
   }, 0);
 }
 
