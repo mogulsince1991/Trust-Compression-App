@@ -1,3 +1,4 @@
+import { applyJobOverride } from "@/lib/metrics/contractor/jobOverrides.js";
 import { dateKeyInTimeZone } from "@/lib/metrics/contractor/domain.js";
 
 const DEFAULT_JOBTREAD_API_BASE_URL = "https://api.jobtread.com";
@@ -116,12 +117,18 @@ async function fetchJobTreadRows(
   const detailRows = await mapInBatches(jobs, DETAIL_BATCH_SIZE, async (job) => {
     const detail = await getJobDetail({ baseUrl, pavePath, grantKey, jobId: job.id });
     if (!detail?.job) return null;
-    return { ...normalizeJob(detail.job), organizationId };
+    return applyJobOverride({ ...normalizeJob(detail.job), organizationId });
   });
 
+  const resolvedRows = detailRows.map((row) => ({
+    ...row,
+    inReportAppointment: inOptionalDateRange(row.appointmentDate, startDate, endDate, timeZone),
+    inReportSold: !matchesCancelledStatus(row) && inOptionalDateRange(row.soldDate, startDate, endDate, timeZone),
+  }));
+
   const rows = includeAllRows
-    ? detailRows
-    : detailRows.filter((row) => matchesReportDateWindow(row, startDate, endDate, timeZone));
+    ? resolvedRows
+    : resolvedRows.filter((row) => matchesReportDateWindow(row, startDate, endDate, timeZone));
 
   return rows.slice(0, maxJobs);
 }
@@ -370,7 +377,7 @@ function normalizeJob(job: any) {
   const fields = customFieldMap(job.customFieldValues?.nodes ?? []);
   const accountFields = customFieldMap(job.location?.account?.customFieldValues?.nodes ?? []);
   const documents = Array.isArray(job.documents?.nodes) ? job.documents.nodes : [];
-  const soldDate = readSoldDate(fields, documents);
+  const { soldDate, soldDateSource } = readSoldDate(fields, documents);
   const revenue =
     revenueFromApprovedOrders(documents) ||
     toNumber(job.projectedPriceWithTax ?? job.projectedPrice) ||
@@ -391,6 +398,7 @@ function normalizeJob(job: any) {
     createdAt: job.createdAt ?? null,
     closedOn: job.closedOn ?? null,
     soldDate,
+    soldDateSource,
     status,
     projectType: firstField(fields, ["job_type_category", "project_type", "job_type", "category", "type"]),
     revenue,
@@ -407,7 +415,7 @@ function normalizeJob(job: any) {
 
 function readSoldDate(fields: Record<string, string>, documents: any[]) {
   const direct = firstField(fields, ["job_sold_date", "job_sold", "sold_date", "date_sold", "sale_date"]);
-  if (direct) return direct;
+  if (direct) return { soldDate: direct, soldDateSource: "custom_field" };
 
   const fallbackKey = Object.keys(fields).find((key) => {
     if (!/sold/.test(key)) return false;
@@ -415,9 +423,14 @@ function readSoldDate(fields: Record<string, string>, documents: any[]) {
     return Boolean(fields[key]);
   });
 
-  if (fallbackKey) return fields[fallbackKey];
+  if (fallbackKey) return { soldDate: fields[fallbackKey], soldDateSource: fallbackKey };
 
-  return soldDateFromApprovedOrders(documents);
+  const approvedOrderSoldDate = soldDateFromApprovedOrders(documents);
+  if (approvedOrderSoldDate) {
+    return { soldDate: approvedOrderSoldDate, soldDateSource: "approved_order" };
+  }
+
+  return { soldDate: null, soldDateSource: null };
 }
 
 function customFieldMap(nodes: any[]) {
@@ -547,16 +560,22 @@ function inOptionalDateRange(value: unknown, startDate: string, endDate: string,
 }
 
 function matchesReportDateWindow(
-  row: { appointmentDate?: unknown; soldDate?: unknown },
+  row: { appointmentDate?: unknown; soldDate?: unknown; inReportAppointment?: boolean; inReportSold?: boolean },
   startDate: string,
   endDate: string,
   timeZone: string
 ) {
   if (!startDate && !endDate) return true;
+  if (row.inReportAppointment === true || row.inReportSold === true) return true;
   return (
     inOptionalDateRange(row.appointmentDate, startDate, endDate, timeZone) ||
     inOptionalDateRange(row.soldDate, startDate, endDate, timeZone)
   );
+}
+
+function matchesCancelledStatus(row: { status?: unknown; cancelled?: unknown }) {
+  if (row.cancelled === true) return true;
+  return /cancel/i.test(String(row.status ?? ""));
 }
 
 function safeJson(value: string) {

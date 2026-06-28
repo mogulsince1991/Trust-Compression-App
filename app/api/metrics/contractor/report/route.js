@@ -346,6 +346,7 @@ function buildDebugPayload({ liveLeads, liveJobs, spendRows, report }) {
             jobNumber: row.jobNumber ?? null,
             customer: row.customer ?? null,
             soldDate: row.soldDate ?? null,
+            soldDateSource: row.soldDateSource ?? null,
             appointmentDate: row.appointmentDate ?? row.createdAt ?? null,
             status: row.status ?? null,
             revenue: row.revenue ?? 0,
@@ -353,6 +354,7 @@ function buildDebugPayload({ liveLeads, liveJobs, spendRows, report }) {
             campaign: row.campaign ?? null,
             designConsultant: row.designConsultant ?? null,
             projectManager: row.projectManager ?? null,
+            overrideReason: row.overrideReason ?? null,
           }))
         ),
         columns: [
@@ -360,6 +362,7 @@ function buildDebugPayload({ liveLeads, liveJobs, spendRows, report }) {
           { key: "jobNumber", label: "Job #" },
           { key: "customer", label: "Customer" },
           { key: "soldDate", label: "Sold Date" },
+          { key: "soldDateSource", label: "Sold Date Source" },
           { key: "appointmentDate", label: "Appointment / Created" },
           { key: "status", label: "Status" },
           { key: "revenue", label: "Revenue", format: "currency" },
@@ -367,6 +370,7 @@ function buildDebugPayload({ liveLeads, liveJobs, spendRows, report }) {
           { key: "campaign", label: "Campaign" },
           { key: "designConsultant", label: "Design Consultant" },
           { key: "projectManager", label: "Project Manager" },
+          { key: "overrideReason", label: "Override Reason" },
         ],
         totalRows: liveJobs.length,
       },
