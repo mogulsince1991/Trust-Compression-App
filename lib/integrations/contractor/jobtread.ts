@@ -463,9 +463,10 @@ function revenueFromFields(fields: Record<string, string>) {
 }
 
 function revenueFromApprovedOrders(documents: any[]) {
-  const latestApprovedOrder = latestApprovedOrderDocument(documents);
-  if (!latestApprovedOrder) return 0;
-  return toNumber(latestApprovedOrder?.priceWithTax ?? latestApprovedOrder?.price ?? latestApprovedOrder?.amountPaid);
+  return approvedOrderDocuments(documents).reduce((largest, doc) => {
+    const amount = toNumber(doc?.priceWithTax ?? doc?.price ?? doc?.amountPaid);
+    return amount > largest ? amount : largest;
+  }, 0);
 }
 
 function soldDateFromApprovedOrders(documents: any[]) {
@@ -479,19 +480,6 @@ function soldDateFromApprovedOrders(documents: any[]) {
 
 function approvedOrderDocuments(documents: any[]) {
   return documents.filter((doc) => isApprovedCustomerOrder(doc));
-}
-
-function latestApprovedOrderDocument(documents: any[]) {
-  return approvedOrderDocuments(documents)
-    .slice()
-    .sort((left, right) => approvedOrderTimestamp(right) - approvedOrderTimestamp(left))[0] ?? null;
-}
-
-function approvedOrderTimestamp(doc: any) {
-  const value = String(doc?.closedAt ?? doc?.signedAt ?? doc?.issueDate ?? "").trim();
-  if (!value) return 0;
-  const timestamp = Date.parse(value);
-  return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
 function isApprovedCustomerOrder(doc: any) {
