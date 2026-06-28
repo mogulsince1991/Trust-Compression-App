@@ -488,6 +488,28 @@
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.debugStack {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.debugDisclosure {
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.debugSummary {
+  cursor: pointer;
+  list-style: none;
+  padding: 14px 16px;
+}
+
+.debugSummary::-webkit-details-marker {
+  display: none;
+}
+
 .previewHeader {
   display: flex;
   justify-content: space-between;

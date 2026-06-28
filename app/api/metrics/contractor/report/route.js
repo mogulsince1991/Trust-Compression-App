@@ -78,6 +78,7 @@ export async function POST(request) {
             unmatched: current.unmatched,
             matchedRecords: current.detail.matchedRecords,
             attributionMatchedRecords: current.detail.attributionMatchedRecords,
+            debug: current.debug,
             configuredMetrics: current.configuredMetrics,
             dashboard: current.dashboard,
             comparison: comparison
@@ -137,6 +138,7 @@ export async function POST(request) {
       configuredMetrics: current.configuredMetrics,
       unmatched: current.unmatched,
       dashboard: current.dashboard,
+      debug: current.debug,
       comparison: comparison
         ? {
             label: "Previous period",
@@ -298,8 +300,218 @@ async function generateReportPayload({ userSupabase, serviceSupabase, workspaceI
     unmatched: report.unmatched,
     detail: report.detail,
     dashboard: buildConfiguredDashboard({ ruleSet, report, context: metricContext }),
+    debug: buildDebugPayload({ liveLeads, liveJobs, spendRows: spendRows ?? [], report }),
     sourceSnapshot,
   };
+}
+
+function buildDebugPayload({ liveLeads, liveJobs, spendRows, report }) {
+  return {
+    tables: [
+      {
+        id: "gohighlevel_contacts",
+        title: "GoHighLevel Contacts",
+        description: "Live contact rows returned for this report window before matching.",
+        rows: limitDebugRows(
+          liveLeads.map((row) => ({
+            id: row.id ?? null,
+            name: row.name ?? null,
+            email: row.email ?? null,
+            phone: row.phone ?? null,
+            source: row.source ?? null,
+            campaign: row.campaign ?? null,
+            createdDate: row.createdDate ?? null,
+            tags: row.tags ?? [],
+          }))
+        ),
+        columns: [
+          { key: "id", label: "ID" },
+          { key: "name", label: "Name" },
+          { key: "email", label: "Email" },
+          { key: "phone", label: "Phone" },
+          { key: "source", label: "Source" },
+          { key: "campaign", label: "Campaign" },
+          { key: "createdDate", label: "Created" },
+          { key: "tags", label: "Tags" },
+        ],
+        totalRows: liveLeads.length,
+      },
+      {
+        id: "jobtread_jobs",
+        title: "JobTread Jobs",
+        description: "Live job rows returned for this report window before sold-job filtering.",
+        rows: limitDebugRows(
+          liveJobs.map((row) => ({
+            jobId: row.jobId ?? row.id ?? null,
+            jobNumber: row.jobNumber ?? null,
+            customer: row.customer ?? null,
+            soldDate: row.soldDate ?? null,
+            appointmentDate: row.appointmentDate ?? row.createdAt ?? null,
+            status: row.status ?? null,
+            revenue: row.revenue ?? 0,
+            source: row.source ?? null,
+            campaign: row.campaign ?? null,
+            designConsultant: row.designConsultant ?? null,
+            projectManager: row.projectManager ?? null,
+          }))
+        ),
+        columns: [
+          { key: "jobId", label: "Job ID" },
+          { key: "jobNumber", label: "Job #" },
+          { key: "customer", label: "Customer" },
+          { key: "soldDate", label: "Sold Date" },
+          { key: "appointmentDate", label: "Appointment / Created" },
+          { key: "status", label: "Status" },
+          { key: "revenue", label: "Revenue", format: "currency" },
+          { key: "source", label: "Source" },
+          { key: "campaign", label: "Campaign" },
+          { key: "designConsultant", label: "Design Consultant" },
+          { key: "projectManager", label: "Project Manager" },
+        ],
+        totalRows: liveJobs.length,
+      },
+      {
+        id: "sold_jobs_used",
+        title: "Sold Jobs Used",
+        description: "The sold-job rows currently powering sold-job and revenue metrics.",
+        rows: limitDebugRows(report.metrics.jobsSoldDetail ?? []),
+        columns: [
+          { key: "jobId", label: "Job ID" },
+          { key: "customer", label: "Customer" },
+          { key: "projectType", label: "Project Type" },
+          { key: "soldDate", label: "Sold Date" },
+          { key: "leadCreatedEastern", label: "Lead Created (ET)" },
+          { key: "timeToClose", label: "Time to Close" },
+          { key: "attributedSource", label: "Attributed Source" },
+          { key: "sourceBucket", label: "Bucket" },
+          { key: "designConsultant", label: "Design Consultant" },
+          { key: "projectManager", label: "Project Manager" },
+          { key: "revenue", label: "Revenue", format: "currency" },
+        ],
+        totalRows: report.metrics.jobsSoldDetail?.length ?? 0,
+      },
+      {
+        id: "matched_records",
+        title: "Matched Records",
+        description: "Lead-to-job matches used for appointments and attribution stitching.",
+        rows: limitDebugRows(report.detail?.matchedRecords ?? []),
+        columns: [
+          { key: "matchKey", label: "Match Key" },
+          { key: "leadId", label: "Lead ID" },
+          { key: "jobId", label: "Job ID" },
+          { key: "email", label: "Email" },
+          { key: "phone", label: "Phone" },
+          { key: "source", label: "Source" },
+          { key: "campaign", label: "Campaign" },
+          { key: "soldDate", label: "Sold Date" },
+          { key: "revenue", label: "Revenue", format: "currency" },
+          { key: "designConsultant", label: "Design Consultant" },
+        ],
+        totalRows: report.detail?.matchedRecords?.length ?? 0,
+      },
+      {
+        id: "attribution_matches",
+        title: "Attributed Sold Matches",
+        description: "Attributed matches used when source attribution is carried onto sold jobs.",
+        rows: limitDebugRows(report.detail?.attributionMatchedRecords ?? []),
+        columns: [
+          { key: "matchKey", label: "Match Key" },
+          { key: "leadId", label: "Lead ID" },
+          { key: "jobId", label: "Job ID" },
+          { key: "name", label: "Name" },
+          { key: "source", label: "Source" },
+          { key: "campaign", label: "Campaign" },
+          { key: "soldDate", label: "Sold Date" },
+          { key: "revenue", label: "Revenue", format: "currency" },
+        ],
+        totalRows: report.detail?.attributionMatchedRecords?.length ?? 0,
+      },
+      {
+        id: "spend_rows",
+        title: "Spend Rows",
+        description: "Marketing spend rows included inside the selected date window.",
+        rows: limitDebugRows(
+          spendRows.map((row) => ({
+            spendDate: row.spend_date ?? null,
+            vendor: row.vendor ?? null,
+            channel: row.channel ?? null,
+            campaign: row.campaign ?? null,
+            spend: row.spend ?? 0,
+            leads: row.leads ?? 0,
+            sourceFile: row.source_file ?? null,
+          }))
+        ),
+        columns: [
+          { key: "spendDate", label: "Spend Date" },
+          { key: "vendor", label: "Vendor" },
+          { key: "channel", label: "Channel" },
+          { key: "campaign", label: "Campaign" },
+          { key: "spend", label: "Spend", format: "currency" },
+          { key: "leads", label: "Leads" },
+          { key: "sourceFile", label: "Source File" },
+        ],
+        totalRows: spendRows.length,
+      },
+      {
+        id: "unmatched_leads",
+        title: "Unmatched Leads",
+        description: "Lead rows that did not match a JobTread job.",
+        rows: limitDebugRows(
+          (report.unmatched?.leads ?? []).map((row) => ({
+            id: row.id ?? null,
+            name: row.name ?? null,
+            email: row.email ?? null,
+            phone: row.phone ?? null,
+            source: row.source ?? null,
+            campaign: row.campaign ?? null,
+            reason: row.reason ?? "Not matched",
+          }))
+        ),
+        columns: [
+          { key: "id", label: "ID" },
+          { key: "name", label: "Name" },
+          { key: "email", label: "Email" },
+          { key: "phone", label: "Phone" },
+          { key: "source", label: "Source" },
+          { key: "campaign", label: "Campaign" },
+          { key: "reason", label: "Reason" },
+        ],
+        totalRows: report.unmatched?.leads?.length ?? 0,
+      },
+      {
+        id: "unmatched_jobs",
+        title: "Unmatched Jobs",
+        description: "Job rows that did not match a lead/contact row.",
+        rows: limitDebugRows(
+          (report.unmatched?.jobs ?? []).map((row) => ({
+            jobId: row.jobId ?? row.id ?? null,
+            jobNumber: row.jobNumber ?? null,
+            customer: row.customer ?? null,
+            soldDate: row.soldDate ?? null,
+            status: row.status ?? null,
+            revenue: row.revenue ?? 0,
+            source: row.source ?? null,
+            reason: row.reason ?? "Not matched",
+          }))
+        ),
+        columns: [
+          { key: "jobId", label: "Job ID" },
+          { key: "jobNumber", label: "Job #" },
+          { key: "customer", label: "Customer" },
+          { key: "soldDate", label: "Sold Date" },
+          { key: "status", label: "Status" },
+          { key: "revenue", label: "Revenue", format: "currency" },
+          { key: "source", label: "Source" },
+          { key: "reason", label: "Reason" },
+        ],
+        totalRows: report.unmatched?.jobs?.length ?? 0,
+      },
+    ],
+  };
+}
+
+function limitDebugRows(rows, limit = 250) {
+  return Array.isArray(rows) ? rows.slice(0, limit) : [];
 }
 
 function toUploadedSpendRow(row) {

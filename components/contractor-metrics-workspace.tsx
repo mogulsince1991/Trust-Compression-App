@@ -603,45 +603,48 @@ export function ContractorMetricsWorkspace() {
           </section>
 
           {activeReport ? (
-            sections.filter((section: any) => section.visible !== false).map((section: any) => {
-              if (section.kind === "summary") {
-                return (
-                  <Panel key={section.id} title={section.title} icon={<Sparkles />}>
-                    <div className={styles.summaryList}>
-                      {(activeReport.executiveSummary ?? []).length ? (
-                        activeReport.executiveSummary.map((entry: string, index: number) => <div key={`${section.id}-${index}`} className={styles.summaryRow}>{entry}</div>)
-                      ) : (
-                        <p className={styles.copy}>No executive summary rows are available yet for this run.</p>
-                      )}
-                    </div>
-                  </Panel>
-                );
-              }
-              if (section.kind === "metric_band") {
-                return (
-                  <Panel key={section.id} title={section.title} icon={<BarChart3 />}>
-                    <div className={metricBandClassName(section)}>
-                      {(section.metricIds ?? []).map((metricId: string) => {
-                        const metric = metricMap[metricId];
-                        if (!metric) return null;
-                        const comparison = comparisonMap[metricId];
-                        return (
-                          <MetricCard
-                            key={metricId}
-                            label={metric.name}
-                            value={formatMetricValue(metric.value, metric.displayType)}
-                            detail={metric.description || describeMetricDefinition(metric)}
-                            delta={metricDelta(metric, comparison)}
-                            inspector={buildMetricInspector(metric)}
-                          />
-                        );
-                      })}
-                    </div>
-                  </Panel>
-                );
-              }
-              return <DataPanel key={section.id} title={section.title} tableId={section.tableId ?? "unmatched_review"} report={activeReport} />;
-            })
+            <>
+              {sections.filter((section: any) => section.visible !== false).map((section: any) => {
+                if (section.kind === "summary") {
+                  return (
+                    <Panel key={section.id} title={section.title} icon={<Sparkles />}>
+                      <div className={styles.summaryList}>
+                        {(activeReport.executiveSummary ?? []).length ? (
+                          activeReport.executiveSummary.map((entry: string, index: number) => <div key={`${section.id}-${index}`} className={styles.summaryRow}>{entry}</div>)
+                        ) : (
+                          <p className={styles.copy}>No executive summary rows are available yet for this run.</p>
+                        )}
+                      </div>
+                    </Panel>
+                  );
+                }
+                if (section.kind === "metric_band") {
+                  return (
+                    <Panel key={section.id} title={section.title} icon={<BarChart3 />}>
+                      <div className={metricBandClassName(section)}>
+                        {(section.metricIds ?? []).map((metricId: string) => {
+                          const metric = metricMap[metricId];
+                          if (!metric) return null;
+                          const comparison = comparisonMap[metricId];
+                          return (
+                            <MetricCard
+                              key={metricId}
+                              label={metric.name}
+                              value={formatMetricValue(metric.value, metric.displayType)}
+                              detail={metric.description || describeMetricDefinition(metric)}
+                              delta={metricDelta(metric, comparison)}
+                              inspector={buildMetricInspector(metric)}
+                            />
+                          );
+                        })}
+                      </div>
+                    </Panel>
+                  );
+                }
+                return <DataPanel key={section.id} title={section.title} tableId={section.tableId ?? "unmatched_review"} report={activeReport} />;
+              })}
+              <DebugTablesPanel report={activeReport} />
+            </>
           ) : (
             <Panel title="No report yet" icon={<Sparkles />}>
               <p className={styles.copy}>Run the contractor report to see KPI cards, ranked tables, and drilldown rows using your current workspace defaults.</p>
@@ -1106,6 +1109,54 @@ function DataPanel({ title, tableId, report }: { title: string; tableId: string;
   return <Panel title={title} icon={<Database />}>{section.description ? <p className={styles.copy}>{section.description}</p> : null}<div className={styles.tableWrap}><table className={styles.table}><thead><tr>{section.columns.map((column: any) => <th key={column.key}>{column.label}</th>)}</tr></thead><tbody>{section.rows.length ? section.rows.map((row: any, index: number) => <tr key={`${row.id ?? row.jobId ?? row.name ?? row.source ?? index}`}>{section.columns.map((column: any) => <td key={column.key}>{formatCell(row[column.key], column.format)}</td>)}</tr>) : <tr><td colSpan={section.columns.length}>No rows yet.</td></tr>}</tbody></table></div></Panel>;
 }
 
+function DebugTablesPanel({ report }: { report: any }) {
+  const tables = report?.debug?.tables ?? [];
+  if (!tables.length) return null;
+
+  return (
+    <Panel title="Source Debug Tables" icon={<Database />}>
+      <p className={styles.copy}>These tables show the raw and matched CRM rows used by the current live report so we can inspect why a job, lead, or revenue row did or did not make it into the dashboard.</p>
+      <div className={styles.debugStack}>
+        {tables.map((table: any) => (
+          <details key={table.id} className={styles.debugDisclosure}>
+            <summary className={styles.debugSummary}>
+              <div className={styles.layoutMeta}>
+                <span>{table.totalRows ?? table.rows?.length ?? 0} rows</span>
+                <strong>{table.title}</strong>
+                <small>{table.description}</small>
+              </div>
+            </summary>
+            <div className={styles.previewPanel}>
+              <div className={styles.tableWrap}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      {(table.columns ?? []).map((column: any) => <th key={column.key}>{column.label}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(table.rows ?? []).length ? (
+                      table.rows.map((row: any, index: number) => (
+                        <tr key={`${table.id}-${row.id ?? row.jobId ?? row.leadId ?? row.matchKey ?? index}`}>
+                          {(table.columns ?? []).map((column: any) => <td key={column.key}>{formatCell(row[column.key], column.format)}</td>)}
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={(table.columns ?? []).length || 1}>No rows in this slice for the current report window.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </details>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
 function resolveTable(tableId: string, report: any) {
   if (tableId === "paid_channel_performance") return { description: "Spend, appointments, sold jobs, revenue, and efficiency by paid vendor alias.", rows: report.dashboard?.paidChannelPerformance ?? [], columns: [{ key: "name", label: "Name" }, { key: "spend", label: "Spend", format: "currency" }, { key: "leads", label: "Leads" }, { key: "issuedLeads", label: "Appointments" }, { key: "soldJobs", label: "Sold Jobs" }, { key: "revenue", label: "Revenue", format: "currency" }, { key: "costPerLead", label: "Cost / Lead", format: "currency" }, { key: "costPerIssuedLead", label: "Cost / Booked Appt", format: "currency" }, { key: "roas", label: "ROAS", format: "ratio" }, { key: "closeRate", label: "Close Rate", format: "percent" }] };
   if (tableId === "design_consultant_performance") return { description: "Appointments, sold jobs, and revenue output by design consultant.", rows: report.dashboard?.designConsultantPerformance ?? [], columns: [{ key: "designConsultant", label: "Design Consultant" }, { key: "appointments", label: "Appointments" }, { key: "soldJobs", label: "Sold Jobs" }, { key: "revenue", label: "Revenue", format: "currency" }, { key: "closeRate", label: "Close Rate", format: "percent" }, { key: "averageJobSize", label: "Avg Job Size", format: "currency" }, { key: "revenuePerAppointment", label: "Revenue / Appt", format: "currency" }] };
@@ -1153,7 +1204,7 @@ function normalizeSections(sections?: any[]) {
 
 function fromStoredReport(report: any, ruleSet: any) {
   if (!report) return null;
-  return { reportId: report.id, createdAt: report.created_at, ruleSet, sourceSnapshot: report.source_snapshot ?? {}, totals: report.totals ?? {}, breakdowns: report.breakdowns ?? {}, executiveSummary: report.detail?.executiveSummary ?? [], configuredMetrics: report.detail?.configuredMetrics ?? [], unmatched: report.detail?.unmatched ?? {}, dashboard: report.detail?.dashboard ?? {}, comparison: report.detail?.comparison ?? null };
+  return { reportId: report.id, createdAt: report.created_at, ruleSet, sourceSnapshot: report.source_snapshot ?? {}, totals: report.totals ?? {}, breakdowns: report.breakdowns ?? {}, executiveSummary: report.detail?.executiveSummary ?? [], configuredMetrics: report.detail?.configuredMetrics ?? [], unmatched: report.detail?.unmatched ?? {}, dashboard: report.detail?.dashboard ?? {}, debug: report.detail?.debug ?? null, comparison: report.detail?.comparison ?? null };
 }
 
 function providerLabel(provider: string) {
