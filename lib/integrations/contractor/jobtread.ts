@@ -383,8 +383,10 @@ function normalizeJob(job: any) {
   const approvedOrderRevenueSum = revenueFromApprovedOrdersSum(documents);
   const projectedRevenue = toNumber(job.projectedPrice ?? null);
   const projectedRevenueWithTax = toNumber(job.projectedPriceWithTax ?? null);
-  const customFieldRevenue = approvedOrdersFromFields(fields);
-  const accountFieldRevenue = approvedOrdersFromFields(accountFields);
+  const customApprovedOrders = approvedOrdersFromFields(fields);
+  const accountApprovedOrders = approvedOrdersFromFields(accountFields);
+  const customFieldRevenue = customApprovedOrders.value;
+  const accountFieldRevenue = accountApprovedOrders.value;
   const revenue = customFieldRevenue || accountFieldRevenue || 0;
   const jobStatus = firstField(fields, ["status", "job_status", "appointment_result"]);
   const customerStatus = firstField(accountFields, ["customer_status", "status"]);
@@ -414,6 +416,10 @@ function normalizeJob(job: any) {
     projectedRevenueWithTax,
     customFieldRevenue,
     accountFieldRevenue,
+    customApprovedOrdersKey: customApprovedOrders.key,
+    accountApprovedOrdersKey: accountApprovedOrders.key,
+    customApprovedOrdersCandidates: customApprovedOrders.candidates,
+    accountApprovedOrdersCandidates: accountApprovedOrders.candidates,
     approvedOrderDocumentCount: approvedOrderDocuments(documents).length,
     approvedOrderAmounts: approvedOrderDocuments(documents)
       .map((doc) => toNumber(doc?.priceWithTax ?? doc?.price ?? doc?.amountPaid))
@@ -476,7 +482,57 @@ function revenueFromFields(fields: Record<string, string>) {
 }
 
 function approvedOrdersFromFields(fields: Record<string, string>) {
-  return toNumber(firstField(fields, ["approved_orders"]));
+  const exactMatch = firstExistingField(fields, [
+    "approved_orders",
+    "approved_order",
+    "approved_orders_total",
+    "approved_order_total",
+    "approved_orders_amount",
+    "approved_order_amount",
+    "approved_order_value",
+    "approved_orders_value",
+  ]);
+
+  if (exactMatch) {
+    return {
+      key: exactMatch.key,
+      value: toNumber(exactMatch.value),
+      candidates: `${exactMatch.key}=${exactMatch.value}`,
+    };
+  }
+
+  const fuzzyMatches = Object.entries(fields)
+    .filter(([key, value]) => {
+      if (!value) return false;
+      if (!/approved/.test(key) || !/order/.test(key)) return false;
+      return /amount|total|value|price|revenue/.test(key) || key === "approved_orders";
+    })
+    .map(([key, value]) => ({ key, value, numeric: toNumber(value) }))
+    .filter((entry) => entry.numeric > 0)
+    .sort((left, right) => right.numeric - left.numeric);
+
+  if (fuzzyMatches.length) {
+    return {
+      key: fuzzyMatches[0].key,
+      value: fuzzyMatches[0].numeric,
+      candidates: fuzzyMatches.map((entry) => `${entry.key}=${entry.value}`).join(" | "),
+    };
+  }
+
+  return {
+    key: null,
+    value: 0,
+    candidates: "",
+  };
+}
+
+function firstExistingField(fields: Record<string, string>, names: string[]) {
+  for (const name of names) {
+    if (fields[name]) {
+      return { key: name, value: fields[name] };
+    }
+  }
+  return null;
 }
 
 function revenueFromApprovedOrders(documents: any[]) {
