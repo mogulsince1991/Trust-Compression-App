@@ -377,7 +377,8 @@ function normalizeJob(job: any) {
   const fields = customFieldMap(job.customFieldValues?.nodes ?? []);
   const accountFields = customFieldMap(job.location?.account?.customFieldValues?.nodes ?? []);
   const documents = Array.isArray(job.documents?.nodes) ? job.documents.nodes : [];
-  const { soldDate, soldDateSource } = readSoldDate(fields, documents);
+  const { soldDate: directSoldDate, soldDateSource } = readSoldDate(fields);
+  const approvedOrderSoldDate = soldDateFromApprovedOrders(documents);
   const revenue =
     revenueFromApprovedOrders(documents) ||
     toNumber(job.projectedPriceWithTax ?? job.projectedPrice) ||
@@ -397,7 +398,9 @@ function normalizeJob(job: any) {
     appointmentDate: job.createdAt ?? null,
     createdAt: job.createdAt ?? null,
     closedOn: job.closedOn ?? null,
-    soldDate,
+    soldDate: directSoldDate,
+    jobSoldDate: directSoldDate,
+    approvedOrderSoldDate,
     soldDateSource,
     status,
     projectType: firstField(fields, ["job_type_category", "project_type", "job_type", "category", "type"]),
@@ -413,7 +416,7 @@ function normalizeJob(job: any) {
   };
 }
 
-function readSoldDate(fields: Record<string, string>, documents: any[]) {
+function readSoldDate(fields: Record<string, string>) {
   const direct = firstField(fields, ["job_sold_date", "job_sold", "sold_date", "date_sold", "sale_date"]);
   if (direct) return { soldDate: direct, soldDateSource: "custom_field" };
 
@@ -424,11 +427,6 @@ function readSoldDate(fields: Record<string, string>, documents: any[]) {
   });
 
   if (fallbackKey) return { soldDate: fields[fallbackKey], soldDateSource: fallbackKey };
-
-  const approvedOrderSoldDate = soldDateFromApprovedOrders(documents);
-  if (approvedOrderSoldDate) {
-    return { soldDate: approvedOrderSoldDate, soldDateSource: "approved_order" };
-  }
 
   return { soldDate: null, soldDateSource: null };
 }

@@ -157,7 +157,7 @@ export const DEFAULT_CONTRACTOR_DATASETS: ContractorDatasetDefinition[] = [
     rowGrain: "One JobTread job.",
     dateField: "appointmentDate",
     description: "Raw JobTread jobs with appointmentDate normalized from createdAt.",
-    fields: ["id", "jobNumber", "customer", "email", "phone", "appointmentDate", "soldDate", "status", "projectType", "revenue", "netSales", "designConsultant", "projectManager", "source", "campaign", "notesSummary"],
+    fields: ["id", "jobNumber", "customer", "email", "phone", "appointmentDate", "soldDate", "jobSoldDate", "approvedOrderSoldDate", "soldDateSource", "status", "projectType", "revenue", "netSales", "designConsultant", "projectManager", "source", "campaign", "notesSummary"],
     isSystem: true,
   },
   {
