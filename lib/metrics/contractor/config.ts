@@ -107,6 +107,7 @@ export type ContractorRuleSetRecord = {
       conditions: ContractorCondition[];
       statuses: string[];
       soldDateFields: string[];
+      revenueFields: string[];
       cancelledPattern: string;
     };
     closingOutcomeRules: Array<{ reason: string; pattern: string; description: string }>;
@@ -412,6 +413,16 @@ export const DEFAULT_CONTRACTOR_RULE_SET: ContractorRuleSetRecord = {
       ],
       statuses: [],
       soldDateFields: ["soldDate", "jobSoldDate", "Sold Date"],
+      revenueFields: [
+        "approved_orders",
+        "approved_order",
+        "approved_orders_total",
+        "approved_order_total",
+        "approved_orders_amount",
+        "approved_order_amount",
+        "approved_order_value",
+        "approved_orders_value",
+      ],
       cancelledPattern: "cancel",
     },
     closingOutcomeRules: [
@@ -499,6 +510,7 @@ export function toRuntimeMetricRules(ruleSet?: Partial<ContractorRuleSetRecord> 
       soldJob: {
         statuses: current.classifications?.soldJob?.statuses ?? base.classifications.soldJob.statuses,
         soldDateFields: current.classifications?.soldJob?.soldDateFields ?? base.classifications.soldJob.soldDateFields,
+        revenueFields: current.classifications?.soldJob?.revenueFields ?? base.classifications.soldJob.revenueFields,
         cancelledPattern: current.classifications?.soldJob?.cancelledPattern ?? base.classifications.soldJob.cancelledPattern,
       },
       paidVendorAliases: current.classifications?.paidVendorAliases ?? base.classifications.paidVendorAliases,
@@ -535,6 +547,14 @@ export function normalizeStoredRuleSet(row: any): ContractorRuleSetRecord {
     classifications: {
       ...base.classifications,
       ...(row?.classifications ?? {}),
+      sourceBucket: {
+        ...base.classifications.sourceBucket,
+        ...(row?.classifications?.sourceBucket ?? {}),
+      },
+      soldJob: {
+        ...base.classifications.soldJob,
+        ...(row?.classifications?.soldJob ?? {}),
+      },
     },
     metricDefinitions: storedMetrics,
     groupedMetricSets: storedGroupedSets,

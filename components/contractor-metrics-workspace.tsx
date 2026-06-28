@@ -510,6 +510,19 @@ export function ContractorMetricsWorkspace() {
     }));
   }
 
+  function updateSoldJobConfig(patch: AnyRecord) {
+    updateRuleSet((current) => ({
+      ...current,
+      classifications: {
+        ...current.classifications,
+        soldJob: {
+          ...current.classifications?.soldJob,
+          ...patch,
+        },
+      },
+    }));
+  }
+
   if (loading) {
     return (
       <main className={styles.screen}>
@@ -769,6 +782,48 @@ export function ContractorMetricsWorkspace() {
               ))}
             </div>
           </Panel>
+
+          <section className={styles.controlGrid}>
+            <Panel title="Sold job rule" icon={<Database />}>
+              <div className={styles.formGrid}>
+                <TextAreaField
+                  label="Sold date field priority"
+                  value={(ruleSetDraft.classifications?.soldJob?.soldDateFields ?? []).join("\n")}
+                  onChange={(value) => updateSoldJobConfig({ soldDateFields: parseLines(value) })}
+                />
+                <TextAreaField
+                  label="Revenue field priority"
+                  value={(ruleSetDraft.classifications?.soldJob?.revenueFields ?? []).join("\n")}
+                  onChange={(value) => updateSoldJobConfig({ revenueFields: parseLines(value) })}
+                />
+                <Field
+                  label="Cancelled status pattern"
+                  value={ruleSetDraft.classifications?.soldJob?.cancelledPattern ?? ""}
+                  onChange={(value) => updateSoldJobConfig({ cancelledPattern: value })}
+                />
+              </div>
+              <p className={styles.copy}>
+                Revenue resolves from these JobTread columns in order. Blank rows fall through to the next configured field.
+              </p>
+            </Panel>
+
+            <Panel title="Current rule snapshot" icon={<Info />}>
+              <div className={styles.reportList}>
+                <div className={styles.reportRow}>
+                  <strong>Sold date fields</strong>
+                  <small>{(ruleSetDraft.classifications?.soldJob?.soldDateFields ?? []).join(", ") || "None"}</small>
+                </div>
+                <div className={styles.reportRow}>
+                  <strong>Revenue fields</strong>
+                  <small>{(ruleSetDraft.classifications?.soldJob?.revenueFields ?? []).join(", ") || "None"}</small>
+                </div>
+                <div className={styles.reportRow}>
+                  <strong>Cancelled pattern</strong>
+                  <small>{ruleSetDraft.classifications?.soldJob?.cancelledPattern || "None"}</small>
+                </div>
+              </div>
+            </Panel>
+          </section>
 
           {selectedMetric ? (
             <Panel title="Metric placement" icon={<Database />}>
@@ -1263,6 +1318,13 @@ function clampPositiveInteger(value: string, fallback: number) {
 
 function clone<T>(value: T): T {
   return value == null ? value : JSON.parse(JSON.stringify(value));
+}
+
+function parseLines(value: string) {
+  return String(value ?? "")
+    .split(/\r?\n/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
 }
 
 function prettyLabel(value: string) {

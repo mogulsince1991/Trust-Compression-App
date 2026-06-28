@@ -388,6 +388,7 @@ function normalizeJob(job: any) {
   const customFieldRevenue = customApprovedOrders.value;
   const accountFieldRevenue = accountApprovedOrders.value;
   const revenue = customFieldRevenue || accountFieldRevenue || 0;
+  const resolvedRevenueField = customApprovedOrders.key ?? accountApprovedOrders.key ?? null;
   const jobStatus = firstField(fields, ["status", "job_status", "appointment_result"]);
   const customerStatus = firstField(accountFields, ["customer_status", "status"]);
   const status = jobStatus ?? customerStatus ?? statusFromDocuments(documents);
@@ -414,8 +415,11 @@ function normalizeJob(job: any) {
     approvedOrderRevenueSum,
     projectedRevenue,
     projectedRevenueWithTax,
+    customFields: fields,
+    accountFields,
     customFieldRevenue,
     accountFieldRevenue,
+    resolvedRevenueField,
     customApprovedOrdersKey: customApprovedOrders.key,
     accountApprovedOrdersKey: accountApprovedOrders.key,
     customApprovedOrdersCandidates: customApprovedOrders.candidates,
