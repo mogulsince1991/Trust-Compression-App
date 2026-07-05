@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { JourneyViewer, type PublicJourney } from "@/components/journey-viewer";
+import type { JourneyAssetType } from "@/lib/journey-embeds";
 import { createPublicSupabaseClient } from "@/lib/supabase";
 
 type SharePageProps = {
@@ -15,9 +16,19 @@ type JourneyRow = {
   cta_url: string | null;
 };
 
-type JourneyVideoRow = {
-  video_id: string;
+type JourneyAssetRow = {
+  id: string;
+  video_id: string | null;
+  asset_type: JourneyAssetType;
+  source_platform: string;
+  title: string;
+  source_url: string | null;
+  embed_url: string | null;
+  thumbnail_url: string | null;
+  summary: string | null;
+  note: string | null;
   position: number;
+  metadata: Record<string, unknown> | null;
 };
 
 type JourneySendRow = {
@@ -44,26 +55,28 @@ export default async function SharePage({ params }: SharePageProps) {
 
   const row = journey as JourneyRow;
   const { data: sequence, error: sequenceError } = await supabase
-    .from("journey_videos")
-    .select("video_id,position")
+    .from("journey_assets")
+    .select("id,video_id,asset_type,source_platform,title,source_url,embed_url,thumbnail_url,summary,note,position,metadata")
     .eq("journey_id", row.id)
     .order("position", { ascending: true });
 
   if (sequenceError || !sequence?.length) notFound();
 
-  const orderedRows = sequence as JourneyVideoRow[];
-  const ids = orderedRows.map((item) => item.video_id);
-  const { data: videos, error: videosError } = await supabase
-    .from("videos")
-    .select("id,title,summary,source_platform,source_url,embed_url,thumbnail_url,duration_seconds")
-    .in("id", ids);
-
-  if (videosError || !videos?.length) notFound();
-
-  const videoMap = new Map((videos as PublicJourney["videos"]).map((video) => [video.id, video]));
-  const orderedVideos = orderedRows.map((item) => videoMap.get(item.video_id)).filter(Boolean) as PublicJourney["videos"];
-
-  if (!orderedVideos.length) notFound();
+  const orderedAssets = (sequence as JourneyAssetRow[]).map((item) => ({
+    id: item.id,
+    videoId: item.video_id,
+    assetType: item.asset_type,
+    sourcePlatform: item.source_platform,
+    title: item.title,
+    sourceUrl: item.source_url,
+    embedUrl: item.embed_url,
+    thumbnailUrl: item.thumbnail_url,
+    durationSeconds: null,
+    summary: item.summary,
+    note: item.note,
+    position: item.position,
+    metadata: item.metadata
+  }));
 
   return (
     <JourneyViewer
@@ -77,7 +90,7 @@ export default async function SharePage({ params }: SharePageProps) {
         send_id: send?.id ?? null,
         contact_id: send?.contact_id ?? null,
         share_token: params.token,
-        videos: orderedVideos
+        assets: orderedAssets
       }}
     />
   );
