@@ -31,6 +31,7 @@ export async function DELETE(request: Request, { params }: RouteContext) {
 
     if (lookupError || !archivedVideo) return NextResponse.json({ error: "Archive the video before permanently deleting it." }, { status: 409 });
 
+    await supabase.from("journey_assets").delete().eq("video_id", params.id);
     await supabase.from("journey_videos").delete().eq("video_id", params.id);
     await supabase.from("video_source_links").delete().eq("video_id", params.id);
     await supabase.from("duplicate_candidates").delete().or(`primary_video_id.eq.${params.id},candidate_video_id.eq.${params.id}`);

@@ -17,12 +17,15 @@ import { useState } from "react";
 import {
   buildOptions,
   formatDuration,
+  formatJourneyAssetLabel,
   formatPlatformLabel,
   formatPublishedLabel,
   type ContactRow,
   type DbVideo,
   type FolderRow,
+  type JourneyAsset,
   type JourneyDraft,
+  type JourneyEmbedDraft,
   type JourneySummary,
   type SmartGroup,
   type VideoContext
@@ -85,7 +88,7 @@ export function LibraryConfigurator({
 export function JourneysView({
   journeys,
   folders,
-  draftVideos,
+  draftAssets,
   groups,
   videos,
   shareUrl,
@@ -94,7 +97,7 @@ export function JourneysView({
 }: {
   journeys: JourneySummary[];
   folders: FolderRow[];
-  draftVideos: DbVideo[];
+  draftAssets: JourneyAsset[];
   groups: SmartGroup[];
   videos: DbVideo[];
   shareUrl?: string;
@@ -114,7 +117,7 @@ export function JourneysView({
               <span>{folders.find((folder) => folder.id === journey.folderId)?.name ?? "Unfoldered"}</span>
               <strong>{journey.title}</strong>
               <small>
-                {journey.videoIds.length} videos / {journey.isPublic ? "Published" : "Draft"}
+                {journey.assets.length} assets / {journey.isPublic ? "Published" : "Draft"}
               </small>
             </div>
             <button className="text-button compact" onClick={() => onEdit(journey)}>
@@ -123,20 +126,23 @@ export function JourneysView({
           </article>
         ))}
       </aside>
-      <SequenceView title={draftVideos.length ? "Current journey" : "Journey draft"} groups={groups} videos={draftVideos.length ? draftVideos : videos.slice(0, 6)} onAdd={onAdd} shareUrl={shareUrl} />
+      <SequenceView title={draftAssets.length ? "Current journey" : "Journey draft"} groups={groups} videos={draftAssets.length ? draftAssets.filter((asset) => asset.videoId).map((asset) => videos.find((video) => video.id === asset.videoId)).filter(Boolean) as DbVideo[] : videos.slice(0, 6)} onAdd={onAdd} shareUrl={shareUrl} />
     </section>
   );
 }
 
 export function JourneyTray({
   draft,
-  videos,
+  assets,
+  embedDraft,
   working,
   shareUrl,
   contacts,
   selectedJourneyId,
   options,
   onDraftChange,
+  onEmbedDraftChange,
+  onAddEmbed,
   onGenerate,
   onPublish,
   onMove,
@@ -144,17 +150,20 @@ export function JourneyTray({
   onCreateContactShare
 }: {
   draft: JourneyDraft;
-  videos: DbVideo[];
+  assets: JourneyAsset[];
+  embedDraft: JourneyEmbedDraft;
   working: boolean;
   shareUrl: string;
   contacts: ContactRow[];
   selectedJourneyId: string | null;
   options: ReturnType<typeof buildOptions>;
   onDraftChange: (draft: JourneyDraft) => void;
+  onEmbedDraftChange: (draft: JourneyEmbedDraft) => void;
+  onAddEmbed: () => void;
   onGenerate: () => void;
   onPublish: () => void;
-  onMove: (videoId: string, direction: -1 | 1) => void;
-  onRemove: (videoId: string) => void;
+  onMove: (assetId: string, direction: -1 | 1) => void;
+  onRemove: (assetId: string) => void;
   onCreateContactShare: (contact: {
     contactId?: string;
     name?: string;
@@ -174,7 +183,7 @@ export function JourneyTray({
     <aside className={open ? "journey-tray is-open" : "journey-tray"}>
       <button className="tray-tab" onClick={() => setOpen((current) => !current)}>
         <Route />
-        <span>{open ? "Close journey builder" : `${videos.length} in journey`}</span>
+        <span>{open ? "Close journey builder" : `${assets.length} in journey`}</span>
       </button>
       <div className="tray-body">
         <Datalists options={options} />
@@ -202,6 +211,20 @@ export function JourneyTray({
         </label>
         <div className="brief-grid">
           <label>
+            <span>Embedded asset title</span>
+            <input value={embedDraft.title} onChange={(event) => onEmbedDraftChange({ ...embedDraft, title: event.target.value })} placeholder="Proposal, Google Doc, PDF, Drive file..." />
+          </label>
+          <label>
+            <span>Cloud asset URL</span>
+            <input value={embedDraft.url} onChange={(event) => onEmbedDraftChange({ ...embedDraft, url: event.target.value })} placeholder="Paste a public Google Doc, PDF, Drive file, Office doc, or embed URL" />
+          </label>
+        </div>
+        <button className="text-button compact" type="button" disabled={working || !embedDraft.url.trim()} onClick={onAddEmbed}>
+          <Plus />
+          Add embedded asset
+        </button>
+        <div className="brief-grid">
+          <label>
             <span>CTA</span>
             <input value={draft.ctaLabel} onChange={(event) => onDraftChange({ ...draft, ctaLabel: event.target.value })} />
           </label>
@@ -211,28 +234,31 @@ export function JourneyTray({
           </label>
         </div>
         <div className="tray-list">
-          {videos.map((video, index) => (
-            <article className="tray-item" key={video.id}>
+          {assets.map((asset, index) => (
+            <article className="tray-item" key={asset.id}>
               <span>{index + 1}</span>
-              <strong>{video.title}</strong>
-              <button className="icon-mini" disabled={index === 0} onClick={() => onMove(video.id, -1)} aria-label="Move up">
+              <div className="tray-item-copy">
+                <strong>{asset.title}</strong>
+                <small>{formatJourneyAssetLabel(asset)}</small>
+              </div>
+              <button className="icon-mini" disabled={index === 0} onClick={() => onMove(asset.id, -1)} aria-label="Move up">
                 <ChevronUp />
               </button>
-              <button className="icon-mini" disabled={index === videos.length - 1} onClick={() => onMove(video.id, 1)} aria-label="Move down">
+              <button className="icon-mini" disabled={index === assets.length - 1} onClick={() => onMove(asset.id, 1)} aria-label="Move down">
                 <ChevronDown />
               </button>
-              <button className="icon-mini" onClick={() => onRemove(video.id)} aria-label="Remove video">
+              <button className="icon-mini" onClick={() => onRemove(asset.id)} aria-label="Remove asset">
                 <Trash2 />
               </button>
             </article>
           ))}
         </div>
         <div className="tray-actions">
-          <button className="seed-button" disabled={working || !videos.length} onClick={onGenerate}>
+          <button className="seed-button" disabled={working || !assets.some((asset) => asset.videoId)} onClick={onGenerate}>
             {working ? <Loader2 className="spin" /> : <Wand2 />}
             Generate
           </button>
-          <button className="wide-action" disabled={working || !videos.length} onClick={onPublish}>
+          <button className="wide-action" disabled={working || !assets.length} onClick={onPublish}>
             {working ? <Loader2 className="spin" /> : <Share2 />}
             {selectedJourneyId ? "Update" : "Publish"}
           </button>

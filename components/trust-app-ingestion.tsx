@@ -22,8 +22,10 @@ import { SocialProfileReportPage } from "@/components/social-profile-report-page
 import { LinkTrackingView, MetricsView } from "@/components/trust-app-attribution-ui";
 import { JourneyTray, JourneysView, LibraryConfigurator } from "@/components/trust-app-library-ui";
 import { SocialProfilesView } from "@/components/trust-app-social-profiles";
+import { normalizeJourneyEmbed } from "@/lib/journey-embeds";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 import {
+  buildJourneyAssetFromVideo,
   buildOptions,
   buildSmartGroups,
   filterVideos,
@@ -33,7 +35,9 @@ import {
   type ContactRow,
   type DbVideo,
   type FolderRow,
+  type JourneyAsset,
   type JourneyDraft,
+  type JourneyEmbedDraft,
   type JourneySummary,
   type JourneyViewRow,
   type LibraryFilters,
@@ -75,6 +79,11 @@ const emptyTrackingDraft: TrackingDraft = {
   title: "",
   destinationUrl: "",
   journeyId: ""
+};
+
+const emptyJourneyEmbedDraft: JourneyEmbedDraft = {
+  title: "",
+  url: ""
 };
 
 const emptySocialProfileDraft: SocialProfileDraft = {
@@ -158,8 +167,9 @@ export function TrustAppIngestion({
   const [loading, setLoading] = useState(true);
   const [workspaceBooted, setWorkspaceBooted] = useState(false);
   const [working, setWorking] = useState(false);
-  const [draftVideos, setDraftVideos] = useState<DbVideo[]>([]);
+  const [draftAssets, setDraftAssets] = useState<JourneyAsset[]>([]);
   const [draft, setDraft] = useState<JourneyDraft>(emptyDraft);
+  const [journeyEmbedDraft, setJourneyEmbedDraft] = useState<JourneyEmbedDraft>(emptyJourneyEmbedDraft);
   const [trackingDraft, setTrackingDraft] = useState<TrackingDraft>(emptyTrackingDraft);
   const [socialProfileDraft, setSocialProfileDraft] = useState<SocialProfileDraft>(emptySocialProfileDraft);
   const [journeyWorking, setJourneyWorking] = useState(false);
@@ -315,7 +325,7 @@ export function TrustAppIngestion({
       setMetrics({ views: [] });
       return;
     }
-    const { data } = await supabase.from("journey_views").select("id,journey_id,video_id,event_type,viewer_label,metadata,created_at").in("journey_id", journeyIds).order("created_at", { ascending: false });
+    const { data } = await supabase.from("journey_views").select("id,journey_id,video_id,asset_id,event_type,viewer_label,metadata,created_at").in("journey_id", journeyIds).order("created_at", { ascending: false });
     setMetrics({ views: (data ?? []) as JourneyViewRow[] });
   }
 
@@ -410,6 +420,9 @@ export function TrustAppIngestion({
       const result = (await response.json()) as { video?: DbVideo; error?: string };
       if (!response.ok || !result.video) throw new Error(result.error ?? "Could not save context.");
       setVideos((current) => current.map((item) => (item.id === video.id ? result.video! : item)));
+      setDraftAssets((current) =>
+        current.map((item) => (item.videoId === video.id ? buildJourneyAssetFromVideo(result.video!, item.position) : item))
+      );
       setSelected(result.video);
       setNotice("Video context saved and searchable.");
     } catch (nextError) {
@@ -428,7 +441,7 @@ export function TrustAppIngestion({
       const result = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(result.error ?? "Could not archive video.");
       setVideos((current) => current.filter((item) => item.id !== video.id));
-      setDraftVideos((current) => current.filter((item) => item.id !== video.id));
+      setDraftAssets((current) => current.filter((item) => item.videoId !== video.id));
       setSelected((current) => (current?.id === video.id ? videos.find((item) => item.id !== video.id) ?? null : current));
       setNotice("Video archived. Existing journey metrics remain intact.");
     } catch (nextError) {
@@ -439,26 +452,58 @@ export function TrustAppIngestion({
   }
 
   function addToJourney(video: DbVideo) {
-    setDraftVideos((current) => (current.some((item) => item.id === video.id) ? current : [...current, video]));
+    setDraftAssets((current) => {
+      if (current.some((item) => item.videoId === video.id)) return current;
+      return [...current, buildJourneyAssetFromVideo(video, current.length + 1)].map((item, index) => ({ ...item, position: index + 1 }));
+    });
     if (!draft.title) {
       setDraft((currentDraft) => ({ ...currentDraft, title: "Proof journey", heading: "A focused path through the videos that matter most.", description: "Watch these in order for a clearer view of the proof, questions, and next step." }));
     }
     setNotice(`Added "${video.title}" to the journey draft.`);
   }
 
-  function removeFromJourney(videoId: string) {
-    setDraftVideos((current) => current.filter((video) => video.id !== videoId));
+  function addEmbeddedAsset() {
+    try {
+      const normalized = normalizeJourneyEmbed({ url: journeyEmbedDraft.url, title: journeyEmbedDraft.title });
+      const nextAsset: JourneyAsset = {
+        id: crypto.randomUUID(),
+        videoId: null,
+        assetType: normalized.assetType as JourneyAsset["assetType"],
+        sourcePlatform: normalized.sourcePlatform,
+        title: normalized.title,
+        sourceUrl: normalized.sourceUrl,
+        embedUrl: normalized.embedUrl,
+        thumbnailUrl: normalized.thumbnailUrl,
+        durationSeconds: null,
+        summary: null,
+        note: null,
+        position: draftAssets.length + 1,
+        metadata: normalized.metadata
+      };
+      setDraftAssets((current) => [...current, nextAsset].map((item, index) => ({ ...item, position: index + 1 })));
+      setJourneyEmbedDraft(emptyJourneyEmbedDraft);
+      if (!draft.title) {
+        setDraft((currentDraft) => ({ ...currentDraft, title: "Proof journey", heading: "A focused proof path through the assets that matter most.", description: "Swipe through the strongest proof, documents, and supporting material in sequence." }));
+      }
+      setNotice(`Added "${normalized.title}" to the journey draft.`);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not add that asset.");
+    }
   }
 
-  function moveDraftVideo(videoId: string, direction: -1 | 1) {
-    setDraftVideos((current) => {
-      const index = current.findIndex((video) => video.id === videoId);
+  function removeFromJourney(assetId: string) {
+    setDraftAssets((current) => current.filter((asset) => asset.id !== assetId).map((item, index) => ({ ...item, position: index + 1 })));
+  }
+
+  function moveDraftAsset(assetId: string, direction: -1 | 1) {
+    setDraftAssets((current) => {
+      const index = current.findIndex((asset) => asset.id === assetId);
       const nextIndex = index + direction;
       if (index < 0 || nextIndex < 0 || nextIndex >= current.length) return current;
       const next = [...current];
       const [item] = next.splice(index, 1);
       next.splice(nextIndex, 0, item);
-      return next;
+      return next.map((asset, assetIndex) => ({ ...asset, position: assetIndex + 1 }));
     });
   }
 
@@ -472,7 +517,7 @@ export function TrustAppIngestion({
       ctaUrl: journey.ctaUrl ?? "",
       folderName: folders.find((folder) => folder.id === journey.folderId)?.name ?? ""
     });
-    setDraftVideos(journey.videoIds.map((id) => videos.find((video) => video.id === id)).filter(Boolean) as DbVideo[]);
+    setDraftAssets(journey.assets);
     setShareUrl(journey.shareUrl ?? "");
     setView("journeys");
     setNotice("Editing saved journey.");
@@ -481,12 +526,14 @@ export function TrustAppIngestion({
   function newJourney() {
     setSelectedJourneyId(null);
     setDraft(emptyDraft);
-    setDraftVideos([]);
+    setDraftAssets([]);
+    setJourneyEmbedDraft(emptyJourneyEmbedDraft);
     setShareUrl("");
     setView("journeys");
   }
 
   async function generateJourney() {
+    const draftVideos = draftAssets.filter((asset) => asset.videoId).map((asset) => videos.find((video) => video.id === asset.videoId)).filter(Boolean) as DbVideo[];
     if (!draftVideos.length) return;
     setJourneyWorking(true);
     setNotice("");
@@ -497,7 +544,15 @@ export function TrustAppIngestion({
       if (!response.ok) throw new Error("Could not generate journey copy.");
       setDraft((current) => ({ ...current, title: result.title || current.title, heading: result.heading || current.heading, description: result.description || current.description, ctaLabel: result.ctaLabel || current.ctaLabel }));
       if (Array.isArray(result.orderedTitles)) {
-        setDraftVideos((current) => [...current].sort((a, b) => ((result.orderedTitles?.indexOf(a.title) ?? 999) < 0 ? 999 : result.orderedTitles?.indexOf(a.title) ?? 999) - ((result.orderedTitles?.indexOf(b.title) ?? 999) < 0 ? 999 : result.orderedTitles?.indexOf(b.title) ?? 999)));
+        setDraftAssets((current) =>
+          [...current]
+            .sort((a, b) => {
+              const aRank = a.videoId ? result.orderedTitles?.indexOf(a.title) ?? 999 : 999;
+              const bRank = b.videoId ? result.orderedTitles?.indexOf(b.title) ?? 999 : 999;
+              return (aRank < 0 ? 999 : aRank) - (bRank < 0 ? 999 : bRank);
+            })
+            .map((item, index) => ({ ...item, position: index + 1 }))
+        );
       }
       setNotice(result.source === "rules" ? "Organized with the no-AI fallback." : "AI generated the journey copy and order.");
     } catch (nextError) {
@@ -508,12 +563,29 @@ export function TrustAppIngestion({
   }
 
   async function publishJourney() {
-    if (!workspaceId || !session || !draftVideos.length) return;
+    if (!workspaceId || !session || !draftAssets.length) return;
     setJourneyWorking(true);
     setNotice("");
     setError("");
     try {
-      const body = { workspaceId, ...draft, videoIds: draftVideos.map((video) => video.id), publish: true };
+      const body = {
+        workspaceId,
+        ...draft,
+        assets: draftAssets.map((asset) => ({
+          videoId: asset.videoId,
+          assetType: asset.assetType,
+          sourcePlatform: asset.sourcePlatform,
+          title: asset.title,
+          sourceUrl: asset.sourceUrl,
+          embedUrl: asset.embedUrl,
+          thumbnailUrl: asset.thumbnailUrl,
+          durationSeconds: asset.durationSeconds,
+          summary: asset.summary,
+          note: asset.note,
+          metadata: asset.metadata
+        })),
+        publish: true
+      };
       const response = await fetch(selectedJourneyId ? `/api/journeys/${selectedJourneyId}` : "/api/journeys", { method: selectedJourneyId ? "PATCH" : "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` }, body: JSON.stringify(body) });
       const result = (await response.json()) as { id?: string; shareUrl?: string; error?: string };
       if (!response.ok || !result.shareUrl) throw new Error(result.error ?? "Could not publish the journey.");
@@ -809,8 +881,8 @@ export function TrustAppIngestion({
         )}
         {view === "tracking" && <LinkTrackingView draft={trackingDraft} journeys={journeys} tracking={tracking} working={trackingWorking} onDraftChange={setTrackingDraft} onCreate={createTrackingLink} />}
         {view === "metrics" && <MetricsView metrics={metrics} videos={videos} sources={sources} journeys={journeys} contacts={contacts} tracking={tracking} />}
-        {view === "journeys" && <JourneysView journeys={journeys} folders={folders} draftVideos={draftVideos} groups={smartGroups} videos={visibleVideos} shareUrl={shareUrl} onEdit={editJourney} onAdd={addToJourney} />}
-        {isInternal && <JourneyTray draft={draft} videos={draftVideos} working={journeyWorking} shareUrl={shareUrl} contacts={contacts} selectedJourneyId={selectedJourneyId} options={options} onDraftChange={setDraft} onGenerate={generateJourney} onPublish={publishJourney} onMove={moveDraftVideo} onRemove={removeFromJourney} onCreateContactShare={createContactShare} />}
+        {view === "journeys" && <JourneysView journeys={journeys} folders={folders} draftAssets={draftAssets} groups={smartGroups} videos={visibleVideos} shareUrl={shareUrl} onEdit={editJourney} onAdd={addToJourney} />}
+        {isInternal && <JourneyTray draft={draft} assets={draftAssets} embedDraft={journeyEmbedDraft} working={journeyWorking} shareUrl={shareUrl} contacts={contacts} selectedJourneyId={selectedJourneyId} options={options} onDraftChange={setDraft} onEmbedDraftChange={setJourneyEmbedDraft} onAddEmbed={addEmbeddedAsset} onGenerate={generateJourney} onPublish={publishJourney} onMove={moveDraftAsset} onRemove={removeFromJourney} onCreateContactShare={createContactShare} />}
       </main>
     </div>
   );

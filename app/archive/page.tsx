@@ -21,6 +21,22 @@ type JourneyVideo = {
   durationSeconds: number | null;
 };
 
+type JourneyAsset = {
+  id: string;
+  videoId: string | null;
+  assetType: string;
+  sourcePlatform: string;
+  title: string;
+  sourceUrl: string | null;
+  embedUrl: string | null;
+  thumbnailUrl: string | null;
+  durationSeconds: number | null;
+  summary: string | null;
+  note: string | null;
+  position: number;
+  metadata: Record<string, unknown> | null;
+};
+
 type ManagedJourney = {
   id: string;
   title: string;
@@ -33,6 +49,7 @@ type ManagedJourney = {
   createdAt: string;
   archivedAt: string | null;
   isPublic: boolean;
+  assets: JourneyAsset[];
   videos: JourneyVideo[];
 };
 
@@ -210,7 +227,24 @@ export default function ArchivePage() {
         Authorization: `Bearer ${session.access_token}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ workspaceId, ...editDraft, videoIds: editing.videos.map((video) => video.id), publish: true })
+      body: JSON.stringify({
+        workspaceId,
+        ...editDraft,
+        assets: editing.assets.map((asset) => ({
+          videoId: asset.videoId,
+          assetType: asset.assetType,
+          sourcePlatform: asset.sourcePlatform,
+          title: asset.title,
+          sourceUrl: asset.sourceUrl,
+          embedUrl: asset.embedUrl,
+          thumbnailUrl: asset.thumbnailUrl,
+          durationSeconds: asset.durationSeconds,
+          summary: asset.summary,
+          note: asset.note,
+          metadata: asset.metadata
+        })),
+        publish: true
+      })
     });
     const result = (await response.json().catch(() => ({}))) as { error?: string };
 

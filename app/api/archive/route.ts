@@ -43,14 +43,14 @@ export async function GET(request: Request) {
         .limit(80),
       dataSupabase
         .from("journeys")
-        .select("id,title,heading,description,cta_label,cta_url,share_token,folder_id,created_at,published_at,is_public,deleted_at,journey_videos(video_id,position,videos(id,title,thumbnail_url,source_platform,duration_seconds))")
+        .select("id,title,heading,description,cta_label,cta_url,share_token,folder_id,created_at,published_at,is_public,deleted_at,journey_assets(id,video_id,asset_type,source_platform,title,source_url,embed_url,thumbnail_url,summary,note,position,metadata,videos(id,title,thumbnail_url,source_platform,duration_seconds))")
         .eq("workspace_id", workspaceId)
         .not("deleted_at", "is", null)
         .order("deleted_at", { ascending: false })
         .limit(80),
       dataSupabase
         .from("journeys")
-        .select("id,title,heading,description,cta_label,cta_url,share_token,folder_id,created_at,published_at,is_public,deleted_at,journey_videos(video_id,position,videos(id,title,thumbnail_url,source_platform,duration_seconds))")
+        .select("id,title,heading,description,cta_label,cta_url,share_token,folder_id,created_at,published_at,is_public,deleted_at,journey_assets(id,video_id,asset_type,source_platform,title,source_url,embed_url,thumbnail_url,summary,note,position,metadata,videos(id,title,thumbnail_url,source_platform,duration_seconds))")
         .eq("workspace_id", workspaceId)
         .is("deleted_at", null)
         .order("created_at", { ascending: false })
@@ -121,7 +121,7 @@ function mapVideo(video: any) {
 }
 
 function mapJourney(journey: any, origin: string) {
-  const items = [...(journey.journey_videos ?? [])].sort((a, b) => a.position - b.position);
+  const items = [...(journey.journey_assets ?? [])].sort((a, b) => a.position - b.position);
   return {
     id: journey.id,
     title: journey.title,
@@ -136,13 +136,30 @@ function mapJourney(journey: any, origin: string) {
     publishedAt: journey.published_at,
     archivedAt: journey.deleted_at ?? null,
     isPublic: journey.is_public,
-    videoIds: items.map((item) => item.video_id),
-    videos: items.map((item) => ({
-      id: item.video_id,
-      title: item.videos?.title ?? "Untitled video",
-      thumbnailUrl: item.videos?.thumbnail_url ?? null,
-      sourcePlatform: item.videos?.source_platform ?? null,
-      durationSeconds: item.videos?.duration_seconds ?? null
-    }))
+    assets: items.map((item) => ({
+      id: item.id,
+      videoId: item.video_id ?? null,
+      assetType: item.asset_type,
+      sourcePlatform: item.source_platform,
+      title: item.title,
+      sourceUrl: item.source_url ?? null,
+      embedUrl: item.embed_url ?? null,
+      thumbnailUrl: item.thumbnail_url ?? item.videos?.thumbnail_url ?? null,
+      durationSeconds: item.videos?.duration_seconds ?? null,
+      summary: item.summary ?? null,
+      note: item.note ?? null,
+      position: item.position,
+      metadata: item.metadata ?? null
+    })),
+    videoIds: items.map((item) => item.video_id).filter(Boolean),
+    videos: items
+      .filter((item) => item.video_id)
+      .map((item) => ({
+        id: item.video_id,
+        title: item.videos?.title ?? item.title ?? "Untitled video",
+        thumbnailUrl: item.videos?.thumbnail_url ?? item.thumbnail_url ?? null,
+        sourcePlatform: item.videos?.source_platform ?? item.source_platform ?? null,
+        durationSeconds: item.videos?.duration_seconds ?? null
+      }))
   };
 }

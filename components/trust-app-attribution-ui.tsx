@@ -37,7 +37,7 @@ export function MetricsView({
   tracking: TrackingState;
 }) {
   const opens = metrics.views.filter((event) => event.event_type === "opened");
-  const starts = metrics.views.filter((event) => event.event_type === "video_started");
+  const starts = metrics.views.filter((event) => event.event_type === "video_started" || event.event_type === "asset_started");
   const ctas = metrics.views.filter((event) => event.event_type === "cta_clicked");
   const redirects = tracking.events.filter((event) => event.eventType === "redirect");
   const linkPageViews = tracking.events.filter((event) => event.eventType === "page_view");

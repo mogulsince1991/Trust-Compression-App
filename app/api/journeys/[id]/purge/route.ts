@@ -31,6 +31,7 @@ export async function DELETE(request: Request, { params }: RouteContext) {
 
     if (lookupError || !archivedJourney) return NextResponse.json({ error: "Archive the journey before permanently deleting it." }, { status: 409 });
 
+    await supabase.from("journey_assets").delete().eq("journey_id", params.id);
     await supabase.from("journey_videos").delete().eq("journey_id", params.id);
     await supabase.from("journey_sends").delete().eq("journey_id", params.id);
 
