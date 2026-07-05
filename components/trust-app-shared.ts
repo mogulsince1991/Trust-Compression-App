@@ -1,3 +1,5 @@
+import { formatJourneyAssetTypeLabel, type JourneyAssetType } from "@/lib/journey-embeds";
+
 export type DbVideo = {
   id: string;
   title: string;
@@ -16,6 +18,22 @@ export type DbVideo = {
   created_at: string | null;
   metadata: Record<string, any> | null;
   tags: string[];
+};
+
+export type JourneyAsset = {
+  id: string;
+  videoId: string | null;
+  assetType: JourneyAssetType;
+  sourcePlatform: string;
+  title: string;
+  sourceUrl: string | null;
+  embedUrl: string | null;
+  thumbnailUrl: string | null;
+  durationSeconds: number | null;
+  summary: string | null;
+  note: string | null;
+  position: number;
+  metadata: Record<string, any> | null;
 };
 
 export type SourceRow = {
@@ -40,6 +58,7 @@ export type JourneySummary = {
   isPublic: boolean;
   publishedAt: string | null;
   createdAt: string | null;
+  assets: JourneyAsset[];
   videoIds: string[];
 };
 
@@ -64,6 +83,7 @@ export type JourneyViewRow = {
   id: string;
   journey_id: string;
   video_id: string | null;
+  asset_id: string | null;
   event_type: string;
   viewer_label: string | null;
   metadata: Record<string, any> | null;
@@ -193,6 +213,11 @@ export type JourneyDraft = {
   ctaLabel: string;
   ctaUrl: string;
   folderName: string;
+};
+
+export type JourneyEmbedDraft = {
+  title: string;
+  url: string;
 };
 
 export type TrackingDraft = {
@@ -389,6 +414,33 @@ export function formatDuration(seconds: number | null) {
 
 export function formatPlatformLabel(value: string) {
   return value.replace(/_/g, " ");
+}
+
+export function formatJourneyAssetLabel(asset: JourneyAsset) {
+  if (asset.assetType === "video") return formatPlatformLabel(asset.sourcePlatform);
+  return formatJourneyAssetTypeLabel(asset.assetType);
+}
+
+export function isVideoJourneyAsset(asset: JourneyAsset) {
+  return asset.assetType === "video" && !!asset.videoId;
+}
+
+export function buildJourneyAssetFromVideo(video: DbVideo, position = 1): JourneyAsset {
+  return {
+    id: video.id,
+    videoId: video.id,
+    assetType: "video",
+    sourcePlatform: video.source_platform,
+    title: video.title,
+    sourceUrl: video.source_url,
+    embedUrl: video.embed_url,
+    thumbnailUrl: video.thumbnail_url,
+    durationSeconds: video.duration_seconds,
+    summary: video.summary,
+    note: null,
+    position,
+    metadata: video.metadata
+  };
 }
 
 export function formatSourceStatus(value: string | null) {
