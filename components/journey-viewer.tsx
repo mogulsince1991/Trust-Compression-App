@@ -4,17 +4,7 @@ import { createBrowserSupabaseClient } from "@/lib/supabase";
 import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-
-type JourneyVideo = {
-  id: string;
-  title: string;
-  summary: string | null;
-  source_platform: string;
-  source_url: string | null;
-  embed_url: string | null;
-  thumbnail_url: string | null;
-  duration_seconds: number | null;
-};
+import { formatJourneyAssetLabel, type JourneyAsset } from "@/components/trust-app-shared";
 
 export type PublicJourney = {
   id: string;
@@ -26,7 +16,7 @@ export type PublicJourney = {
   send_id?: string | null;
   contact_id?: string | null;
   share_token?: string | null;
-  videos: JourneyVideo[];
+  assets: JourneyAsset[];
 };
 
 type VideoOrientation = "wide" | "portrait";
@@ -35,27 +25,29 @@ export function JourneyViewer({ journey, variant = "share" }: { journey: PublicJ
   const [active, setActive] = useState(0);
   const [started, setStarted] = useState(false);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
-  const activeVideo = journey.videos[active];
+  const activeAsset = journey.assets[active];
   const listRef = useRef<HTMLDivElement>(null);
-  const trackedVideos = useRef<Set<string>>(new Set());
+  const trackedAssets = useRef<Set<string>>(new Set());
   const trackedOpen = useRef(false);
-  const isYouTube = activeVideo?.embed_url?.includes("youtube.com/embed");
-  const orientation = activeVideo ? inferOrientation(activeVideo) : "wide";
+  const isYouTube = activeAsset?.embedUrl?.includes("youtube.com/embed");
+  const orientation = activeAsset ? inferOrientation(activeAsset) : "wide";
+
+  if (!activeAsset) return null;
 
   const embedUrl = useMemo(() => {
-    if (!activeVideo?.embed_url) return "";
-    const url = new URL(activeVideo.embed_url);
+    if (!activeAsset?.embedUrl) return "";
+    const url = new URL(activeAsset.embedUrl);
     if (isYouTube) {
       url.searchParams.set("enablejsapi", "1");
       url.searchParams.set("playsinline", "1");
       if (started) url.searchParams.set("autoplay", "1");
     }
     return url.toString();
-  }, [activeVideo?.embed_url, isYouTube, started]);
+  }, [activeAsset?.embedUrl, isYouTube, started]);
 
   useEffect(() => {
     setStarted(false);
-  }, [activeVideo?.id]);
+  }, [activeAsset?.id]);
 
   useEffect(() => {
     const node = listRef.current;
@@ -69,6 +61,7 @@ export function JourneyViewer({ journey, variant = "share" }: { journey: PublicJ
     trackedOpen.current = true;
     void trackJourneyEvent({
       journey,
+      assetId: null,
       videoId: null,
       eventType: "opened",
       viewerId: getViewerId(),
@@ -78,32 +71,34 @@ export function JourneyViewer({ journey, variant = "share" }: { journey: PublicJ
   }, [active, journey, variant]);
 
   useEffect(() => {
-    if (!activeVideo?.id) return;
-    const key = `${journey.id}:${activeVideo.id}`;
-    if (trackedVideos.current.has(key)) return;
-    trackedVideos.current.add(key);
+    if (!activeAsset?.id) return;
+    const key = `${journey.id}:${activeAsset.id}`;
+    if (trackedAssets.current.has(key)) return;
+    trackedAssets.current.add(key);
 
     void trackJourneyEvent({
       journey,
-      videoId: activeVideo.id,
-      eventType: "video_started",
+      assetId: activeAsset.id,
+      videoId: activeAsset.videoId,
+      eventType: "asset_started",
       viewerId: getViewerId(),
       activeIndex: active,
       metadata: { surface: variant }
     });
-  }, [active, activeVideo?.id, journey, variant]);
+  }, [active, activeAsset?.id, journey, variant]);
 
   useEffect(() => {
-    if (!started || !activeVideo?.id) return;
+    if (!started || !activeAsset?.id) return;
     let secondsWatched = 0;
-    const duration = activeVideo.duration_seconds ?? null;
+    const duration = activeAsset.durationSeconds ?? null;
     const timer = window.setInterval(() => {
       secondsWatched += 10;
       const percentWatched = duration ? Math.min(100, Math.round((secondsWatched / duration) * 100)) : null;
       void trackJourneyEvent({
         journey,
-        videoId: activeVideo.id,
-        eventType: "video_progress",
+        assetId: activeAsset.id,
+        videoId: activeAsset.videoId,
+        eventType: "asset_progress",
         viewerId: getViewerId(),
         activeIndex: active,
         metadata: {
@@ -117,13 +112,13 @@ export function JourneyViewer({ journey, variant = "share" }: { journey: PublicJ
     }, 10000);
 
     return () => window.clearInterval(timer);
-  }, [active, activeVideo?.id, activeVideo?.duration_seconds, journey, started, variant]);
+  }, [active, activeAsset?.id, activeAsset?.durationSeconds, journey, started, variant]);
 
   useEffect(() => {
-    if (!started || !activeVideo?.duration_seconds) return;
-    const timer = window.setTimeout(() => next(), Math.max(8, activeVideo.duration_seconds) * 1000);
+    if (!started || !activeAsset?.durationSeconds) return;
+    const timer = window.setTimeout(() => next(), Math.max(8, activeAsset.durationSeconds) * 1000);
     return () => window.clearTimeout(timer);
-  }, [active, activeVideo?.duration_seconds, started]);
+  }, [active, activeAsset?.durationSeconds, started]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -133,7 +128,7 @@ export function JourneyViewer({ journey, variant = "share" }: { journey: PublicJ
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [journey.videos.length]);
+  }, [journey.assets.length]);
 
   function onWheel(event: React.WheelEvent<HTMLElement>) {
     const horizontal = Math.abs(event.deltaX) > Math.abs(event.deltaY);
@@ -163,7 +158,7 @@ export function JourneyViewer({ journey, variant = "share" }: { journey: PublicJ
   }
 
   function next() {
-    setActive((current) => Math.min(current + 1, journey.videos.length - 1));
+    setActive((current) => Math.min(current + 1, journey.assets.length - 1));
   }
 
   function previous() {
@@ -173,7 +168,8 @@ export function JourneyViewer({ journey, variant = "share" }: { journey: PublicJ
   function trackCtaClick() {
     void trackJourneyEvent({
       journey,
-      videoId: activeVideo?.id ?? null,
+      assetId: activeAsset?.id ?? null,
+      videoId: activeAsset?.videoId ?? null,
       eventType: "cta_clicked",
       viewerId: getViewerId(),
       activeIndex: active,
@@ -190,7 +186,7 @@ export function JourneyViewer({ journey, variant = "share" }: { journey: PublicJ
       </section>
 
       <section className="reel-shell">
-        <button className="reel-nav previous" onClick={previous} disabled={active === 0} aria-label="Previous video">
+        <button className="reel-nav previous" onClick={previous} disabled={active === 0} aria-label="Previous asset">
           <ChevronLeft />
         </button>
         <article className="reel-video">
@@ -198,35 +194,37 @@ export function JourneyViewer({ journey, variant = "share" }: { journey: PublicJ
             <iframe
               key={embedUrl}
               src={embedUrl}
-              title={activeVideo.title}
+              title={activeAsset.title}
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
               allowFullScreen
               onLoad={() => setStarted(true)}
             />
           ) : (
-            <div className="reel-poster" style={{ backgroundImage: `url(${activeVideo.thumbnail_url ?? ""})` }} />
+            <div className="reel-poster" style={{ backgroundImage: `url(${activeAsset.thumbnailUrl ?? ""})` }} />
           )}
           <div className="reel-caption">
             <span>
-              {active + 1} / {journey.videos.length}
+              {active + 1} / {journey.assets.length}
             </span>
+            <strong>{formatJourneyAssetLabel(activeAsset)}</strong>
           </div>
         </article>
-        <button className="reel-nav next" onClick={next} disabled={active === journey.videos.length - 1} aria-label="Next video">
+        <button className="reel-nav next" onClick={next} disabled={active === journey.assets.length - 1} aria-label="Next asset">
           <ChevronRight />
         </button>
       </section>
 
       <section className="reel-queue" ref={listRef}>
-        {journey.videos.map((video, index) => (
-          <button className={index === active ? "queue-card is-active" : "queue-card"} key={video.id} data-index={index} onClick={() => setActive(index)}>
-            <span style={{ backgroundImage: `url(${video.thumbnail_url ?? ""})` }} />
-            <strong>{video.title}</strong>
+        {journey.assets.map((asset, index) => (
+          <button className={index === active ? "queue-card is-active" : "queue-card"} key={asset.id} data-index={index} onClick={() => setActive(index)}>
+            <span style={{ backgroundImage: `url(${asset.thumbnailUrl ?? ""})` }} />
+            <strong>{asset.title}</strong>
+            <small>{formatJourneyAssetLabel(asset)}</small>
           </button>
         ))}
       </section>
 
-      <button className="scroll-cue" onClick={next} disabled={active === journey.videos.length - 1} aria-label="Next video">
+      <button className="scroll-cue" onClick={next} disabled={active === journey.assets.length - 1} aria-label="Next asset">
         <ChevronDown />
       </button>
 
@@ -239,8 +237,9 @@ export function JourneyViewer({ journey, variant = "share" }: { journey: PublicJ
   );
 }
 
-function inferOrientation(video: JourneyVideo): VideoOrientation {
-  const source = `${video.source_url ?? ""} ${video.embed_url ?? ""} ${video.title ?? ""}`.toLowerCase();
+function inferOrientation(asset: JourneyAsset): VideoOrientation {
+  const source = `${asset.sourceUrl ?? ""} ${asset.embedUrl ?? ""} ${asset.title ?? ""}`.toLowerCase();
+  if (asset.assetType !== "video") return "wide";
   if (source.includes("/shorts/") || source.includes("youtube.com/shorts") || source.includes("instagram.com/reel") || source.includes("tiktok.com") || source.includes("vertical") || source.includes("portrait")) return "portrait";
   return "wide";
 }
@@ -256,8 +255,9 @@ function getViewerId() {
 
 type JourneyEventPayload = {
   journey: PublicJourney;
+  assetId: string | null;
   videoId: string | null;
-  eventType: "opened" | "video_started" | "video_completed" | "video_progress" | "cta_clicked";
+  eventType: "opened" | "video_started" | "video_completed" | "video_progress" | "asset_started" | "asset_completed" | "asset_progress" | "cta_clicked";
   viewerId: string;
   activeIndex: number;
   metadata?: Record<string, unknown>;
@@ -279,6 +279,7 @@ async function trackJourneyEvent(payload: JourneyEventPayload) {
     const { error } = await supabase.from("journey_views").insert({
       journey_id: payload.journey.id,
       video_id: payload.videoId,
+      asset_id: payload.assetId,
       event_type: payload.eventType,
       viewer_label: payload.viewerId.slice(0, 80),
       metadata
@@ -292,6 +293,7 @@ async function trackJourneyEvent(payload: JourneyEventPayload) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       journeyId: payload.journey.id,
+      assetId: payload.assetId,
       videoId: payload.videoId,
       eventType: payload.eventType,
       viewerId: payload.viewerId,
