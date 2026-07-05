@@ -4,13 +4,14 @@ import { createPublicSupabaseClient, createServiceSupabaseClient } from "@/lib/s
 type JourneyEventRequest = {
   journeyId?: string;
   videoId?: string | null;
+  assetId?: string | null;
   eventType?: string;
   viewerId?: string;
   activeIndex?: number;
   metadata?: Record<string, unknown>;
 };
 
-const allowedEvents = new Set(["opened", "video_started", "video_completed", "video_progress", "cta_clicked"]);
+const allowedEvents = new Set(["opened", "video_started", "video_completed", "video_progress", "asset_started", "asset_completed", "asset_progress", "cta_clicked"]);
 
 export async function POST(request: Request) {
   try {
@@ -20,14 +21,16 @@ export async function POST(request: Request) {
     const body = (await request.json()) as JourneyEventRequest;
     const journeyId = body.journeyId?.trim();
     const videoId = typeof body.videoId === "string" ? body.videoId.trim() : null;
+    const assetId = typeof body.assetId === "string" ? body.assetId.trim() : null;
     const eventType = allowedEvents.has(body.eventType ?? "") ? body.eventType : "opened";
 
     if (!journeyId) return NextResponse.json({ error: "Journey is required." }, { status: 400 });
-    if (eventType !== "opened" && eventType !== "cta_clicked" && !videoId) return NextResponse.json({ error: "Video is required." }, { status: 400 });
+    if (eventType !== "opened" && eventType !== "cta_clicked" && !assetId && !videoId) return NextResponse.json({ error: "Asset is required." }, { status: 400 });
 
     const { error } = await supabase.from("journey_views").insert({
       journey_id: journeyId,
       video_id: videoId,
+      asset_id: assetId,
       event_type: eventType,
       viewer_label: body.viewerId?.slice(0, 80) ?? null,
       metadata: {
