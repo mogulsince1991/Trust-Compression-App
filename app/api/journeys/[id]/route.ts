@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createUserSupabaseClient } from "@/lib/supabase";
+import { normalizeJourneyEmbed, type JourneyAssetType } from "@/lib/journey-embeds";
 
 type RouteContext = {
   params: { id: string };
@@ -14,6 +15,19 @@ type JourneyPatchRequest = {
   ctaUrl?: string;
   folderName?: string;
   parentFolderName?: string;
+  assets?: Array<{
+    videoId?: string | null;
+    assetType?: JourneyAssetType;
+    sourcePlatform?: string | null;
+    title?: string | null;
+    sourceUrl?: string | null;
+    embedUrl?: string | null;
+    thumbnailUrl?: string | null;
+    durationSeconds?: number | null;
+    summary?: string | null;
+    note?: string | null;
+    metadata?: Record<string, unknown> | null;
+  }>;
   videoIds?: string[];
   publish?: boolean;
 };
@@ -60,12 +74,36 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
     if (journeyError || !journey) return NextResponse.json({ error: journeyError?.message ?? "Journey was not found." }, { status: 404 });
 
-    if (body.videoIds) {
-      const videoIds = Array.from(new Set(body.videoIds)).filter(Boolean);
-      await supabase.from("journey_videos").delete().eq("journey_id", params.id);
-      if (videoIds.length) {
-        const { error: videosError } = await supabase.from("journey_videos").insert(videoIds.map((videoId, index) => ({ journey_id: params.id, video_id: videoId, position: index + 1 })));
-        if (videosError) throw videosError;
+    if (body.assets || body.videoIds) {
+      const videoIds = Array.from(new Set(body.videoIds ?? [])).filter(Boolean);
+      const resolvedAssets = await resolveJourneyAssets(supabase, workspaceId, Array.isArray(body.assets) ? body.assets : [], videoIds);
+      await supabase.from("journey_assets").delete().eq("journey_id", params.id);
+      if (resolvedAssets.length) {
+        const { error: assetsError } = await supabase.from("journey_assets").insert(
+          resolvedAssets.map((asset, index) => ({
+            journey_id: params.id,
+            video_id: asset.video_id,
+            asset_type: asset.asset_type,
+            source_platform: asset.source_platform,
+            title: asset.title,
+            source_url: asset.source_url,
+            embed_url: asset.embed_url,
+            thumbnail_url: asset.thumbnail_url,
+            summary: asset.summary,
+            note: asset.note,
+            metadata: asset.metadata,
+            position: index + 1
+          }))
+        );
+        if (assetsError) throw assetsError;
+      }
+
+      if (resolvedAssets[0]) {
+        await supabase
+          .from("journeys")
+          .update({ cover_url: resolvedAssets[0].thumbnail_url ?? null, updated_at: new Date().toISOString() })
+          .eq("id", params.id)
+          .eq("workspace_id", workspaceId);
       }
     }
 
@@ -73,6 +111,65 @@ export async function PATCH(request: Request, { params }: RouteContext) {
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Journey update failed." }, { status: 400 });
   }
+}
+
+async function resolveJourneyAssets(
+  supabase: ReturnType<typeof createUserSupabaseClient>,
+  workspaceId: string,
+  assets: NonNullable<JourneyPatchRequest["assets"]>,
+  fallbackVideoIds: string[]
+) {
+  const nextAssets = assets.length ? assets : fallbackVideoIds.map((videoId) => ({ videoId }));
+  const videoIds = Array.from(new Set(nextAssets.map((asset) => asset.videoId).filter(Boolean))) as string[];
+  const videoMap = new Map<string, any>();
+
+  if (videoIds.length) {
+    const { data: videos, error } = await supabase
+      .from("videos")
+      .select("id,title,source_platform,source_url,embed_url,thumbnail_url,duration_seconds,summary,metadata")
+      .eq("workspace_id", workspaceId)
+      .in("id", videoIds);
+    if (error) throw error;
+    for (const video of videos ?? []) videoMap.set(video.id, video);
+  }
+
+  return nextAssets.map((asset, index) => {
+    if (asset.videoId) {
+      const video = videoMap.get(asset.videoId);
+      if (!video) throw new Error("One of the selected videos no longer exists.");
+      return {
+        video_id: video.id,
+        asset_type: "video",
+        source_platform: video.source_platform ?? "manual",
+        title: video.title ?? "Untitled video",
+        source_url: video.source_url ?? null,
+        embed_url: video.embed_url ?? video.source_url ?? "",
+        thumbnail_url: video.thumbnail_url ?? null,
+        summary: video.summary ?? null,
+        note: asset.note?.trim() || null,
+        metadata: video.metadata ?? {},
+        position: index + 1
+      };
+    }
+
+    const normalized = normalizeJourneyEmbed({ url: asset.sourceUrl ?? "", title: asset.title ?? "" });
+    return {
+      video_id: null,
+      asset_type: normalized.assetType,
+      source_platform: normalized.sourcePlatform,
+      title: normalized.title,
+      source_url: normalized.sourceUrl,
+      embed_url: normalized.embedUrl,
+      thumbnail_url: normalized.thumbnailUrl,
+      summary: asset.summary?.trim() || null,
+      note: asset.note?.trim() || null,
+      metadata: {
+        ...normalized.metadata,
+        ...(asset.metadata ?? {})
+      },
+      position: index + 1
+    };
+  });
 }
 
 async function ensureFolder(supabase: ReturnType<typeof createUserSupabaseClient>, workspaceId: string, userId: string, name: string, parentName?: string) {
