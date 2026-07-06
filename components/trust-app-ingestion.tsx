@@ -831,13 +831,6 @@ export function TrustAppIngestion({
     setError("");
   }
 
-  function openSocialProfileReport(profile: SocialProfileRow) {
-    setSelectedSocialProfileId(profile.id);
-    setSocialProfileReportId(profile.id);
-    setView("socialProfiles");
-    router.push(`/social-profiles/${profile.id}`);
-  }
-
   function closeSocialProfileReport() {
     setSocialProfileReportId(null);
     setView("socialProfiles");
@@ -896,7 +889,6 @@ export function TrustAppIngestion({
             onDraftChange={setSocialProfileDraft}
             onSave={saveSocialProfile}
             onAnalyze={analyzeSocialProfile}
-            onViewReport={openSocialProfileReport}
             onRemove={removeSocialProfile}
           />
         )}

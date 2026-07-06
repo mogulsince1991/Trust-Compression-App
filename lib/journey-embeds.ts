@@ -21,19 +21,22 @@ export type NormalizedJourneyEmbed = {
 const OFFICE_EXTENSIONS = new Set(["doc", "docx", "ppt", "pptx", "xls", "xlsx"]);
 
 export function normalizeJourneyEmbed(input: { url: string; title?: string | null }) {
-  const sourceUrl = input.url.trim();
-  if (!sourceUrl) throw new Error("Add a cloud URL before inserting an asset.");
+  const rawInput = input.url.trim();
+  if (!rawInput) throw new Error("Add a cloud URL or iframe embed code before inserting an asset.");
+
+  const iframeEmbed = readIframeEmbed(rawInput);
+  const sourceUrl = iframeEmbed?.src ?? rawInput;
 
   let url: URL;
   try {
     url = new URL(sourceUrl);
   } catch (_error) {
-    throw new Error("That asset URL is not valid.");
+    throw new Error("That asset URL or iframe embed code is not valid.");
   }
 
   const hostname = url.hostname.toLowerCase();
   const pathname = url.pathname;
-  const title = input.title?.trim() || buildFallbackTitle(url);
+  const title = input.title?.trim() || iframeEmbed?.title || buildFallbackTitle(url);
 
   if (hostname.includes("youtube.com") || hostname === "youtu.be") {
     const videoId = readYouTubeVideoId(url);
@@ -130,7 +133,13 @@ export function normalizeJourneyEmbed(input: { url: string; title?: string | nul
     };
   }
 
-  if (pathname.includes("/embed") || pathname.includes("/preview") || url.searchParams.has("embed")) {
+  if (
+    iframeEmbed ||
+    pathname.includes("/embed") ||
+    pathname.includes("/preview") ||
+    url.searchParams.has("embed") ||
+    hostname.includes("gamma.app")
+  ) {
     return {
       assetType: "embed",
       sourcePlatform: hostname.replace(/^www\./, ""),
@@ -138,11 +147,11 @@ export function normalizeJourneyEmbed(input: { url: string; title?: string | nul
       sourceUrl,
       embedUrl: sourceUrl,
       thumbnailUrl: null,
-      metadata: { provider: hostname, mode: "direct_embed" }
+      metadata: { provider: hostname, mode: iframeEmbed ? "iframe_embed" : "direct_embed" }
     };
   }
 
-  throw new Error("That link is not a supported embeddable asset yet. Use a public YouTube, Google Docs/Sheets/Slides, Google Drive file, PDF, Office doc, or direct embed URL.");
+  throw new Error("That link is not a supported embeddable asset yet. Use a public YouTube, Google Docs/Sheets/Slides, Google Drive file, PDF, Office doc, Gamma embed, iframe embed code, or direct embed URL.");
 }
 
 export function formatJourneyAssetTypeLabel(assetType: JourneyAssetType) {
@@ -179,4 +188,21 @@ function readExtension(pathname: string) {
   const segment = pathname.split("/").filter(Boolean).pop() ?? "";
   const parts = segment.split(".");
   return parts.length > 1 ? parts.pop()!.toLowerCase() : "";
+}
+
+function readIframeEmbed(input: string) {
+  if (!/<iframe/i.test(input)) return null;
+
+  const srcMatch = input.match(/src=(["'])(.*?)\1/i);
+  const titleMatch = input.match(/title=(["'])(.*?)\1/i);
+  const src = srcMatch?.[2]?.trim();
+
+  if (!src) {
+    throw new Error("That iframe embed code is missing a src URL.");
+  }
+
+  return {
+    src,
+    title: titleMatch?.[2]?.trim() || null
+  };
 }

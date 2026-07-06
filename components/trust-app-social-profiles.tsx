@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, ExternalLink, Facebook, Instagram, Linkedin, Loader2, RefreshCw, Trash2, UserRound, Youtube } from "lucide-react";
+import { Facebook, Instagram, Linkedin, Loader2, RefreshCw, Trash2, UserRound, Youtube } from "lucide-react";
 import type { FormEvent } from "react";
 import { parseMetricSnapshot, socialProfileStatusLabel } from "@/lib/social-profiles";
 import { formatDateTime, type SocialProfileDraft, type SocialProfileRow } from "@/components/trust-app-shared";
@@ -23,7 +23,6 @@ export function SocialProfilesView({
   onDraftChange,
   onSave,
   onAnalyze,
-  onViewReport,
   onRemove,
 }: {
   draft: SocialProfileDraft;
@@ -33,7 +32,6 @@ export function SocialProfilesView({
   onDraftChange: (draft: SocialProfileDraft) => void;
   onSave: (event: FormEvent<HTMLFormElement>) => void;
   onAnalyze: (profile: SocialProfileRow) => void;
-  onViewReport: (profile: SocialProfileRow) => void;
   onRemove: (profile: SocialProfileRow) => void;
 }) {
   const selected = profiles.find((profile) => profile.id === selectedProfileId) ?? profiles[0] ?? null;
@@ -118,10 +116,6 @@ export function SocialProfilesView({
                       <RefreshCw />
                       Analyze
                     </button>
-                    <button className="text-button compact" type="button" onClick={() => onViewReport(profile)}>
-                      <ExternalLink />
-                      View report
-                    </button>
                     <button className="text-button compact danger" type="button" onClick={() => onRemove(profile)}>
                       <Trash2 />
                       Remove
@@ -154,7 +148,7 @@ export function SocialProfilesView({
                 <p>{selected.profileUrl || "No profile URL stored"}</p>
               </div>
             </div>
-            <p className="social-profile-summary">{snapshot?.summary || snapshot?.sourceNote || "Save a profile and open the dedicated report to see what content is working and what should be imported."}</p>
+            <p className="social-profile-summary">{snapshot?.summary || snapshot?.sourceNote || "Save a profile and reuse it later without retyping the same social handle and profile URL."}</p>
             <div className="tracking-overview tracking-overview-compact social-profile-overview">
               <MetricStat label="Status" value={socialProfileStatusLabel(snapshot?.status)} detail="What kind of report data is currently available." />
               <MetricStat label="Data source" value={snapshot?.sourceLabel || "Saved profile"} detail="How this snapshot was generated." />
@@ -178,11 +172,7 @@ export function SocialProfilesView({
               </div>
             </div>
             <div className="social-snapshot-actions">
-              <button className="wide-action compact" type="button" onClick={() => onViewReport(selected)}>
-                <ArrowUpRight />
-                View full report
-              </button>
-              <button className="text-button compact" type="button" onClick={() => onAnalyze(selected)} disabled={working}>
+              <button className="wide-action compact" type="button" onClick={() => onAnalyze(selected)} disabled={working}>
                 {working ? <Loader2 className="spin" /> : <RefreshCw />}
                 Refresh snapshot
               </button>
@@ -190,10 +180,10 @@ export function SocialProfilesView({
             {selected.avatarUrl ? <a className="text-link" href={selected.avatarUrl} target="_blank" rel="noreferrer">View avatar asset</a> : null}
           </div>
         ) : (
-          <div className="tracking-empty-state social-profile-empty-state">
-            <span>Profile snapshot</span>
-            <h3>Select a saved profile.</h3>
-            <p>Choose a saved profile to inspect its saved state, then open the full report for the founder-facing YouTube analysis view.</p>
+            <div className="tracking-empty-state social-profile-empty-state">
+              <span>Profile snapshot</span>
+              <h3>Select a saved profile.</h3>
+            <p>Choose a saved profile to inspect its saved state and refresh the cached snapshot.</p>
           </div>
         )}
       </section>

@@ -215,8 +215,8 @@ export function JourneyTray({
             <input value={embedDraft.title} onChange={(event) => onEmbedDraftChange({ ...embedDraft, title: event.target.value })} placeholder="Proposal, Google Doc, PDF, Drive file..." />
           </label>
           <label>
-            <span>Cloud asset URL</span>
-            <input value={embedDraft.url} onChange={(event) => onEmbedDraftChange({ ...embedDraft, url: event.target.value })} placeholder="Paste a public Google Doc, PDF, Drive file, Office doc, or embed URL" />
+            <span>Cloud asset URL or iframe</span>
+            <input value={embedDraft.url} onChange={(event) => onEmbedDraftChange({ ...embedDraft, url: event.target.value })} placeholder="Paste a public Google Doc, Gamma embed, PDF, Drive file, Office doc, direct embed URL, or iframe code" />
           </label>
         </div>
         <button className="text-button compact" type="button" disabled={working || !embedDraft.url.trim()} onClick={onAddEmbed}>
