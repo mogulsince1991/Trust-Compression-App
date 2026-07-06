@@ -523,6 +523,20 @@ export function TrustAppIngestion({
     setNotice("Editing saved journey.");
   }
 
+  function hydrateJourneyDraft(journey: JourneySummary) {
+    setSelectedJourneyId(journey.id);
+    setDraft({
+      title: journey.title ?? "",
+      heading: journey.heading ?? "",
+      description: journey.description ?? "",
+      ctaLabel: journey.ctaLabel ?? "Continue the conversation",
+      ctaUrl: journey.ctaUrl ?? "",
+      folderName: folders.find((folder) => folder.id === journey.folderId)?.name ?? ""
+    });
+    setDraftAssets(journey.assets);
+    setShareUrl(journey.shareUrl ?? "");
+  }
+
   function newJourney() {
     setSelectedJourneyId(null);
     setDraft(emptyDraft);
@@ -590,10 +604,17 @@ export function TrustAppIngestion({
       const result = (await response.json()) as { id?: string; shareUrl?: string; error?: string };
       if (!response.ok || !result.shareUrl) throw new Error(result.error ?? "Could not publish the journey.");
       const absoluteUrl = new URL(result.shareUrl, window.location.origin).toString();
+      const nextJourneyId = result.id ?? selectedJourneyId;
       setShareUrl(absoluteUrl);
-      setSelectedJourneyId(result.id ?? selectedJourneyId);
+      setSelectedJourneyId(nextJourneyId);
       setNotice(selectedJourneyId ? "Journey updated. The share link is ready." : "Journey published. The share link is ready.");
-      await refreshWorkspace();
+      const nextJourneys = await loadJourneys(workspaceId);
+      await Promise.all([loadVideos(workspaceId), loadSources(workspaceId), loadContacts(workspaceId), loadSocialProfiles(workspaceId), loadTracking(workspaceId)]);
+      await loadMetrics(workspaceId, nextJourneys ?? []);
+      if (nextJourneyId) {
+        const refreshed = (nextJourneys ?? []).find((journey) => journey.id === nextJourneyId);
+        if (refreshed) hydrateJourneyDraft(refreshed);
+      }
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Could not publish the journey.");
     } finally {

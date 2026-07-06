@@ -107,7 +107,12 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       }
     }
 
-    return NextResponse.json({ journey, shareUrl: `/share/${journey.share_token}` });
+    return NextResponse.json({
+      id: journey.id,
+      shareToken: journey.share_token,
+      shareUrl: `/share/${journey.share_token}`,
+      journey
+    });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Journey update failed." }, { status: 400 });
   }
