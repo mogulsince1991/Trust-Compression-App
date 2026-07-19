@@ -43,14 +43,14 @@ export async function GET(request: Request) {
         .limit(80),
       dataSupabase
         .from("journeys")
-        .select("id,title,heading,description,cta_label,cta_url,share_token,folder_id,created_at,published_at,is_public,deleted_at,journey_assets(id,video_id,asset_type,source_platform,title,source_url,embed_url,thumbnail_url,summary,note,position,metadata,videos(id,title,thumbnail_url,source_platform,duration_seconds))")
+        .select("id,title,heading,description,cta_label,cta_url,share_token,folder_id,created_at,published_at,is_public,deleted_at,journey_assets(id,library_asset_id,video_id,asset_type,source_platform,title,source_url,embed_url,thumbnail_url,summary,note,position,metadata,videos(id,title,thumbnail_url,source_platform,duration_seconds))")
         .eq("workspace_id", workspaceId)
         .not("deleted_at", "is", null)
         .order("deleted_at", { ascending: false })
         .limit(80),
       dataSupabase
         .from("journeys")
-        .select("id,title,heading,description,cta_label,cta_url,share_token,folder_id,created_at,published_at,is_public,deleted_at,journey_assets(id,video_id,asset_type,source_platform,title,source_url,embed_url,thumbnail_url,summary,note,position,metadata,videos(id,title,thumbnail_url,source_platform,duration_seconds))")
+        .select("id,title,heading,description,cta_label,cta_url,share_token,folder_id,created_at,published_at,is_public,deleted_at,journey_assets(id,library_asset_id,video_id,asset_type,source_platform,title,source_url,embed_url,thumbnail_url,summary,note,position,metadata,videos(id,title,thumbnail_url,source_platform,duration_seconds))")
         .eq("workspace_id", workspaceId)
         .is("deleted_at", null)
         .order("created_at", { ascending: false })
