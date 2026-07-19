@@ -23,6 +23,7 @@ export type DbVideo = {
 export type JourneyAsset = {
   id: string;
   videoId: string | null;
+  libraryAssetId?: string | null;
   assetType: JourneyAssetType;
   sourcePlatform: string;
   title: string;
@@ -34,6 +35,41 @@ export type JourneyAsset = {
   note: string | null;
   position: number;
   metadata: Record<string, any> | null;
+};
+
+export type LibraryAssetRow = {
+  id: string;
+  workspaceId: string;
+  assetType: JourneyAssetType;
+  sourcePlatform: string;
+  title: string;
+  sourceUrl: string | null;
+  embedUrl: string | null;
+  thumbnailUrl: string | null;
+  summary: string | null;
+  metadata: Record<string, any> | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  archivedAt: string | null;
+};
+
+export type WorkspaceRow = {
+  id: string;
+  name: string;
+  slug: string;
+  role: string;
+  createdAt: string | null;
+};
+
+export type WorkspaceInviteRow = {
+  id: string;
+  email: string;
+  role: string;
+  status: string;
+  token: string;
+  inviteUrl: string;
+  expiresAt: string | null;
+  createdAt: string | null;
 };
 
 export type SourceRow = {
@@ -429,6 +465,7 @@ export function buildJourneyAssetFromVideo(video: DbVideo, position = 1): Journe
   return {
     id: video.id,
     videoId: video.id,
+    libraryAssetId: null,
     assetType: "video",
     sourcePlatform: video.source_platform,
     title: video.title,
