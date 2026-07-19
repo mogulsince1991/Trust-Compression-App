@@ -11,6 +11,7 @@ type JourneyRequest = {
   ctaUrl?: string;
   folderName?: string;
   assets?: Array<{
+    libraryAssetId?: string | null;
     videoId?: string | null;
     assetType?: JourneyAssetType;
     sourcePlatform?: string | null;
@@ -61,7 +62,7 @@ export async function GET(request: Request) {
 
     let query = dataSupabase
       .from("journeys")
-      .select("id,title,heading,description,cta_label,cta_url,share_token,folder_id,created_at,published_at,is_public,deleted_at,journey_assets(id,video_id,asset_type,source_platform,title,source_url,embed_url,thumbnail_url,summary,note,position,metadata),journey_videos(video_id,position)")
+      .select("id,title,heading,description,cta_label,cta_url,share_token,folder_id,created_at,published_at,is_public,deleted_at,journey_assets(id,library_asset_id,video_id,asset_type,source_platform,title,source_url,embed_url,thumbnail_url,summary,note,position,metadata),journey_videos(video_id,position)")
       .eq("workspace_id", workspaceId)
       .order(archived ? "deleted_at" : "created_at", { ascending: false })
       .limit(80);
@@ -149,6 +150,7 @@ export async function POST(request: Request) {
     const { error: assetsError } = await supabase.from("journey_assets").insert(
       resolvedAssets.map((asset, index) => ({
         journey_id: journey.id,
+        library_asset_id: asset.library_asset_id ?? null,
         video_id: asset.video_id,
         asset_type: asset.asset_type,
         source_platform: asset.source_platform,
@@ -176,6 +178,7 @@ function mapJourneyAssets(journey: any) {
     return assetRows.map((item) => ({
       id: item.id,
       videoId: item.video_id ?? null,
+      libraryAssetId: item.library_asset_id ?? null,
       assetType: item.asset_type,
       sourcePlatform: item.source_platform,
       title: item.title,
@@ -217,7 +220,9 @@ async function resolveJourneyAssets(
 ) {
   const nextAssets = assets.length ? assets : fallbackVideoIds.map((videoId) => ({ videoId }));
   const videoIds = Array.from(new Set(nextAssets.map((asset) => asset.videoId).filter(Boolean))) as string[];
+  const libraryAssetIds = Array.from(new Set(nextAssets.map((asset) => asset.libraryAssetId).filter(Boolean))) as string[];
   const videoMap = new Map<string, any>();
+  const libraryAssetMap = new Map<string, any>();
 
   if (videoIds.length) {
     const { data: videos, error } = await supabase
@@ -229,11 +234,23 @@ async function resolveJourneyAssets(
     for (const video of videos ?? []) videoMap.set(video.id, video);
   }
 
+  if (libraryAssetIds.length) {
+    const { data: libraryAssets, error } = await supabase
+      .from("library_assets")
+      .select("id,asset_type,source_platform,title,source_url,embed_url,thumbnail_url,summary,metadata")
+      .eq("workspace_id", workspaceId)
+      .is("archived_at", null)
+      .in("id", libraryAssetIds);
+    if (error) throw error;
+    for (const libraryAsset of libraryAssets ?? []) libraryAssetMap.set(libraryAsset.id, libraryAsset);
+  }
+
   return nextAssets.map((asset, index) => {
     if (asset.videoId) {
       const video = videoMap.get(asset.videoId);
       if (!video) throw new Error("One of the selected videos no longer exists.");
       return {
+        library_asset_id: null,
         video_id: video.id,
         asset_type: "video",
         source_platform: video.source_platform ?? "manual",
@@ -248,8 +265,31 @@ async function resolveJourneyAssets(
       };
     }
 
+    if (asset.libraryAssetId) {
+      const libraryAsset = libraryAssetMap.get(asset.libraryAssetId);
+      if (!libraryAsset) throw new Error("One of the selected library assets no longer exists.");
+      return {
+        library_asset_id: libraryAsset.id,
+        video_id: null,
+        asset_type: libraryAsset.asset_type,
+        source_platform: libraryAsset.source_platform ?? "manual",
+        title: libraryAsset.title ?? "Untitled asset",
+        source_url: libraryAsset.source_url ?? null,
+        embed_url: libraryAsset.embed_url ?? "",
+        thumbnail_url: libraryAsset.thumbnail_url ?? null,
+        summary: asset.summary?.trim() || (libraryAsset.summary ?? null),
+        note: asset.note?.trim() || null,
+        metadata: {
+          ...(libraryAsset.metadata ?? {}),
+          ...(asset.metadata ?? {})
+        },
+        position: index + 1
+      };
+    }
+
     const normalized = normalizeJourneyEmbed({ url: asset.sourceUrl ?? "", title: asset.title ?? "" });
     return {
+      library_asset_id: null,
       video_id: null,
       asset_type: normalized.assetType,
       source_platform: normalized.sourcePlatform,
