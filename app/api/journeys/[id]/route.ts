@@ -16,6 +16,7 @@ type JourneyPatchRequest = {
   folderName?: string;
   parentFolderName?: string;
   assets?: Array<{
+    libraryAssetId?: string | null;
     videoId?: string | null;
     assetType?: JourneyAssetType;
     sourcePlatform?: string | null;
@@ -82,6 +83,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
         const { error: assetsError } = await supabase.from("journey_assets").insert(
           resolvedAssets.map((asset, index) => ({
             journey_id: params.id,
+            library_asset_id: asset.library_asset_id ?? null,
             video_id: asset.video_id,
             asset_type: asset.asset_type,
             source_platform: asset.source_platform,
@@ -126,7 +128,9 @@ async function resolveJourneyAssets(
 ) {
   const nextAssets = assets.length ? assets : fallbackVideoIds.map((videoId) => ({ videoId }));
   const videoIds = Array.from(new Set(nextAssets.map((asset) => asset.videoId).filter(Boolean))) as string[];
+  const libraryAssetIds = Array.from(new Set(nextAssets.map((asset) => asset.libraryAssetId).filter(Boolean))) as string[];
   const videoMap = new Map<string, any>();
+  const libraryAssetMap = new Map<string, any>();
 
   if (videoIds.length) {
     const { data: videos, error } = await supabase
@@ -138,11 +142,23 @@ async function resolveJourneyAssets(
     for (const video of videos ?? []) videoMap.set(video.id, video);
   }
 
+  if (libraryAssetIds.length) {
+    const { data: libraryAssets, error } = await supabase
+      .from("library_assets")
+      .select("id,asset_type,source_platform,title,source_url,embed_url,thumbnail_url,summary,metadata")
+      .eq("workspace_id", workspaceId)
+      .is("archived_at", null)
+      .in("id", libraryAssetIds);
+    if (error) throw error;
+    for (const libraryAsset of libraryAssets ?? []) libraryAssetMap.set(libraryAsset.id, libraryAsset);
+  }
+
   return nextAssets.map((asset, index) => {
     if (asset.videoId) {
       const video = videoMap.get(asset.videoId);
       if (!video) throw new Error("One of the selected videos no longer exists.");
       return {
+        library_asset_id: null,
         video_id: video.id,
         asset_type: "video",
         source_platform: video.source_platform ?? "manual",
@@ -157,8 +173,31 @@ async function resolveJourneyAssets(
       };
     }
 
+    if (asset.libraryAssetId) {
+      const libraryAsset = libraryAssetMap.get(asset.libraryAssetId);
+      if (!libraryAsset) throw new Error("One of the selected library assets no longer exists.");
+      return {
+        library_asset_id: libraryAsset.id,
+        video_id: null,
+        asset_type: libraryAsset.asset_type,
+        source_platform: libraryAsset.source_platform ?? "manual",
+        title: libraryAsset.title ?? "Untitled asset",
+        source_url: libraryAsset.source_url ?? null,
+        embed_url: libraryAsset.embed_url ?? "",
+        thumbnail_url: libraryAsset.thumbnail_url ?? null,
+        summary: asset.summary?.trim() || (libraryAsset.summary ?? null),
+        note: asset.note?.trim() || null,
+        metadata: {
+          ...(libraryAsset.metadata ?? {}),
+          ...(asset.metadata ?? {})
+        },
+        position: index + 1
+      };
+    }
+
     const normalized = normalizeJourneyEmbed({ url: asset.sourceUrl ?? "", title: asset.title ?? "" });
     return {
+      library_asset_id: null,
       video_id: null,
       asset_type: normalized.assetType,
       source_platform: normalized.sourcePlatform,
