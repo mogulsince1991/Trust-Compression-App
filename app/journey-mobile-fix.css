@@ -101,13 +101,13 @@
   }
 
   .journey-viewer.is-portrait .reel-video {
-    width: min(74vw, 360px) !important;
-    height: 58vh !important;
-    height: 58svh !important;
+    width: min(82vw, 400px) !important;
+    height: 62vh !important;
+    height: 62svh !important;
     min-width: 0 !important;
     min-height: 0 !important;
-    max-height: calc(100vh - 220px) !important;
-    max-height: calc(100svh - 220px) !important;
+    max-height: calc(100vh - 206px) !important;
+    max-height: calc(100svh - 206px) !important;
     overflow: hidden !important;
     border: 1px solid rgba(255, 255, 255, 0.08) !important;
     background: #000 !important;
@@ -125,14 +125,16 @@
   }
 
   .journey-viewer .reel-caption {
-    top: 8px !important;
-    right: 8px !important;
+    top: 12px !important;
+    right: 12px !important;
     bottom: auto !important;
     left: auto !important;
     width: auto !important;
-    padding: 4px 8px !important;
+    max-width: calc(100% - 24px) !important;
+    padding: 6px 10px !important;
     border-radius: 999px !important;
-    background: rgba(0, 0, 0, 0.45) !important;
+    background: rgba(0, 0, 0, 0.34) !important;
+    backdrop-filter: blur(14px) !important;
     pointer-events: none !important;
   }
 
@@ -142,8 +144,12 @@
   }
 
   .journey-viewer .reel-caption span {
-    color: rgba(246, 243, 238, 0.76) !important;
-    font-size: 11px !important;
+    color: rgba(246, 243, 238, 0.9) !important;
+    font-size: 12px !important;
+  }
+
+  .journey-viewer .reel-caption strong {
+    display: none !important;
   }
 
   .journey-viewer .reel-nav {
@@ -157,8 +163,8 @@
     bottom: 12px !important;
     bottom: max(12px, env(safe-area-inset-bottom)) !important;
     z-index: 24 !important;
-    height: 82px !important;
-    min-height: 82px !important;
+    height: 96px !important;
+    min-height: 96px !important;
     display: flex !important;
     align-items: stretch !important;
     gap: 8px !important;
@@ -170,23 +176,23 @@
   }
 
   .journey-viewer .queue-card {
-    width: 76vw !important;
-    min-width: 76vw !important;
-    max-width: 370px !important;
-    height: 76px !important;
+    width: 84vw !important;
+    min-width: 84vw !important;
+    max-width: 404px !important;
+    height: 90px !important;
     display: grid !important;
-    grid-template-columns: 96px minmax(0, 1fr) !important;
-    gap: 10px !important;
+    grid-template-columns: 116px minmax(0, 1fr) !important;
+    gap: 12px !important;
     align-items: center !important;
-    padding: 6px !important;
+    padding: 8px !important;
     scroll-snap-align: center !important;
     overflow: hidden !important;
   }
 
   .journey-viewer .queue-card span {
-    width: 96px !important;
-    min-width: 96px !important;
-    height: 54px !important;
+    width: 116px !important;
+    min-width: 116px !important;
+    height: 68px !important;
     aspect-ratio: 16 / 9 !important;
     background-color: #050505 !important;
     background-position: center !important;
@@ -201,14 +207,20 @@
     -webkit-line-clamp: 2 !important;
     -webkit-box-orient: vertical !important;
     white-space: normal !important;
-    line-height: 1.15 !important;
+    font-size: 14px !important;
+    line-height: 1.18 !important;
+  }
+
+  .journey-viewer .queue-card small {
+    font-size: 11px !important;
+    color: rgba(246, 243, 238, 0.68) !important;
   }
 
   .journey-viewer .scroll-cue {
     position: fixed !important;
     left: 50% !important;
-    bottom: 104px !important;
-    bottom: calc(104px + env(safe-area-inset-bottom)) !important;
+    bottom: 118px !important;
+    bottom: calc(118px + env(safe-area-inset-bottom)) !important;
     z-index: 23 !important;
     align-self: auto !important;
     justify-self: center !important;
@@ -225,8 +237,8 @@
     position: fixed !important;
     left: 50% !important;
     right: auto !important;
-    bottom: 104px !important;
-    bottom: calc(104px + env(safe-area-inset-bottom)) !important;
+    bottom: 118px !important;
+    bottom: calc(118px + env(safe-area-inset-bottom)) !important;
     z-index: 25 !important;
     width: fit-content !important;
     max-width: calc(100vw - 32px) !important;
