@@ -68,4 +68,3 @@ export function httpError(status: number, message: string) {
   error.status = status;
   return error;
 }
-
