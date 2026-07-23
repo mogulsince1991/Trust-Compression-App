@@ -27,26 +27,39 @@ import {
   type JourneyDraft,
   type JourneyEmbedDraft,
   type JourneySummary,
+  type LibraryAssetRow,
   type SmartGroup,
   type VideoContext
 } from "@/components/trust-app-shared";
 
 export function LibraryConfigurator({
   videos,
+  libraryAssets,
+  assetDraft,
   selected,
   saving,
   options,
   onSelect,
   onAdd,
+  onAssetDraftChange,
+  onSaveAsset,
+  onAddAsset,
+  onDeleteAsset,
   onArchive,
   onSaveContext
 }: {
   videos: DbVideo[];
+  libraryAssets: LibraryAssetRow[];
+  assetDraft: JourneyEmbedDraft;
   selected: DbVideo | null;
   saving: boolean;
   options: ReturnType<typeof buildOptions>;
   onSelect: (video: DbVideo) => void;
   onAdd: (video: DbVideo) => void;
+  onAssetDraftChange: (draft: JourneyEmbedDraft) => void;
+  onSaveAsset: () => void;
+  onAddAsset: (asset: LibraryAssetRow) => void;
+  onDeleteAsset: (asset: LibraryAssetRow) => void;
   onArchive: (video: DbVideo) => void;
   onSaveContext: (video: DbVideo, context: VideoContext) => void;
 }) {
@@ -56,6 +69,15 @@ export function LibraryConfigurator({
         <span>No videos yet</span>
         <h2>Start by importing a public source.</h2>
         <p>Paste a YouTube video or a public Drive folder to build the library.</p>
+        <EmbeddedAssetsLibrary
+          assets={libraryAssets}
+          draft={assetDraft}
+          saving={saving}
+          onDraftChange={onAssetDraftChange}
+          onSave={onSaveAsset}
+          onAdd={onAddAsset}
+          onDelete={onDeleteAsset}
+        />
       </section>
     );
   }
@@ -80,7 +102,107 @@ export function LibraryConfigurator({
           ))}
         </section>
       </section>
+      <EmbeddedAssetsLibrary
+        assets={libraryAssets}
+        draft={assetDraft}
+        saving={saving}
+        onDraftChange={onAssetDraftChange}
+        onSave={onSaveAsset}
+        onAdd={onAddAsset}
+        onDelete={onDeleteAsset}
+      />
       <BottomPlayer selected={selected} saving={saving} options={options} onAdd={onAdd} onArchive={onArchive} onSaveContext={onSaveContext} />
+    </section>
+  );
+}
+
+function EmbeddedAssetsLibrary({
+  assets,
+  draft,
+  saving,
+  onDraftChange,
+  onSave,
+  onAdd,
+  onDelete,
+}: {
+  assets: LibraryAssetRow[];
+  draft: JourneyEmbedDraft;
+  saving: boolean;
+  onDraftChange: (draft: JourneyEmbedDraft) => void;
+  onSave: () => void;
+  onAdd: (asset: LibraryAssetRow) => void;
+  onDelete: (asset: LibraryAssetRow) => void;
+}) {
+  return (
+    <section className="embedded-library">
+      <div className="collection-top">
+        <div>
+          <span>Library assets</span>
+          <h1>Save reusable embeds and docs</h1>
+        </div>
+        <p>Keep proposals, Gamma docs, Google Docs, PDFs, and cloud-hosted proof assets in one reusable library.</p>
+      </div>
+      <section className="embedded-library-grid">
+        <form
+          className="prospect-brief"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSave();
+          }}
+        >
+          <div className="brief-grid">
+            <label>
+              <span>Asset title</span>
+              <input
+                value={draft.title}
+                onChange={(event) => onDraftChange({ ...draft, title: event.target.value })}
+                placeholder="Kitchen proposal, Gamma scope deck, financing PDF..."
+              />
+            </label>
+            <label>
+              <span>Cloud URL or iframe</span>
+              <input
+                value={draft.url}
+                onChange={(event) => onDraftChange({ ...draft, url: event.target.value })}
+                placeholder="Paste a Google Doc, PDF, Gamma embed, Drive file, Office doc, or iframe code"
+              />
+            </label>
+          </div>
+          <button className="wide-action" disabled={saving || !draft.url.trim()}>
+            {saving ? <Loader2 className="spin" /> : <Plus />}
+            Save asset
+          </button>
+        </form>
+        <div className="embedded-asset-list">
+          {assets.length ? (
+            assets.map((asset) => (
+              <article className="embedded-asset-card" key={asset.id}>
+                <div className="embedded-asset-copy">
+                  <span>{formatJourneyAssetLabel({ id: asset.id, videoId: null, libraryAssetId: asset.id, assetType: asset.assetType, sourcePlatform: asset.sourcePlatform, title: asset.title, sourceUrl: asset.sourceUrl, embedUrl: asset.embedUrl, thumbnailUrl: asset.thumbnailUrl, durationSeconds: null, summary: asset.summary, note: null, position: 1, metadata: asset.metadata })}</span>
+                  <strong>{asset.title}</strong>
+                  <small>{asset.sourceUrl ?? asset.embedUrl ?? "Embedded asset"}</small>
+                </div>
+                <div className="embedded-asset-actions">
+                  <button className="text-button compact" type="button" onClick={() => onAdd(asset)}>
+                    <Plus />
+                    Add to journey
+                  </button>
+                  <button className="icon-mini danger" type="button" onClick={() => onDelete(asset)} aria-label="Archive asset">
+                    <Trash2 />
+                  </button>
+                </div>
+              </article>
+            ))
+          ) : (
+            <article className="embedded-asset-card">
+              <div className="embedded-asset-copy">
+                <strong>No saved assets yet.</strong>
+                <small>Save reusable embeds here so your team can drop them into journeys without re-pasting URLs.</small>
+              </div>
+            </article>
+          )}
+        </div>
+      </section>
     </section>
   );
 }
