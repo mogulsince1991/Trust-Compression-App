@@ -18,4 +18,3 @@ using (
 
 drop policy if exists "workspace managers update workspaces" on public.workspaces;
 drop policy if exists "workspace managers manage members" on public.workspace_members;
-
