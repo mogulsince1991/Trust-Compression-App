@@ -296,7 +296,7 @@ export function WorkspaceView({
             {workspaces.map((item) => (
               <button className={item.id === workspace?.id ? "workspace-list-item is-active" : "workspace-list-item"} key={item.id} onClick={() => onSwitch(item.id)}>
                 <span><Building2 /></span>
-                <div><strong>{item.name}</strong><small>{formatRole(item.role)} Â· {item.slug}</small></div>
+                <div><strong>{item.name}</strong><small>{formatRole(item.role)} · {item.slug}</small></div>
                 {item.id === workspace?.id && <Check />}
               </button>
             ))}
@@ -362,7 +362,7 @@ export function WorkspaceView({
             <div className="workspace-invite-list">
               {activeInvites.length ? activeInvites.map((invite) => (
                 <article className="workspace-invite" key={invite.id}>
-                  <div><strong>{invite.email}</strong><small>{formatRole(invite.role)} Â· expires {invite.expiresAt ? formatDateTime(invite.expiresAt) : "soon"}</small></div>
+                  <div><strong>{invite.email}</strong><small>{formatRole(invite.role)} · expires {invite.expiresAt ? formatDateTime(invite.expiresAt) : "soon"}</small></div>
                   <button className="icon-mini" onClick={() => void navigator.clipboard.writeText(invite.inviteUrl)} aria-label="Copy invitation link"><Copy /></button>
                   <button className="icon-mini danger" onClick={() => onRevokeInvite(invite)} aria-label="Revoke invitation"><X /></button>
                 </article>
@@ -537,4 +537,3 @@ export function readRememberedWorkspaceId(workspaces: WorkspaceRow[]) {
   const savedId = window.localStorage.getItem("trust-compression.workspace-id");
   return workspaces.find((workspace) => workspace.id === savedId)?.id ?? workspaces[0]?.id ?? null;
 }
-
