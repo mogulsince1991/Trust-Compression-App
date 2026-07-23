@@ -58,7 +58,9 @@ export type WorkspaceRow = {
   name: string;
   slug: string;
   role: string;
+  settings: Record<string, any>;
   createdAt: string | null;
+  updatedAt: string | null;
 };
 
 export type WorkspaceInviteRow = {
@@ -70,6 +72,16 @@ export type WorkspaceInviteRow = {
   inviteUrl: string;
   expiresAt: string | null;
   createdAt: string | null;
+};
+
+export type WorkspaceMemberRow = {
+  id: string;
+  userId: string;
+  email: string;
+  displayName: string;
+  role: string;
+  createdAt: string | null;
+  updatedAt: string | null;
 };
 
 export type SourceRow = {
@@ -565,3 +577,4 @@ function compactTrackingReferrer(value: string | null) {
 function formatEventTypeLabel(value: TrackingEventRow["eventType"]) {
   return value.replace(/_/g, " ");
 }
+
