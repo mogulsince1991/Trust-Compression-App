@@ -44,7 +44,6 @@ export function JourneyViewer({ journey, variant = "share" }: { journey: PublicJ
     if (isYouTube) {
       url.searchParams.set("enablejsapi", "1");
       url.searchParams.set("playsinline", "1");
-      url.searchParams.set("vq", "hd1080");
       if (started) url.searchParams.set("autoplay", "1");
     }
     return url.toString();
@@ -214,7 +213,7 @@ export function JourneyViewer({ journey, variant = "share" }: { journey: PublicJ
               title={activeAsset.title}
               controls
               playsInline
-              preload="auto"
+              preload="metadata"
               poster={activeAsset.thumbnailUrl ?? undefined}
               onPlay={() => setStarted(true)}
               onPause={() => setStarted(false)}
