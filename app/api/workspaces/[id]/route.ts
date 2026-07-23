@@ -32,4 +32,3 @@ function jsonError(error: unknown, fallback: string) {
   const status = typeof error === "object" && error && "status" in error ? Number((error as { status?: number }).status) : 400;
   return NextResponse.json({ error: error instanceof Error ? error.message : fallback }, { status });
 }
-
