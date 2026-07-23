@@ -3,6 +3,7 @@
 import {
   ArrowUpRight,
   BarChart3,
+  Building2,
   Clapperboard,
   Import,
   Link2,
@@ -19,6 +20,24 @@ import { useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 import { SocialProfileReportPage } from "@/components/social-profile-report-page";
+import {
+  AuthGate,
+  LibraryFiltersBar,
+  mapLibraryAssetRow,
+  mapSocialProfileRow,
+  mapWorkspaceInviteRow,
+  mapWorkspaceMemberRow,
+  mapWorkspaceRow,
+  readRememberedWorkspaceId,
+  rememberWorkspaceId,
+  RoleGate,
+  type RoleDefinition,
+  type RoleId,
+  SimpleGate,
+  SourcesView,
+  WorkspaceView,
+  type ViewId,
+} from "@/components/trust-app-shell";
 import { LinkTrackingView, MetricsView } from "@/components/trust-app-attribution-ui";
 import { JourneyTray, JourneysView, LibraryConfigurator } from "@/components/trust-app-library-ui";
 import { SocialProfilesView } from "@/components/trust-app-social-profiles";
@@ -29,9 +48,7 @@ import {
   buildOptions,
   buildSmartGroups,
   filterVideos,
-  formatDateTime,
   formatPlatformLabel,
-  formatSourceStatus,
   type ContactRow,
   type DbVideo,
   type FolderRow,
@@ -40,6 +57,7 @@ import {
   type JourneyEmbedDraft,
   type JourneySummary,
   type JourneyViewRow,
+  type LibraryAssetRow,
   type LibraryFilters,
   type MetricsState,
   type SocialProfileDraft,
@@ -50,11 +68,11 @@ import {
   type TrackingLinkRow,
   type TrackingState,
   type TrackingEventRow,
-  type VideoContext
+  type VideoContext,
+  type WorkspaceInviteRow,
+  type WorkspaceMemberRow,
+  type WorkspaceRow
 } from "@/components/trust-app-shared";
-
-type RoleId = "libraryManager" | "salesRep" | "owner" | "prospect";
-type ViewId = "sources" | "library" | "socialProfiles" | "tracking" | "journeys" | "metrics";
 
 const emptyDraft: JourneyDraft = {
   title: "",
@@ -95,7 +113,7 @@ const emptySocialProfileDraft: SocialProfileDraft = {
   businessProfileLabel: "",
 };
 
-const roles: Record<RoleId, { label: string; title: string; description: string; view: ViewId; placeholder: string }> = {
+const roles: Record<RoleId, RoleDefinition> = {
   libraryManager: {
     label: "Library Manager",
     title: "Connect the content sources.",
@@ -132,10 +150,9 @@ const viewTitles: Record<ViewId, string> = {
   socialProfiles: "Social Profiles",
   tracking: "Link Tracking",
   journeys: "Journeys",
-  metrics: "Metrics"
+  metrics: "Metrics",
+  workspace: "Workspace"
 };
-
-const noMagicLinkEmails = new Set(["admin@unmarked.media"]);
 
 export function TrustAppIngestion({
   initialView = "library",
@@ -150,6 +167,10 @@ export function TrustAppIngestion({
   const [view, setView] = useState<ViewId>(initialView);
   const [session, setSession] = useState<Session | null>(null);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+  const [workspaces, setWorkspaces] = useState<WorkspaceRow[]>([]);
+  const [libraryAssets, setLibraryAssets] = useState<LibraryAssetRow[]>([]);
+  const [workspaceInvites, setWorkspaceInvites] = useState<WorkspaceInviteRow[]>([]);
+  const [workspaceMembers, setWorkspaceMembers] = useState<WorkspaceMemberRow[]>([]);
   const [videos, setVideos] = useState<DbVideo[]>([]);
   const [sources, setSources] = useState<SourceRow[]>([]);
   const [journeys, setJourneys] = useState<JourneySummary[]>([]);
@@ -170,8 +191,12 @@ export function TrustAppIngestion({
   const [draftAssets, setDraftAssets] = useState<JourneyAsset[]>([]);
   const [draft, setDraft] = useState<JourneyDraft>(emptyDraft);
   const [journeyEmbedDraft, setJourneyEmbedDraft] = useState<JourneyEmbedDraft>(emptyJourneyEmbedDraft);
+  const [libraryAssetDraft, setLibraryAssetDraft] = useState<JourneyEmbedDraft>(emptyJourneyEmbedDraft);
   const [trackingDraft, setTrackingDraft] = useState<TrackingDraft>(emptyTrackingDraft);
   const [socialProfileDraft, setSocialProfileDraft] = useState<SocialProfileDraft>(emptySocialProfileDraft);
+  const [inviteDraft, setInviteDraft] = useState({ email: "", role: "member" });
+  const [createWorkspaceName, setCreateWorkspaceName] = useState("");
+  const [renameWorkspaceName, setRenameWorkspaceName] = useState("");
   const [journeyWorking, setJourneyWorking] = useState(false);
   const [trackingWorking, setTrackingWorking] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
@@ -185,6 +210,8 @@ export function TrustAppIngestion({
   const smartGroups = useMemo(() => buildSmartGroups(visibleVideos), [visibleVideos]);
   const showCommandSearch = view === "library";
   const pageTitle = viewTitles[view];
+  const currentWorkspace = workspaces.find((workspace) => workspace.id === workspaceId) ?? null;
+  const canManageWorkspace = currentWorkspace?.role === "owner" || currentWorkspace?.role === "admin";
   const selectedReportProfile = socialProfileReportId ? socialProfiles.find((profile) => profile.id === socialProfileReportId) ?? null : null;
 
   useEffect(() => {
@@ -202,6 +229,10 @@ export function TrustAppIngestion({
       setSession(nextSession);
       if (!nextSession) {
         setWorkspaceId(null);
+        setWorkspaces([]);
+        setLibraryAssets([]);
+        setWorkspaceInvites([]);
+        setWorkspaceMembers([]);
         setVideos([]);
         setSources([]);
         setJourneys([]);
@@ -224,16 +255,27 @@ export function TrustAppIngestion({
     async function openWorkspace() {
       if (!workspaceBooted) setLoading(true);
       setError("");
-      const { data: id, error: workspaceError } = await supabase.rpc("ensure_workspace", { workspace_name: "Trust Library" });
+      const nextWorkspaces = await loadWorkspaces();
       if (!active) return;
-      if (workspaceError || !id) {
-        setError(workspaceError?.message ?? "Could not open workspace.");
-        setLoading(false);
-        return;
+
+      let nextWorkspaceId = readRememberedWorkspaceId(nextWorkspaces);
+      if (!nextWorkspaceId) {
+        const { data: id, error: workspaceError } = await supabase.rpc("ensure_workspace", { workspace_name: "Trust Library" });
+        if (!active) return;
+        if (workspaceError || !id) {
+          setError(workspaceError?.message ?? "Could not open workspace.");
+          setLoading(false);
+          return;
+        }
+        const refreshedWorkspaces = await loadWorkspaces();
+        nextWorkspaceId = readRememberedWorkspaceId(refreshedWorkspaces) ?? String(id);
       }
 
-      setWorkspaceId(id);
-      await refreshWorkspace(id);
+      setWorkspaceId(nextWorkspaceId);
+      rememberWorkspaceId(nextWorkspaceId);
+      const openedWorkspace = nextWorkspaces.find((workspace) => workspace.id === nextWorkspaceId);
+      setRenameWorkspaceName(openedWorkspace?.name ?? "");
+      await refreshWorkspace(nextWorkspaceId);
       if (active) {
         setWorkspaceBooted(true);
         setLoading(false);
@@ -264,6 +306,57 @@ export function TrustAppIngestion({
     const nextVideos = (data ?? []) as DbVideo[];
     setVideos(nextVideos);
     setSelected((current) => (current ? nextVideos.find((video) => video.id === current.id) ?? nextVideos[0] ?? null : nextVideos[0] ?? null));
+  }
+
+  async function loadWorkspaces() {
+    if (!session) return [] as WorkspaceRow[];
+    const response = await fetch("/api/workspaces", {
+      headers: { Authorization: `Bearer ${session.access_token}` }
+    });
+    if (!response.ok) return [] as WorkspaceRow[];
+    const result = (await response.json()) as { workspaces?: Array<Record<string, any>> };
+    const nextWorkspaces = (result.workspaces ?? []).map(mapWorkspaceRow);
+    setWorkspaces(nextWorkspaces);
+    return nextWorkspaces;
+  }
+
+  async function loadLibraryAssets(nextWorkspaceId = workspaceId) {
+    if (!session || !nextWorkspaceId) return;
+    const response = await fetch(`/api/library-assets?workspaceId=${encodeURIComponent(nextWorkspaceId)}`, {
+      headers: { Authorization: `Bearer ${session.access_token}` }
+    });
+    if (!response.ok) {
+      setLibraryAssets([]);
+      return;
+    }
+    const result = (await response.json()) as { assets?: Array<Record<string, any>> };
+    setLibraryAssets((result.assets ?? []).map(mapLibraryAssetRow));
+  }
+
+  async function loadWorkspaceInvites(nextWorkspaceId = workspaceId) {
+    if (!session || !nextWorkspaceId) return;
+    const response = await fetch(`/api/workspace/invites?workspaceId=${encodeURIComponent(nextWorkspaceId)}`, {
+      headers: { Authorization: `Bearer ${session.access_token}` }
+    });
+    if (!response.ok) {
+      setWorkspaceInvites([]);
+      return;
+    }
+    const result = (await response.json()) as { invites?: Array<Record<string, any>> };
+    setWorkspaceInvites((result.invites ?? []).map(mapWorkspaceInviteRow));
+  }
+
+  async function loadWorkspaceMembers(nextWorkspaceId = workspaceId) {
+    if (!session || !nextWorkspaceId) return;
+    const response = await fetch(`/api/workspaces/${encodeURIComponent(nextWorkspaceId)}/members`, {
+      headers: { Authorization: `Bearer ${session.access_token}` }
+    });
+    if (!response.ok) {
+      setWorkspaceMembers([]);
+      return;
+    }
+    const result = (await response.json()) as { members?: Array<Record<string, any>> };
+    setWorkspaceMembers((result.members ?? []).map(mapWorkspaceMemberRow));
   }
 
   async function loadSources(nextWorkspaceId = workspaceId) {
@@ -330,7 +423,15 @@ export function TrustAppIngestion({
   }
 
   async function refreshWorkspace(nextWorkspaceId = workspaceId) {
-    await Promise.all([loadVideos(nextWorkspaceId), loadSources(nextWorkspaceId), loadContacts(nextWorkspaceId), loadSocialProfiles(nextWorkspaceId)]);
+    await Promise.all([
+      loadVideos(nextWorkspaceId),
+      loadSources(nextWorkspaceId),
+      loadContacts(nextWorkspaceId),
+      loadSocialProfiles(nextWorkspaceId),
+      loadLibraryAssets(nextWorkspaceId),
+      loadWorkspaceInvites(nextWorkspaceId),
+      loadWorkspaceMembers(nextWorkspaceId)
+    ]);
     const [nextJourneys] = await Promise.all([loadJourneys(nextWorkspaceId), loadTracking(nextWorkspaceId)]);
     await loadMetrics(nextWorkspaceId, nextJourneys ?? []);
   }
@@ -398,140 +499,7 @@ export function TrustAppIngestion({
     setNotice("");
     setError("");
     try {
-      const response = await fetch(`/api/videos/${video.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({
-          workspaceId,
-          suggestedUse: context.suggestedUse,
-          salesCategory: context.salesCategory,
-          funnelStage: context.funnelStage,
-          proofType: context.proofType || context.salesCategory,
-          buyingStage: context.buyingStage || context.funnelStage,
-          tags: context.tags.split(",").map((tag) => tag.trim()).filter(Boolean),
-          customContext: {
-            notes: context.notes,
-            targetBuyer: context.targetBuyer,
-            objections: context.objections,
-            offer: context.offer
-          }
-        })
-      });
-      const result = (await response.json()) as { video?: DbVideo; error?: string };
-      if (!response.ok || !result.video) throw new Error(result.error ?? "Could not save context.");
-      setVideos((current) => current.map((item) => (item.id === video.id ? result.video! : item)));
-      setDraftAssets((current) =>
-        current.map((item) => (item.videoId === video.id ? buildJourneyAssetFromVideo(result.video!, item.position) : item))
-      );
-      setSelected(result.video);
-      setNotice("Video context saved and searchable.");
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not save context.");
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function archiveVideo(video: DbVideo) {
-    if (!session || !workspaceId) return;
-    setWorking(true);
-    setError("");
-    try {
-      const response = await fetch(`/api/videos/${video.id}?workspaceId=${encodeURIComponent(workspaceId)}`, { method: "DELETE", headers: { Authorization: `Bearer ${session.access_token}` } });
-      const result = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(result.error ?? "Could not archive video.");
-      setVideos((current) => current.filter((item) => item.id !== video.id));
-      setDraftAssets((current) => current.filter((item) => item.videoId !== video.id));
-      setSelected((current) => (current?.id === video.id ? videos.find((item) => item.id !== video.id) ?? null : current));
-      setNotice("Video archived. Existing journey metrics remain intact.");
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not archive video.");
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  function addToJourney(video: DbVideo) {
-    setDraftAssets((current) => {
-      if (current.some((item) => item.videoId === video.id)) return current;
-      return [...current, buildJourneyAssetFromVideo(video, current.length + 1)].map((item, index) => ({ ...item, position: index + 1 }));
-    });
-    if (!draft.title) {
-      setDraft((currentDraft) => ({ ...currentDraft, title: "Proof journey", heading: "A focused path through the videos that matter most.", description: "Watch these in order for a clearer view of the proof, questions, and next step." }));
-    }
-    setNotice(`Added "${video.title}" to the journey draft.`);
-  }
-
-  function addEmbeddedAsset() {
-    try {
-      const normalized = normalizeJourneyEmbed({ url: journeyEmbedDraft.url, title: journeyEmbedDraft.title });
-      const nextAsset: JourneyAsset = {
-        id: crypto.randomUUID(),
-        videoId: null,
-        assetType: normalized.assetType as JourneyAsset["assetType"],
-        sourcePlatform: normalized.sourcePlatform,
-        title: normalized.title,
-        sourceUrl: normalized.sourceUrl,
-        embedUrl: normalized.embedUrl,
-        thumbnailUrl: normalized.thumbnailUrl,
-        durationSeconds: null,
-        summary: null,
-        note: null,
-        position: draftAssets.length + 1,
-        metadata: normalized.metadata
-      };
-      setDraftAssets((current) => [...current, nextAsset].map((item, index) => ({ ...item, position: index + 1 })));
-      setJourneyEmbedDraft(emptyJourneyEmbedDraft);
-      if (!draft.title) {
-        setDraft((currentDraft) => ({ ...currentDraft, title: "Proof journey", heading: "A focused proof path through the assets that matter most.", description: "Swipe through the strongest proof, documents, and supporting material in sequence." }));
-      }
-      setNotice(`Added "${normalized.title}" to the journey draft.`);
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not add that asset.");
-    }
-  }
-
-  function removeFromJourney(assetId: string) {
-    setDraftAssets((current) => current.filter((asset) => asset.id !== assetId).map((item, index) => ({ ...item, position: index + 1 })));
-  }
-
-  function moveDraftAsset(assetId: string, direction: -1 | 1) {
-    setDraftAssets((current) => {
-      const index = current.findIndex((asset) => asset.id === assetId);
-      const nextIndex = index + direction;
-      if (index < 0 || nextIndex < 0 || nextIndex >= current.length) return current;
-      const next = [...current];
-      const [item] = next.splice(index, 1);
-      next.splice(nextIndex, 0, item);
-      return next.map((asset, assetIndex) => ({ ...asset, position: assetIndex + 1 }));
-    });
-  }
-
-  function editJourney(journey: JourneySummary) {
-    setSelectedJourneyId(journey.id);
-    setDraft({
-      title: journey.title ?? "",
-      heading: journey.heading ?? "",
-      description: journey.description ?? "",
-      ctaLabel: journey.ctaLabel ?? "Continue the conversation",
-      ctaUrl: journey.ctaUrl ?? "",
-      folderName: folders.find((folder) => folder.id === journey.folderId)?.name ?? ""
-    });
-    setDraftAssets(journey.assets);
-    setShareUrl(journey.shareUrl ?? "");
-    setView("journeys");
-    setNotice("Editing saved journey.");
-  }
-
-  function hydrateJourneyDraft(journey: JourneySummary) {
-    setSelectedJourneyId(journey.id);
-    setDraft({
-      title: journey.title ?? "",
-      heading: journey.heading ?? "",
-      description: journey.description ?? "",
-      ctaLabel: journey.ctaLabel ?? "Continue the conversation",
-      ctaUrl: journey.ctaUrl ?? "",
-      folderName: folders.find((folder) => folder.id === journey.folderId)?.name ?? ""
+      const response = await fe…4023 tokens truncated…ame: folders.find((folder) => folder.id === journey.folderId)?.name ?? ""
     });
     setDraftAssets(journey.assets);
     setShareUrl(journey.shareUrl ?? "");
@@ -586,6 +554,7 @@ export function TrustAppIngestion({
         workspaceId,
         ...draft,
         assets: draftAssets.map((asset) => ({
+          libraryAssetId: asset.libraryAssetId ?? null,
           videoId: asset.videoId,
           assetType: asset.assetType,
           sourcePlatform: asset.sourcePlatform,
@@ -837,7 +806,7 @@ export function TrustAppIngestion({
     router.push("/");
   }
 
-  if (!roleId || !role) return <RoleGate onChoose={chooseRole} />;
+  if (!roleId || !role) return <RoleGate onChoose={chooseRole} roles={roles} />;
   if (loading && !workspaceBooted) return <main className="role-gate"><Loader2 className="spin" /><h1>Opening workspace.</h1></main>;
   if (!supabase && isInternal) return <SimpleGate title="Supabase is not configured." body="Add the Supabase public URL and publishable key in Vercel." onBack={() => setRoleId(null)} />;
   if (!session && isInternal) return <AuthGate role={role} supabase={supabase} onBack={() => setRoleId(null)} />;
@@ -853,6 +822,7 @@ export function TrustAppIngestion({
           <button className={view === "tracking" ? "icon-button is-active" : "icon-button"} onClick={() => setView("tracking")} aria-label="Link tracking" title="Link tracking"><Link2 /><span>Links</span></button>
           <button className={view === "metrics" ? "icon-button is-active" : "icon-button"} onClick={() => setView("metrics")} aria-label="Sales metrics" title="Metrics"><BarChart3 /><span>Metrics</span></button>
           <button className={view === "journeys" ? "icon-button is-active" : "icon-button"} onClick={newJourney} aria-label="Journeys" title="Journeys"><Route /><span>Journeys</span></button>
+          <button className={view === "workspace" ? "icon-button is-active" : "icon-button"} onClick={() => setView("workspace")} aria-label="Workspace" title="Workspace"><Building2 /><span>Workspace</span></button>
         </nav>
         {session && <button className="icon-button" onClick={() => supabase?.auth.signOut()} aria-label="Sign out" title="Sign out"><LogOut /><span>Exit</span></button>}
       </aside>
@@ -860,16 +830,31 @@ export function TrustAppIngestion({
       <main className="stage">
         <header className="command-bar">
           <div className="brand-line"><span>{role.label}</span><strong>{pageTitle}</strong></div>
+          {currentWorkspace && (
+            <label className="workspace-switcher">
+              <span>{currentWorkspace.role} workspace</span>
+              <select value={workspaceId ?? ""} onChange={(event) => void switchWorkspace(event.target.value)}>
+                {workspaces.map((workspace) => (
+                  <option key={workspace.id} value={workspace.id}>
+                    {workspace.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {showCommandSearch ? <label className="command-search"><Search /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={role.placeholder} /></label> : <div className="command-spacer" aria-hidden="true" />}
         </header>
 
         {view === "library" && <LibraryFiltersBar filters={filters} options={options} onChange={setFilters} />}
 
-        <section className="role-context is-quiet"><span>{role.label}</span><h2>{role.title}</h2><p>{role.description}</p></section>
+        {view !== "workspace" && (
+          <section className="role-context is-quiet"><span>{role.label}</span><h2>{role.title}</h2><p>{role.description}</p></section>
+        )}
         {(notice || error) && <p style={{ margin: "0 6px 18px", color: error ? "#ffd4d4" : "#d8d1c5" }}>{error || notice}</p>}
 
         {view === "sources" && <SourcesView sources={sources} importing={working} onImport={importSource} onReimport={reimportSource} onDelete={deleteSource} />}
-        {view === "library" && <LibraryConfigurator videos={visibleVideos} selected={selected} saving={working} options={options} onSelect={setSelected} onAdd={addToJourney} onArchive={archiveVideo} onSaveContext={saveVideoContext} />}
+        {view === "workspace" && <WorkspaceView workspace={currentWorkspace} workspaces={workspaces} members={workspaceMembers} invites={workspaceInvites} canManage={canManageWorkspace} working={working} createName={createWorkspaceName} renameName={renameWorkspaceName} inviteDraft={inviteDraft} onCreateNameChange={setCreateWorkspaceName} onRenameNameChange={setRenameWorkspaceName} onInviteDraftChange={setInviteDraft} onCreate={createWorkspace} onRename={renameWorkspace} onInvite={inviteWorkspaceMember} onSwitch={switchWorkspace} onMemberRoleChange={updateWorkspaceMemberRole} onRemoveMember={removeWorkspaceMember} onRevokeInvite={revokeWorkspaceInvite} />}
+        {view === "library" && <LibraryConfigurator videos={visibleVideos} libraryAssets={libraryAssets} assetDraft={libraryAssetDraft} selected={selected} saving={working} options={options} onSelect={setSelected} onAdd={addToJourney} onAssetDraftChange={setLibraryAssetDraft} onSaveAsset={saveLibraryAsset} onAddAsset={addLibraryAssetToJourney} onDeleteAsset={deleteLibraryAsset} onArchive={archiveVideo} onSaveContext={saveVideoContext} />}
         {view === "socialProfiles" && socialProfileReportId && (
           <SocialProfileReportPage
             profile={selectedReportProfile}
@@ -901,78 +886,3 @@ export function TrustAppIngestion({
   );
 }
 
-function RoleGate({ onChoose }: { onChoose: (role: RoleId) => void }) {
-  return <main className="role-gate"><section className="gate-intro"><span>Trust Library</span><h1>Choose your workspace.</h1><p>Start with sources, then turn imported videos into proof journeys.</p></section><section className="role-grid">{(Object.keys(roles) as RoleId[]).map((id) => <button className="role-card" key={id} onClick={() => onChoose(id)}><span>{roles[id].label}</span><h2>{roles[id].title}</h2><p>{roles[id].description}</p><i>Open <ArrowUpRight /></i></button>)}</section></main>;
-}
-
-function AuthGate({ role, supabase, onBack }: { role: (typeof roles)[RoleId]; supabase: ReturnType<typeof createBrowserSupabaseClient>; onBack: () => void }) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [message, setMessage] = useState("");
-  const [isError, setIsError] = useState(false);
-  const [sending, setSending] = useState(false);
-
-  async function sendMagicLink(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!supabase || !email) return;
-    if (noMagicLinkEmails.has(email.trim().toLowerCase())) {
-      setIsError(true);
-      setMessage("Use password login for this admin account. No magic-link email was sent.");
-      return;
-    }
-    setSending(true);
-    setIsError(false);
-    const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin } });
-    setIsError(Boolean(error));
-    setMessage(error ? error.message : "Check your email. The sign-in link has been sent.");
-    setSending(false);
-  }
-
-  async function signInWithPassword() {
-    if (!supabase || !email || !password) return;
-    setSending(true);
-    setIsError(false);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setIsError(Boolean(error));
-    setMessage(error ? error.message : "Signed in. Opening your workspace...");
-    setSending(false);
-  }
-
-  return <main className="role-gate"><button className="text-button" onClick={onBack}>Back</button><section className="gate-intro"><span>{role.label}</span><h1>Sign in.</h1><p>{role.description}</p></section><form className="prospect-brief" onSubmit={sendMagicLink}><div className="brief-grid"><label className="wide-field"><span>Email</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@company.com" required /></label><label className="wide-field"><span>Password</span><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Password login" minLength={6} /></label></div><button className="wide-action" disabled={sending}>{sending ? <Loader2 className="spin" /> : <ArrowUpRight />}Send magic link</button><button className="text-button" type="button" disabled={sending || !email || password.length < 6} onClick={signInWithPassword} style={{ marginTop: 12 }}>Sign in with password</button>{message && <p style={{ border: "1px solid rgba(255,255,255,.16)", color: isError ? "#ffd4d4" : "#e9e2d6", marginTop: 16, padding: "14px 16px" }}>{message}</p>}</form></main>;
-}
-
-function SourcesView({ sources, importing, onImport, onReimport, onDelete }: { sources: SourceRow[]; importing: boolean; onImport: (event: FormEvent<HTMLFormElement>) => void; onReimport: (source: SourceRow) => void; onDelete: (source: SourceRow) => void }) {
-  return <section className="sources-grid"><section className="browse"><div className="collection-top"><div><span>Sources</span><h1>Import public video sources</h1></div><p>YouTube works now. Public Drive folders work when GOOGLE_DRIVE_API_KEY is set in Vercel.</p></div><form className="prospect-brief" onSubmit={onImport}><div className="brief-grid"><label className="wide-field"><span>Public source URL</span><input name="sourceUrl" required placeholder="YouTube channel, playlist, video, or public Drive folder URL" /></label></div><button className="wide-action" disabled={importing}>{importing ? <Loader2 className="spin" /> : <Import />}Import source</button></form></section><aside className="source-panel"><div className="mini-head"><span>Connected sources</span><strong>{sources.length}</strong></div><div className="source-list">{sources.map((source) => <article className="source-card" key={source.id}><div className="source-card-copy"><div className="source-card-heading"><span>{formatPlatformLabel(source.platform)}</span><strong>{source.account_label ?? formatPlatformLabel(source.platform)}</strong></div><div className="source-card-meta"><small>{formatSourceStatus(source.status)}</small><small>{source.last_synced_at ? `Updated ${formatDateTime(source.last_synced_at)}` : "Waiting for first sync"}</small></div>{source.error && <p>{source.error}</p>}<div className="source-stats"><div><small>Imported</small><strong>{String(source.metadata?.imported ?? 0)}</strong></div><div><small>Updated</small><strong>{String(source.metadata?.updated ?? 0)}</strong></div><div><small>Flagged</small><strong>{String(source.metadata?.duplicateCandidates ?? 0)}</strong></div></div></div><div className="source-card-actions"><button className="icon-mini" disabled={importing} onClick={() => onReimport(source)} aria-label="Reimport source"><RefreshCw /></button><button className="icon-mini danger" disabled={importing} onClick={() => onDelete(source)} aria-label="Delete source"><Trash2 /></button></div></article>)}</div></aside></section>;
-}
-
-function LibraryFiltersBar({ filters, options, onChange }: { filters: LibraryFilters; options: ReturnType<typeof buildOptions>; onChange: (filters: LibraryFilters) => void }) {
-  return <section className="filter-bar"><FilterSelect label="Source" value={filters.platform} options={options.platforms} onChange={(platform) => onChange({ ...filters, platform })} /><FilterSelect label="Date" value={filters.date} options={["last_7", "last_30", "older"]} labels={{ last_7: "Last 7 days", last_30: "Last 30 days", older: "Older" }} onChange={(date) => onChange({ ...filters, date })} /><FilterSelect label="Category" value={filters.category} options={options.categories} onChange={(category) => onChange({ ...filters, category })} /><FilterSelect label="Funnel" value={filters.funnelStage} options={options.funnelStages} onChange={(funnelStage) => onChange({ ...filters, funnelStage })} /><FilterSelect label="Proof" value={filters.proofType} options={options.proofTypes} onChange={(proofType) => onChange({ ...filters, proofType })} /><FilterSelect label="Offer" value={filters.offer} options={options.offers} onChange={(offer) => onChange({ ...filters, offer })} /><FilterSelect label="Buyer" value={filters.buyer} options={options.buyers} onChange={(buyer) => onChange({ ...filters, buyer })} /><button className="text-button compact" onClick={() => onChange(emptyFilters)}>Clear</button></section>;
-}
-
-function FilterSelect({ label, value, options, labels, onChange }: { label: string; value: string; options: string[]; labels?: Record<string, string>; onChange: (value: string) => void }) {
-  return <label className="filter-select"><span>{label}</span><select value={value} onChange={(event) => onChange(event.target.value)}><option value="all">All</option>{options.map((option) => <option key={option} value={option}>{labels?.[option] ?? option}</option>)}</select></label>;
-}
-
-function SimpleGate({ title, body, onBack }: { title: string; body: string; onBack: () => void }) {
-  return <main className="role-gate"><button className="text-button" onClick={onBack}>Back</button><section className="gate-intro"><span>Setup</span><h1>{title}</h1><p>{body}</p></section></main>;
-}
-
-function mapSocialProfileRow(row: Record<string, any>): SocialProfileRow {
-  return {
-    id: String(row.id),
-    workspaceId: String(row.workspace_id),
-    userId: row.user_id ?? null,
-    businessProfileId: row.business_profile_id ?? null,
-    businessProfileLabel: row.business_profile_label ?? null,
-    platform: row.platform ?? "other",
-    username: row.username ?? null,
-    profileUrl: row.profile_url ?? null,
-    profileKey: row.profile_key ?? "",
-    displayName: row.display_name ?? null,
-    avatarUrl: row.avatar_url ?? null,
-    latestCachedMetrics: row.latest_cached_metrics ?? null,
-    lastAnalyzedAt: row.last_analyzed_at ?? null,
-    createdAt: row.created_at ?? null,
-    updatedAt: row.updated_at ?? null,
-  };
-}
