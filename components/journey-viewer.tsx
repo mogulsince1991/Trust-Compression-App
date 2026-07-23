@@ -24,6 +24,7 @@ type VideoOrientation = "wide" | "portrait";
 export function JourneyViewer({ journey, variant = "share" }: { journey: PublicJourney; variant?: "share" | "embed" }) {
   const [active, setActive] = useState(0);
   const [started, setStarted] = useState(false);
+  const [showOverlay, setShowOverlay] = useState(true);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const activeAsset = journey.assets[active];
   const listRef = useRef<HTMLDivElement>(null);
@@ -47,7 +48,14 @@ export function JourneyViewer({ journey, variant = "share" }: { journey: PublicJ
 
   useEffect(() => {
     setStarted(false);
+    setShowOverlay(true);
   }, [activeAsset?.id]);
+
+  useEffect(() => {
+    if (!showOverlay) return;
+    const timer = window.setTimeout(() => setShowOverlay(false), started ? 2200 : 3600);
+    return () => window.clearTimeout(timer);
+  }, [activeAsset?.id, showOverlay, started]);
 
   useEffect(() => {
     const node = listRef.current;
@@ -177,6 +185,10 @@ export function JourneyViewer({ journey, variant = "share" }: { journey: PublicJ
     });
   }
 
+  function revealOverlay() {
+    setShowOverlay(true);
+  }
+
   return (
     <main className={`journey-viewer is-${orientation}${variant === "embed" ? " is-embed" : ""}`} onWheel={onWheel} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       <section className="journey-copy">
@@ -189,7 +201,7 @@ export function JourneyViewer({ journey, variant = "share" }: { journey: PublicJ
         <button className="reel-nav previous" onClick={previous} disabled={active === 0} aria-label="Previous asset">
           <ChevronLeft />
         </button>
-        <article className="reel-video">
+        <article className={`reel-video${showOverlay ? " is-overlay-visible" : " is-overlay-hidden"}`} onClick={revealOverlay}>
           {embedUrl ? (
             <iframe
               key={embedUrl}
