@@ -499,7 +499,381 @@ export function TrustAppIngestion({
     setNotice("");
     setError("");
     try {
-      const response = await fe…4023 tokens truncated…ame: folders.find((folder) => folder.id === journey.folderId)?.name ?? ""
+      const response = await fetch(`/api/videos/${video.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({
+          workspaceId,
+          suggestedUse: context.suggestedUse,
+          salesCategory: context.salesCategory,
+          funnelStage: context.funnelStage,
+          proofType: context.proofType || context.salesCategory,
+          buyingStage: context.buyingStage || context.funnelStage,
+          tags: context.tags.split(",").map((tag) => tag.trim()).filter(Boolean),
+          customContext: {
+            notes: context.notes,
+            targetBuyer: context.targetBuyer,
+            objections: context.objections,
+            offer: context.offer
+          }
+        })
+      });
+      const result = (await response.json()) as { video?: DbVideo; error?: string };
+      if (!response.ok || !result.video) throw new Error(result.error ?? "Could not save context.");
+      setVideos((current) => current.map((item) => (item.id === video.id ? result.video! : item)));
+      setDraftAssets((current) =>
+        current.map((item) => (item.videoId === video.id ? buildJourneyAssetFromVideo(result.video!, item.position) : item))
+      );
+      setSelected(result.video);
+      setNotice("Video context saved and searchable.");
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not save context.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function archiveVideo(video: DbVideo) {
+    if (!session || !workspaceId) return;
+    setWorking(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/videos/${video.id}?workspaceId=${encodeURIComponent(workspaceId)}`, { method: "DELETE", headers: { Authorization: `Bearer ${session.access_token}` } });
+      const result = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Could not archive video.");
+      setVideos((current) => current.filter((item) => item.id !== video.id));
+      setDraftAssets((current) => current.filter((item) => item.videoId !== video.id));
+      setSelected((current) => (current?.id === video.id ? videos.find((item) => item.id !== video.id) ?? null : current));
+      setNotice("Video archived. Existing journey metrics remain intact.");
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not archive video.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  function addToJourney(video: DbVideo) {
+    setDraftAssets((current) => {
+      if (current.some((item) => item.videoId === video.id)) return current;
+      return [...current, buildJourneyAssetFromVideo(video, current.length + 1)].map((item, index) => ({ ...item, position: index + 1 }));
+    });
+    if (!draft.title) {
+      setDraft((currentDraft) => ({ ...currentDraft, title: "Proof journey", heading: "A focused path through the videos that matter most.", description: "Watch these in order for a clearer view of the proof, questions, and next step." }));
+    }
+    setNotice(`Added "${video.title}" to the journey draft.`);
+  }
+
+  function addEmbeddedAsset() {
+    try {
+      const normalized = normalizeJourneyEmbed({ url: journeyEmbedDraft.url, title: journeyEmbedDraft.title });
+      const nextAsset: JourneyAsset = {
+        id: crypto.randomUUID(),
+        videoId: null,
+        assetType: normalized.assetType as JourneyAsset["assetType"],
+        sourcePlatform: normalized.sourcePlatform,
+        title: normalized.title,
+        sourceUrl: normalized.sourceUrl,
+        embedUrl: normalized.embedUrl,
+        thumbnailUrl: normalized.thumbnailUrl,
+        durationSeconds: null,
+        summary: null,
+        note: null,
+        position: draftAssets.length + 1,
+        metadata: normalized.metadata
+      };
+      setDraftAssets((current) => [...current, nextAsset].map((item, index) => ({ ...item, position: index + 1 })));
+      setJourneyEmbedDraft(emptyJourneyEmbedDraft);
+      if (!draft.title) {
+        setDraft((currentDraft) => ({ ...currentDraft, title: "Proof journey", heading: "A focused proof path through the assets that matter most.", description: "Swipe through the strongest proof, documents, and supporting material in sequence." }));
+      }
+      setNotice(`Added "${normalized.title}" to the journey draft.`);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not add that asset.");
+    }
+  }
+
+  async function saveLibraryAsset() {
+    if (!workspaceId || !session) return;
+    setWorking(true);
+    setNotice("");
+    setError("");
+    try {
+      const response = await fetch("/api/library-assets", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          workspaceId,
+          title: libraryAssetDraft.title,
+          url: libraryAssetDraft.url
+        })
+      });
+      const result = (await response.json()) as { asset?: Record<string, any>; error?: string };
+      if (!response.ok || !result.asset) throw new Error(result.error ?? "Could not save the library asset.");
+      const nextAsset = mapLibraryAssetRow(result.asset);
+      setLibraryAssetDraft(emptyJourneyEmbedDraft);
+      setNotice(`Saved "${nextAsset.title}" to the workspace asset library.`);
+      await loadLibraryAssets(workspaceId);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not save the library asset.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  function addLibraryAssetToJourney(asset: LibraryAssetRow) {
+    setDraftAssets((current) => {
+      const nextAsset: JourneyAsset = {
+        id: crypto.randomUUID(),
+        videoId: null,
+        libraryAssetId: asset.id,
+        assetType: asset.assetType,
+        sourcePlatform: asset.sourcePlatform,
+        title: asset.title,
+        sourceUrl: asset.sourceUrl,
+        embedUrl: asset.embedUrl,
+        thumbnailUrl: asset.thumbnailUrl,
+        durationSeconds: null,
+        summary: asset.summary,
+        note: null,
+        position: current.length + 1,
+        metadata: asset.metadata
+      };
+      return [...current, nextAsset].map((item, index) => ({ ...item, position: index + 1 }));
+    });
+    setNotice(`Added "${asset.title}" to the journey draft.`);
+  }
+
+  async function deleteLibraryAsset(asset: LibraryAssetRow) {
+    if (!workspaceId || !session) return;
+    setWorking(true);
+    setNotice("");
+    setError("");
+    try {
+      const response = await fetch(`/api/library-assets/${asset.id}?workspaceId=${encodeURIComponent(workspaceId)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      });
+      const result = (await response.json()) as { ok?: boolean; error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Could not archive the library asset.");
+      setNotice(`Archived "${asset.title}" from the reusable asset library.`);
+      await loadLibraryAssets(workspaceId);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not archive the library asset.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function switchWorkspace(nextWorkspaceId: string) {
+    if (!nextWorkspaceId || nextWorkspaceId === workspaceId) return;
+    setLoading(true);
+    setNotice("");
+    setError("");
+    setWorkspaceId(nextWorkspaceId);
+    rememberWorkspaceId(nextWorkspaceId);
+    setRenameWorkspaceName(workspaces.find((workspace) => workspace.id === nextWorkspaceId)?.name ?? "");
+    await refreshWorkspace(nextWorkspaceId);
+    setLoading(false);
+  }
+
+  async function createWorkspace(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!session) return;
+    setWorking(true);
+    setNotice("");
+    setError("");
+    try {
+      const response = await fetch("/api/workspaces", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ name: createWorkspaceName })
+      });
+      const result = (await response.json()) as { workspace?: Record<string, any>; error?: string };
+      if (!response.ok || !result.workspace) throw new Error(result.error ?? "Could not create workspace.");
+      const nextWorkspace = mapWorkspaceRow(result.workspace);
+      const nextWorkspaces = [...workspaces, nextWorkspace];
+      setWorkspaces(nextWorkspaces);
+      setCreateWorkspaceName("");
+      setWorkspaceId(nextWorkspace.id);
+      setRenameWorkspaceName(nextWorkspace.name);
+      rememberWorkspaceId(nextWorkspace.id);
+      await refreshWorkspace(nextWorkspace.id);
+      setNotice(`${nextWorkspace.name} is ready.`);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not create workspace.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function renameWorkspace(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!workspaceId || !session || !canManageWorkspace) return;
+    setWorking(true);
+    setNotice("");
+    setError("");
+    try {
+      const response = await fetch(`/api/workspaces/${encodeURIComponent(workspaceId)}`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ name: renameWorkspaceName })
+      });
+      const result = (await response.json()) as { workspace?: Record<string, any>; error?: string };
+      if (!response.ok || !result.workspace) throw new Error(result.error ?? "Could not update workspace.");
+      const updated = mapWorkspaceRow(result.workspace);
+      setWorkspaces((current) => current.map((workspace) => workspace.id === updated.id ? updated : workspace));
+      setRenameWorkspaceName(updated.name);
+      setNotice("Workspace name updated.");
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not update workspace.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function inviteWorkspaceMember(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!workspaceId || !session) return;
+    setWorking(true);
+    setNotice("");
+    setError("");
+    try {
+      const response = await fetch("/api/workspace/invites", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          workspaceId,
+          email: inviteDraft.email,
+          role: inviteDraft.role
+        })
+      });
+      const result = (await response.json()) as { invite?: Record<string, any>; error?: string };
+      if (!response.ok || !result.invite) throw new Error(result.error ?? "Could not invite teammate.");
+      setInviteDraft({ email: "", role: inviteDraft.role });
+      setNotice(`Invite ready for ${result.invite.email}.`);
+      await loadWorkspaceInvites(workspaceId);
+      await loadWorkspaceMembers(workspaceId);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not invite teammate.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function updateWorkspaceMemberRole(member: WorkspaceMemberRow, role: string) {
+    if (!workspaceId || !session || !canManageWorkspace) return;
+    setWorking(true);
+    setNotice("");
+    setError("");
+    try {
+      const response = await fetch(`/api/workspaces/${encodeURIComponent(workspaceId)}/members`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ membershipId: member.id, role })
+      });
+      const result = (await response.json()) as { member?: Record<string, any>; error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Could not update member role.");
+      await loadWorkspaceMembers(workspaceId);
+      setNotice(`${member.displayName}'s role was updated.`);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not update member role.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function removeWorkspaceMember(member: WorkspaceMemberRow) {
+    if (!workspaceId || !session || !canManageWorkspace) return;
+    if (!window.confirm(`Remove ${member.displayName} from this workspace?`)) return;
+    setWorking(true);
+    setNotice("");
+    setError("");
+    try {
+      const response = await fetch(`/api/workspaces/${encodeURIComponent(workspaceId)}/members`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ membershipId: member.id })
+      });
+      const result = (await response.json()) as { ok?: boolean; error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Could not remove workspace member.");
+      await loadWorkspaceMembers(workspaceId);
+      setNotice(`${member.displayName} was removed from the workspace.`);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not remove workspace member.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function revokeWorkspaceInvite(invite: WorkspaceInviteRow) {
+    if (!workspaceId || !session || !canManageWorkspace) return;
+    setWorking(true);
+    setNotice("");
+    setError("");
+    try {
+      const response = await fetch("/api/workspace/invites", {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId, inviteId: invite.id })
+      });
+      const result = (await response.json()) as { ok?: boolean; error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Could not revoke invitation.");
+      await loadWorkspaceInvites(workspaceId);
+      setNotice(`Invitation for ${invite.email} was revoked.`);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not revoke invitation.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  function removeFromJourney(assetId: string) {
+    setDraftAssets((current) => current.filter((asset) => asset.id !== assetId).map((item, index) => ({ ...item, position: index + 1 })));
+  }
+
+  function moveDraftAsset(assetId: string, direction: -1 | 1) {
+    setDraftAssets((current) => {
+      const index = current.findIndex((asset) => asset.id === assetId);
+      const nextIndex = index + direction;
+      if (index < 0 || nextIndex < 0 || nextIndex >= current.length) return current;
+      const next = [...current];
+      const [item] = next.splice(index, 1);
+      next.splice(nextIndex, 0, item);
+      return next.map((asset, assetIndex) => ({ ...asset, position: assetIndex + 1 }));
+    });
+  }
+
+  function editJourney(journey: JourneySummary) {
+    setSelectedJourneyId(journey.id);
+    setDraft({
+      title: journey.title ?? "",
+      heading: journey.heading ?? "",
+      description: journey.description ?? "",
+      ctaLabel: journey.ctaLabel ?? "Continue the conversation",
+      ctaUrl: journey.ctaUrl ?? "",
+      folderName: folders.find((folder) => folder.id === journey.folderId)?.name ?? ""
+    });
+    setDraftAssets(journey.assets);
+    setShareUrl(journey.shareUrl ?? "");
+    setView("journeys");
+    setNotice("Editing saved journey.");
+  }
+
+  function hydrateJourneyDraft(journey: JourneySummary) {
+    setSelectedJourneyId(journey.id);
+    setDraft({
+      title: journey.title ?? "",
+      heading: journey.heading ?? "",
+      description: journey.description ?? "",
+      ctaLabel: journey.ctaLabel ?? "Continue the conversation",
+      ctaUrl: journey.ctaUrl ?? "",
+      folderName: folders.find((folder) => folder.id === journey.folderId)?.name ?? ""
     });
     setDraftAssets(journey.assets);
     setShareUrl(journey.shareUrl ?? "");
@@ -885,4 +1259,3 @@ export function TrustAppIngestion({
     </div>
   );
 }
-
