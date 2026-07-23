@@ -25,6 +25,7 @@ export function JourneyViewer({ journey, variant = "share" }: { journey: PublicJ
   const [active, setActive] = useState(0);
   const [started, setStarted] = useState(false);
   const [showOverlay, setShowOverlay] = useState(true);
+  const [driveStreamFailed, setDriveStreamFailed] = useState(false);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const activeAsset = journey.assets[active];
   const listRef = useRef<HTMLDivElement>(null);
@@ -32,6 +33,8 @@ export function JourneyViewer({ journey, variant = "share" }: { journey: PublicJ
   const trackedOpen = useRef(false);
   const isYouTube = activeAsset?.embedUrl?.includes("youtube.com/embed");
   const orientation = activeAsset ? inferOrientation(activeAsset) : "wide";
+  const driveFileId = activeAsset ? extractDriveFileId(activeAsset.sourceUrl ?? activeAsset.embedUrl) : null;
+  const driveStreamUrl = driveFileId ? `/api/media/drive/${encodeURIComponent(driveFileId)}` : null;
 
   if (!activeAsset) return null;
 
@@ -49,6 +52,7 @@ export function JourneyViewer({ journey, variant = "share" }: { journey: PublicJ
   useEffect(() => {
     setStarted(false);
     setShowOverlay(true);
+    setDriveStreamFailed(false);
   }, [activeAsset?.id]);
 
   useEffect(() => {
@@ -202,7 +206,20 @@ export function JourneyViewer({ journey, variant = "share" }: { journey: PublicJ
           <ChevronLeft />
         </button>
         <article className={`reel-video${showOverlay ? " is-overlay-visible" : " is-overlay-hidden"}`} onClick={revealOverlay}>
-          {embedUrl ? (
+          {driveStreamUrl && !driveStreamFailed ? (
+            <video
+              key={driveStreamUrl}
+              src={driveStreamUrl}
+              title={activeAsset.title}
+              controls
+              playsInline
+              preload="metadata"
+              poster={activeAsset.thumbnailUrl ?? undefined}
+              onPlay={() => setStarted(true)}
+              onPause={() => setStarted(false)}
+              onError={() => setDriveStreamFailed(true)}
+            />
+          ) : embedUrl ? (
             <iframe
               key={embedUrl}
               src={embedUrl}
@@ -269,6 +286,18 @@ function inferOrientation(asset: JourneyAsset): VideoOrientation {
   ) return "portrait";
   if (source.includes("drive.google.com") || asset.sourcePlatform.toLowerCase().includes("drive")) return "adaptive";
   return "wide";
+}
+
+function extractDriveFileId(value: string | null) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (!url.hostname.includes("drive.google.com")) return null;
+    const fileMatch = url.pathname.match(/\/file\/d\/([^/]+)/);
+    return fileMatch?.[1] ?? url.searchParams.get("id");
+  } catch {
+    return null;
+  }
 }
 
 function getViewerId() {
