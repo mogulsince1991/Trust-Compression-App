@@ -19,7 +19,7 @@ export type PublicJourney = {
   assets: JourneyAsset[];
 };
 
-type VideoOrientation = "wide" | "portrait";
+type VideoOrientation = "wide" | "portrait" | "adaptive";
 
 export function JourneyViewer({ journey, variant = "share" }: { journey: PublicJourney; variant?: "share" | "embed" }) {
   const [active, setActive] = useState(0);
@@ -250,9 +250,24 @@ export function JourneyViewer({ journey, variant = "share" }: { journey: PublicJ
 }
 
 function inferOrientation(asset: JourneyAsset): VideoOrientation {
+  const metadataOrientation = String(asset.metadata?.orientation ?? asset.metadata?.aspectRatio ?? "").toLowerCase();
+  const width = Number(asset.metadata?.width ?? asset.metadata?.videoWidth ?? 0);
+  const height = Number(asset.metadata?.height ?? asset.metadata?.videoHeight ?? 0);
   const source = `${asset.sourceUrl ?? ""} ${asset.embedUrl ?? ""} ${asset.title ?? ""}`.toLowerCase();
   if (asset.assetType !== "video") return "wide";
-  if (source.includes("/shorts/") || source.includes("youtube.com/shorts") || source.includes("instagram.com/reel") || source.includes("tiktok.com") || source.includes("vertical") || source.includes("portrait")) return "portrait";
+  if (
+    metadataOrientation.includes("portrait")
+    || metadataOrientation === "9:16"
+    || metadataOrientation === "9/16"
+    || (width > 0 && height > width)
+    || source.includes("/shorts/")
+    || source.includes("youtube.com/shorts")
+    || source.includes("instagram.com/reel")
+    || source.includes("tiktok.com")
+    || source.includes("vertical")
+    || source.includes("portrait")
+  ) return "portrait";
+  if (source.includes("drive.google.com") || asset.sourcePlatform.toLowerCase().includes("drive")) return "adaptive";
   return "wide";
 }
 
