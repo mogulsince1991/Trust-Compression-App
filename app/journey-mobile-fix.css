@@ -5,6 +5,7 @@
 }
 
 .journey-viewer .reel-video iframe,
+.journey-viewer .reel-video video,
 .journey-viewer .reel-poster {
   display: block;
   border: 0;
@@ -14,9 +15,15 @@
   background-size: contain;
 }
 
+.journey-viewer .reel-video video {
+  object-fit: contain;
+}
+
 .journey-viewer.is-wide .reel-video iframe,
+.journey-viewer.is-wide .reel-video video,
 .journey-viewer.is-wide .reel-poster,
 .journey-viewer.is-adaptive .reel-video iframe,
+.journey-viewer.is-adaptive .reel-video video,
 .journey-viewer.is-adaptive .reel-poster {
   aspect-ratio: 16 / 9;
   width: 100%;
@@ -25,6 +32,7 @@
 }
 
 .journey-viewer.is-portrait .reel-video iframe,
+.journey-viewer.is-portrait .reel-video video,
 .journey-viewer.is-portrait .reel-poster {
   aspect-ratio: 9 / 16;
   width: auto;
@@ -128,10 +136,13 @@
   }
 
   .journey-viewer.is-wide .reel-video iframe,
+  .journey-viewer.is-wide .reel-video video,
   .journey-viewer.is-wide .reel-poster,
   .journey-viewer.is-adaptive .reel-video iframe,
+  .journey-viewer.is-adaptive .reel-video video,
   .journey-viewer.is-adaptive .reel-poster,
   .journey-viewer.is-portrait .reel-video iframe,
+  .journey-viewer.is-portrait .reel-video video,
   .journey-viewer.is-portrait .reel-poster {
     width: 100% !important;
     height: 100% !important;
@@ -214,6 +225,10 @@
     background-position: center !important;
     background-repeat: no-repeat !important;
     background-size: contain !important;
+  }
+
+  .journey-viewer .reel-video video {
+    object-fit: contain !important;
   }
 
   .journey-viewer .queue-card strong {
