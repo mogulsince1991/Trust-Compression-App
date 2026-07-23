@@ -577,4 +577,3 @@ function compactTrackingReferrer(value: string | null) {
 function formatEventTypeLabel(value: TrackingEventRow["eventType"]) {
   return value.replace(/_/g, " ");
 }
-
