@@ -130,4 +130,3 @@ revoke insert, update, delete on public.workspace_invites from authenticated;
 grant select on public.workspaces to authenticated;
 grant select on public.workspace_members to authenticated;
 grant select on public.workspace_invites to authenticated;
-
