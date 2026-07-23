@@ -1103,7 +1103,104 @@ div {
 .social-metric-card strong {
   display: block;
   min-width: 0;
-  fon…481 tokens truncated…  line-height: 1.6;
+  font-family: var(--sans);
+  font-size: clamp(16px, 1.8vw, 22px);
+  line-height: 1.15;
+  font-weight: 600;
+}
+
+.social-metric-card p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.social-report-page-shell,
+.social-report-page-topline,
+.social-report-page-actions,
+.social-report-hero,
+.social-report-hero-copy,
+.social-report-hero-card,
+.social-report-hero-links,
+.social-report-hero-head,
+.social-report-mini-grid,
+.social-report-section-shell,
+.social-video-grid,
+.social-video-card,
+.social-video-card-top,
+.social-video-stats,
+.social-video-actions,
+.social-report-two-up,
+.social-recommendation-list,
+.social-recommendation-card,
+.social-recommendation-actions,
+.social-gap-list {
+  display: grid;
+}
+
+.social-report-page-shell {
+  gap: 18px;
+}
+
+.social-report-page-topline {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.social-report-page-actions,
+.social-video-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.social-report-hero,
+.social-report-two-up {
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+  gap: 16px;
+}
+
+.social-report-hero-copy,
+.social-report-hero-card,
+.social-report-section-shell,
+.social-video-card,
+.social-recommendation-card,
+.social-gap-card {
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.social-report-hero-copy,
+.social-report-hero-card,
+.social-report-section-shell {
+  gap: 14px;
+}
+
+.social-report-hero-head {
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.social-report-hero-head h1 {
+  margin: 6px 0 10px;
+  font-size: clamp(34px, 5vw, 58px);
+  line-height: 0.94;
+  font-weight: 500;
+}
+
+.social-report-hero-head p,
+.social-report-hero-card p,
+.social-recommendation-card p,
+.social-gap-card p {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.6;
 }
 
 .social-report-hero-meta {
@@ -2238,4 +2335,3 @@ div {
     grid-template-columns: 30px minmax(0, 1fr) auto auto;
   }
 }
-
