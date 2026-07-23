@@ -9,6 +9,8 @@ export type WorkspaceAccessContext = {
   serviceSupabase: NonNullable<ReturnType<typeof createServiceSupabaseClient>>;
 };
 
+export const workspaceManagerRoles = new Set(["owner", "admin"]);
+
 export async function requireWorkspaceAccess(request: Request, workspaceId: string): Promise<WorkspaceAccessContext> {
   const accessToken = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim();
   if (!accessToken) {
@@ -54,8 +56,16 @@ export async function requireWorkspaceAccess(request: Request, workspaceId: stri
   };
 }
 
+export function requireWorkspaceManager(context: WorkspaceAccessContext) {
+  if (!workspaceManagerRoles.has(context.workspaceRole)) {
+    throw httpError(403, "Only workspace owners and admins can manage this workspace.");
+  }
+  return context;
+}
+
 export function httpError(status: number, message: string) {
   const error = new Error(message) as Error & { status?: number };
   error.status = status;
   return error;
 }
+
