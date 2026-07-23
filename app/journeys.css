@@ -279,6 +279,7 @@
   bottom: 0;
   padding: clamp(18px, 3vw, 34px);
   background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.86));
+  transition: opacity 180ms ease, transform 180ms ease;
 }
 
 .reel-caption span {
@@ -295,6 +296,17 @@
 .reel-caption p {
   max-width: 620px;
   margin-top: 12px;
+}
+
+.reel-video.is-overlay-hidden .reel-caption {
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+}
+
+.reel-video.is-overlay-visible .reel-caption {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .reel-nav,
