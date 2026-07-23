@@ -15,7 +15,9 @@
 }
 
 .journey-viewer.is-wide .reel-video iframe,
-.journey-viewer.is-wide .reel-poster {
+.journey-viewer.is-wide .reel-poster,
+.journey-viewer.is-adaptive .reel-video iframe,
+.journey-viewer.is-adaptive .reel-poster {
   aspect-ratio: 16 / 9;
   width: 100%;
   height: auto;
@@ -90,11 +92,23 @@
 
   .journey-viewer.is-wide .reel-video {
     width: 100% !important;
-    height: 34vh !important;
-    height: 34svh !important;
+    height: min(44vh, calc(100vh - 310px)) !important;
+    height: min(44svh, calc(100svh - 310px)) !important;
     min-width: 0 !important;
     min-height: 0 !important;
-    max-height: 320px !important;
+    max-height: 430px !important;
+    overflow: hidden !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    background: #000 !important;
+  }
+
+  .journey-viewer.is-adaptive .reel-video {
+    width: min(92vw, 540px) !important;
+    height: min(52vh, calc(100vh - 286px)) !important;
+    height: min(52svh, calc(100svh - 286px)) !important;
+    min-width: 0 !important;
+    min-height: 300px !important;
+    max-height: 560px !important;
     overflow: hidden !important;
     border: 1px solid rgba(255, 255, 255, 0.08) !important;
     background: #000 !important;
@@ -115,6 +129,8 @@
 
   .journey-viewer.is-wide .reel-video iframe,
   .journey-viewer.is-wide .reel-poster,
+  .journey-viewer.is-adaptive .reel-video iframe,
+  .journey-viewer.is-adaptive .reel-poster,
   .journey-viewer.is-portrait .reel-video iframe,
   .journey-viewer.is-portrait .reel-poster {
     width: 100% !important;
