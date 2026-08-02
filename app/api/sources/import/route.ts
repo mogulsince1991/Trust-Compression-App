@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { runSourceImport } from "@/lib/import-runner";
-import { createUserSupabaseClient } from "@/lib/supabase";
+import { createServiceSupabaseClient, createUserSupabaseClient } from "@/lib/supabase";
+import { recordActivity } from "@/lib/server/activity";
 
 type ImportRequest = {
   workspaceId?: string;
@@ -26,6 +27,8 @@ export async function POST(request: Request) {
     if (userError || !user) return NextResponse.json({ error: "Your session expired. Sign in again." }, { status: 401 });
 
     const result = await runSourceImport({ supabase, workspaceId, sourceUrl, userId: user.id });
+    const serviceSupabase = createServiceSupabaseClient();
+    if (serviceSupabase) await recordActivity(serviceSupabase, { workspaceId, actorUserId: user.id, eventType: "source_imported", entityType: "source", surface: "sources", metadata: { imported: Number(result.imported ?? 0), updated: Number(result.updated ?? 0) } });
     return NextResponse.json(result);
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Source import failed." }, { status: 400 });
