@@ -484,7 +484,558 @@ export function ContractorMetricsWorkspace() {
     });
   }
 
-  function toggleMetricInSection(sectionId: string, metricId: str…8235 tokens truncated…ng>{value}</strong></div>;
+  function toggleMetricInSection(sectionId: string, metricId: string) {
+    updateRuleSet((current) => ({
+      ...current,
+      settings: {
+        ...current.settings,
+        dashboardSections: (current.settings?.dashboardSections ?? []).map((section: any) => {
+          if (section.id !== sectionId || section.kind !== "metric_band") return section;
+          const metricIds = new Set(section.metricIds ?? []);
+          if (metricIds.has(metricId)) metricIds.delete(metricId);
+          else metricIds.add(metricId);
+          return { ...section, metricIds: Array.from(metricIds) };
+        }),
+      },
+    }));
+  }
+
+  function updatePreviewRequest(connectedAccountId: string, key: keyof PreviewRequestState, value: string) {
+    setPreviewRequests((current) => ({
+      ...current,
+      [connectedAccountId]: { ...(current[connectedAccountId] ?? defaultPreviewRequest()), [key]: value },
+    }));
+  }
+
+  function updatePreviewFilter(connectedAccountId: string, key: string, value: string) {
+    setPreviewFilters((current) => ({
+      ...current,
+      [connectedAccountId]: { ...(current[connectedAccountId] ?? {}), [key]: value },
+    }));
+  }
+
+  function updateSoldJobConfig(patch: AnyRecord) {
+    updateRuleSet((current) => ({
+      ...current,
+      classifications: {
+        ...current.classifications,
+        soldJob: {
+          ...current.classifications?.soldJob,
+          ...patch,
+        },
+      },
+    }));
+  }
+
+  if (loading) {
+    return (
+      <main className={styles.screen}>
+        <div className={styles.loadingBox}>
+          <Loader2 className={styles.spin} />
+          <p className={styles.copy}>Loading contractor metrics workspace.</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (!session) {
+    return <Gate title="Sign in to open contractor metrics." body="This workspace uses your Trust Compression session plus server-side connected accounts." />;
+  }
+
+  if (!workspaceId || !ruleSetDraft) {
+    return <Gate title="Workspace not ready." body={error || "We could not load the contractor metrics workspace right now."} />;
+  }
+
+  const metricOptions = metrics.map((metric: any) => ({ value: metric.id, label: metric.name }));
+
+  return (
+    <main className={styles.screen}>
+      <section className={styles.hero}>
+        <span>Contractor Metrics</span>
+        <h1>Live CRM reporting with source previews and a guided metrics builder.</h1>
+        <p>Run the contractor dashboard directly from connected CRMs, inspect live source rows before syncing, and tune the live reporting layout without dropping into raw JSON.</p>
+        <div className={styles.heroActions}>
+          <Link href="/" className={styles.linkButton}>Open main app</Link>
+          <button className={styles.secondary} type="button" disabled={working === "refresh"} onClick={() => refresh()}><RefreshCw />Refresh workspace</button>
+          <button className={styles.primary} type="button" disabled={working === "report"} onClick={runReport}><Sparkles />{working === "report" ? "Generating..." : "Run contractor report"}</button>
+        </div>
+      </section>
+
+      {notice ? <div className={styles.notice}>{notice}</div> : null}
+      {error ? <div className={styles.error}>{error}</div> : null}
+
+      <nav className={styles.shellTabs}>
+        {TABS.map((entry) => {
+          const Icon = entry.icon;
+          return <button key={entry.id} type="button" className={tab === entry.id ? styles.shellTabActive : styles.shellTab} onClick={() => setTab(entry.id)}><Icon />{entry.label}</button>;
+        })}
+      </nav>
+
+      {tab === "metrics" ? (
+        <div className={styles.stack}>
+          <section className={styles.controlGrid}>
+            <Panel title="Report run controls" icon={<BarChart3 />}>
+              <div className={styles.formGrid}>
+                <Field label="Client name" value={clientName} onChange={setClientName} />
+                <SelectField label="Report template" value={selectedRuleSetId ?? ""} onChange={(value) => { setSelectedRuleSetId(value); const next = ruleSets.find((entry) => entry.id === value) ?? null; setRuleSetDraft(clone(next)); }} options={ruleSets.map((entry) => ({ value: entry.id ?? entry.slug, label: entry.name }))} />
+                <Field label="Start date" type="date" value={startDate} onChange={setStartDate} />
+                <Field label="End date" type="date" value={endDate} onChange={setEndDate} />
+              </div>
+            </Panel>
+            <Panel title="Dashboard status" icon={<Database />}>
+              <div className={styles.statusStrip}>
+                <Pill label="Connected accounts" value={String(accounts.length)} />
+                <Pill label="Normalized sources" value={String(sources.length)} />
+                <Pill label="Saved runs" value={String(reports.length)} />
+              </div>
+              {activeReport ? (
+                <div className={styles.previewPanel}>
+                  <div className={styles.reportRow}>
+                    <strong>{ruleSetDraft.name}</strong>
+                    <small>{startDate} to {endDate}</small>
+                    <small>{activeReport?.createdAt ? `Generated ${formatDateTime(activeReport.createdAt)}` : "Live report ready to run."}</small>
+                  </div>
+                  <div className={styles.reportRow}>
+                    <small>{activeReportSource}</small>
+                    {activeReport?.reportId ? <small>Report ID {activeReport.reportId}</small> : null}
+                  </div>
+                  <div className={styles.reportRow}>
+                    <small>
+                      Source rows: {String(activeReport.sourceSnapshot?.leadRows ?? 0)} leads / {String(activeReport.sourceSnapshot?.jobRows ?? 0)} jobs / {String(activeReport.sourceSnapshot?.spendRows ?? 0)} spend
+                    </small>
+                    <small>{String(activeReport.sourceSnapshot?.generatedFrom ?? "Live fetch")}</small>
+                  </div>
+                  {Array.isArray(activeReport.sourceSnapshot?.accountErrors) && activeReport.sourceSnapshot.accountErrors.length ? (
+                    <div className={styles.summaryList}>
+                      {activeReport.sourceSnapshot.accountErrors.map((entry: string, index: number) => (
+                        <div key={`account-error-${index}`} className={styles.summaryRow}>
+                          <span className={styles.rowError}>{entry}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </Panel>
+          </section>
+
+          {activeReport ? (
+            <>
+              {sections.filter((section: any) => section.visible !== false).map((section: any) => {
+                if (section.kind === "summary") {
+                  return (
+                    <Panel key={section.id} title={section.title} icon={<Sparkles />}>
+                      <div className={styles.summaryList}>
+                        {(activeReport.executiveSummary ?? []).length ? (
+                          activeReport.executiveSummary.map((entry: string, index: number) => <div key={`${section.id}-${index}`} className={styles.summaryRow}>{entry}</div>)
+                        ) : (
+                          <p className={styles.copy}>No executive summary rows are available yet for this run.</p>
+                        )}
+                      </div>
+                    </Panel>
+                  );
+                }
+                if (section.kind === "metric_band") {
+                  return (
+                    <Panel key={section.id} title={section.title} icon={<BarChart3 />}>
+                      <div className={metricBandClassName(section)}>
+                        {(section.metricIds ?? []).map((metricId: string) => {
+                          const metric = metricMap[metricId];
+                          if (!metric) return null;
+                          const comparison = comparisonMap[metricId];
+                          return (
+                            <MetricCard
+                              key={metricId}
+                              label={metric.name}
+                              value={formatMetricValue(metric.value, metric.displayType)}
+                              detail={metric.description || describeMetricDefinition(metric)}
+                              delta={metricDelta(metric, comparison)}
+                              inspector={buildMetricInspector(metric)}
+                            />
+                          );
+                        })}
+                      </div>
+                    </Panel>
+                  );
+                }
+                return <DataPanel key={section.id} title={section.title} tableId={section.tableId ?? "unmatched_review"} report={activeReport} />;
+              })}
+              <DebugTablesPanel report={activeReport} />
+            </>
+          ) : (
+            <Panel title="No report yet" icon={<Sparkles />}>
+              <p className={styles.copy}>Run the contractor report to see KPI cards, ranked tables, and drilldown rows using your current workspace defaults.</p>
+            </Panel>
+          )}
+        </div>
+      ) : null}
+
+      {tab === "config" ? (
+        <div className={styles.stack}>
+          <section className={styles.builderHeader}>
+            <div>
+              <span>Report Config</span>
+              <h2>Restore clarity to the live dashboard.</h2>
+              <p className={styles.copy}>Shape what the owner sees first: metric formulas, card placement, and how dense each metric band should feel.</p>
+            </div>
+            <div className={styles.heroActions}>
+              <button className={styles.secondary} type="button" onClick={() => addSection("metric_band")}><Plus />Add metric band</button>
+              <button className={styles.secondary} type="button" onClick={() => addSection("table")}><Plus />Add table</button>
+              <button className={styles.primary} type="button" disabled={working === "save-rule-set"} onClick={saveRuleSet}><Save />{working === "save-rule-set" ? "Saving..." : "Save config"}</button>
+            </div>
+          </section>
+
+          <section className={styles.controlGrid}>
+            <Panel title="Metric catalog" icon={<Sparkles />}>
+              <div className={styles.actionRow}>
+                <button className={styles.secondary} type="button" onClick={addMetric}><Plus />Add metric</button>
+                {selectedMetric ? <button className={styles.ghost} type="button" onClick={() => removeMetric(selectedMetric.id)}><Trash2 />Remove metric</button> : null}
+              </div>
+              <div className={styles.previewPanel}>
+                <div className={styles.reportList}>
+                  {metrics.map((metric: any) => (
+                    <button key={metric.id} type="button" className={selectedMetric?.id === metric.id ? styles.metricListItemActive : styles.metricListItem} onClick={() => setSelectedMetricId(metric.id)}>
+                      <strong>{metric.name}</strong>
+                      <small>{describeMetricDefinition(metric)}</small>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </Panel>
+
+            <Panel title="Metric editor" icon={<Settings2 />}>
+              {selectedMetric ? (
+                <div className={styles.formGrid}>
+                  <Field label="Metric name" value={selectedMetric.name ?? ""} onChange={(value) => updateMetric(selectedMetric.id, (metric) => ({ ...metric, name: value }))} />
+                  <SelectField label="Display type" value={selectedMetric.displayType ?? "number"} onChange={(value) => updateMetric(selectedMetric.id, (metric) => ({ ...metric, displayType: value }))} options={DISPLAY_TYPES.map((value) => ({ value, label: prettyLabel(value) }))} />
+                  <SelectField label="Operation" value={selectedMetric.operation ?? "count"} onChange={(value) => updateMetric(selectedMetric.id, (metric) => ({ ...metric, operation: value }))} options={METRIC_OPERATIONS.map((value) => ({ value, label: prettyLabel(value) }))} />
+                  <TextAreaField label="Description" value={selectedMetric.description ?? ""} onChange={(value) => updateMetric(selectedMetric.id, (metric) => ({ ...metric, description: value }))} />
+                  {selectedMetric.operation === "formula" ? (
+                    <div className={styles.fullField}>
+                      <FormulaBuilder metric={selectedMetric} metrics={metrics} onChange={(formula) => updateMetric(selectedMetric.id, (metric) => ({ ...metric, formula }))} />
+                    </div>
+                  ) : (
+                    <>
+                      <SelectField label="Dataset" value={selectedMetricDatasetId ?? ""} onChange={(value) => {
+                        const dataset = datasets.find((entry: DatasetDefinition) => entry.id === value);
+                        if (!dataset) return;
+                        updateMetric(selectedMetric.id, (metric) => ({
+                          ...metric,
+                          source: dataset.provider,
+                          provider: dataset.provider,
+                          object: dataset.object,
+                          field: dataset.fields[0] ?? "",
+                          dateField: metric.dateField || dataset.dateField || "",
+                        }));
+                      }} options={datasets.map((dataset: DatasetDefinition) => ({ value: dataset.id, label: `${dataset.label} (${dataset.kind})` }))} />
+                      <SelectField label="Field" value={selectedMetric.field ?? ""} onChange={(value) => updateMetric(selectedMetric.id, (metric) => ({ ...metric, field: value }))} options={selectedMetricFields.map((value) => ({ value, label: value }))} />
+                      <Field label="Date field" value={selectedMetric.dateField ?? ""} onChange={(value) => updateMetric(selectedMetric.id, (metric) => ({ ...metric, dateField: value }))} />
+                      {selectedMetricDataset ? (
+                        <div className={styles.fullField}>
+                          <div className={styles.ruleCard}>
+                            <div className={styles.ruleCardHeader}>
+                              <div className={styles.layoutMeta}>
+                                <span>{selectedMetricDataset.kind === "computed" ? "Computed dataset" : "Raw dataset"}</span>
+                                <strong>{selectedMetricDataset.label}</strong>
+                              </div>
+                            </div>
+                            <small>{selectedMetricDataset.description}</small>
+                            <small>Row grain: {selectedMetricDataset.rowGrain}</small>
+                            {selectedMetricDataset.inputDatasets?.length ? <small>Inputs: {selectedMetricDataset.inputDatasets.join(", ")}</small> : null}
+                          </div>
+                        </div>
+                      ) : null}
+                    </>
+                  )}
+                </div>
+              ) : <p className={styles.copy}>Select a metric to edit it.</p>}
+            </Panel>
+          </section>
+
+          <Panel title="Dashboard sections" icon={<BarChart3 />}>
+            <div className={styles.stack}>
+              {sections.map((section: any) => (
+                <article key={section.id} className={styles.layoutRow}>
+                  <div className={styles.layoutMeta}>
+                    <span>{section.kind === "metric_band" ? "Metric band" : "Table"}</span>
+                    <strong>{section.title}</strong>
+                  </div>
+                  <div className={styles.layoutControls}>
+                    <input value={section.title ?? ""} onChange={(event) => updateSection(section.id, { title: event.target.value })} aria-label={`Title for ${section.title}`} />
+                    <label className={styles.toggle}><input type="checkbox" checked={section.visible !== false} onChange={(event) => updateSection(section.id, { visible: event.target.checked })} />Visible</label>
+                    {section.kind === "metric_band" ? (
+                      <>
+                        <select value={String(section.columns ?? 4)} onChange={(event) => updateSection(section.id, { columns: Number(event.target.value) })}>
+                          {[2, 3, 4, 6].map((value) => <option key={value} value={value}>{value} columns</option>)}
+                        </select>
+                        <select value={section.density ?? "comfortable"} onChange={(event) => updateSection(section.id, { density: event.target.value })}>
+                          <option value="compact">Compact cards</option>
+                          <option value="comfortable">Comfortable cards</option>
+                          <option value="editorial">Editorial cards</option>
+                        </select>
+                      </>
+                    ) : (
+                      <select value={section.tableId ?? "unmatched_review"} onChange={(event) => updateSection(section.id, { tableId: event.target.value })}>
+                        {TABLE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+                    )}
+                    <button className={styles.iconButton} type="button" onClick={() => moveSection(section.id, -1)}><ArrowUp /></button>
+                    <button className={styles.iconButton} type="button" onClick={() => moveSection(section.id, 1)}><ArrowDown /></button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </Panel>
+
+          <section className={styles.controlGrid}>
+            <Panel title="Sold job rule" icon={<Database />}>
+              <div className={styles.formGrid}>
+                <TextAreaField
+                  label="Sold date field priority"
+                  value={(ruleSetDraft.classifications?.soldJob?.soldDateFields ?? []).join("\n")}
+                  onChange={(value) => updateSoldJobConfig({ soldDateFields: parseLines(value) })}
+                />
+                <TextAreaField
+                  label="Revenue field priority"
+                  value={(ruleSetDraft.classifications?.soldJob?.revenueFields ?? []).join("\n")}
+                  onChange={(value) => updateSoldJobConfig({ revenueFields: parseLines(value) })}
+                />
+                <Field
+                  label="Cancelled status pattern"
+                  value={ruleSetDraft.classifications?.soldJob?.cancelledPattern ?? ""}
+                  onChange={(value) => updateSoldJobConfig({ cancelledPattern: value })}
+                />
+              </div>
+              <p className={styles.copy}>
+                Revenue resolves from these JobTread columns in order. Blank rows fall through to the next configured field.
+              </p>
+            </Panel>
+
+            <Panel title="Current rule snapshot" icon={<Info />}>
+              <div className={styles.reportList}>
+                <div className={styles.reportRow}>
+                  <strong>Sold date fields</strong>
+                  <small>{(ruleSetDraft.classifications?.soldJob?.soldDateFields ?? []).join(", ") || "None"}</small>
+                </div>
+                <div className={styles.reportRow}>
+                  <strong>Revenue fields</strong>
+                  <small>{(ruleSetDraft.classifications?.soldJob?.revenueFields ?? []).join(", ") || "None"}</small>
+                </div>
+                <div className={styles.reportRow}>
+                  <strong>Cancelled pattern</strong>
+                  <small>{ruleSetDraft.classifications?.soldJob?.cancelledPattern || "None"}</small>
+                </div>
+              </div>
+            </Panel>
+          </section>
+
+          {selectedMetric ? (
+            <Panel title="Metric placement" icon={<Database />}>
+              <div className={styles.reportList}>
+                {sections.filter((section: any) => section.kind === "metric_band").map((section: any) => (
+                  <article key={section.id} className={styles.ruleCard}>
+                    <div className={styles.ruleCardHeader}>
+                      <div className={styles.layoutMeta}>
+                        <span>Metric band</span>
+                        <strong>{section.title}</strong>
+                      </div>
+                      <label className={styles.toggle}>
+                        <input type="checkbox" checked={(section.metricIds ?? []).includes(selectedMetric.id)} onChange={() => toggleMetricInSection(section.id, selectedMetric.id)} />
+                        Show card
+                      </label>
+                    </div>
+                    <small>{(section.metricIds ?? []).length} cards in this band</small>
+                  </article>
+                ))}
+              </div>
+            </Panel>
+          ) : null}
+
+          <section className={styles.controlGrid}>
+            <Panel title="Dataset registry" icon={<Database />}>
+              <div className={styles.actionRow}>
+                <button className={styles.secondary} type="button" onClick={addComputedDataset}><Plus />Add computed dataset</button>
+              </div>
+              <div className={styles.previewPanel}>
+                <div className={styles.reportList}>
+                  {datasets.map((dataset: DatasetDefinition) => (
+                    <button
+                      key={dataset.id}
+                      type="button"
+                      className={selectedDataset?.id === dataset.id ? styles.metricListItemActive : styles.metricListItem}
+                      onClick={() => setSelectedDatasetId(dataset.id)}
+                    >
+                      <strong>{dataset.label}</strong>
+                      <small>{dataset.kind === "computed" ? "Computed" : "Raw"} | {dataset.id}</small>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </Panel>
+
+            <Panel title="Dataset editor" icon={<Settings2 />}>
+              {selectedDataset ? (
+                <div className={styles.formGrid}>
+                  <Field
+                    label="Dataset label"
+                    value={selectedDataset.label ?? ""}
+                    onChange={(value) => updateDataset(selectedDataset.id, (dataset) => ({ ...dataset, label: value }))}
+                  />
+                  <Field
+                    label="Date field"
+                    value={selectedDataset.dateField ?? ""}
+                    onChange={(value) => updateDataset(selectedDataset.id, (dataset) => ({ ...dataset, dateField: value }))}
+                  />
+                  <TextAreaField
+                    label="Description"
+                    value={selectedDataset.description ?? ""}
+                    onChange={(value) => updateDataset(selectedDataset.id, (dataset) => ({ ...dataset, description: value }))}
+                  />
+                  <TextAreaField
+                    label="Row grain"
+                    value={selectedDataset.rowGrain ?? ""}
+                    onChange={(value) => updateDataset(selectedDataset.id, (dataset) => ({ ...dataset, rowGrain: value }))}
+                  />
+                  <TextAreaField
+                    label="Available fields"
+                    value={(selectedDataset.fields ?? []).join("\n")}
+                    onChange={(value) =>
+                      updateDataset(selectedDataset.id, (dataset) => ({
+                        ...dataset,
+                        fields: value.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean),
+                      }))
+                    }
+                  />
+                  <TextAreaField
+                    label="Input datasets"
+                    value={(selectedDataset.inputDatasets ?? []).join("\n")}
+                    onChange={(value) =>
+                      updateDataset(selectedDataset.id, (dataset) => ({
+                        ...dataset,
+                        inputDatasets: value.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean),
+                      }))
+                    }
+                  />
+                </div>
+              ) : <p className={styles.copy}>Select a dataset to inspect or edit it.</p>}
+            </Panel>
+          </section>
+        </div>
+      ) : null}
+
+      {tab === "connections" ? (
+        <div className={styles.stack}>
+          <section className={styles.grid}>
+            <ConnectionCard title="GoHighLevel" description="Use your private integration token plus location ID. Preview source rows before syncing when you want to backcheck the report.">
+              <form className={styles.formGrid} onSubmit={(event: FormEvent<HTMLFormElement>) => { event.preventDefault(); void postAction("/api/connect/ghl", "connect-ghl", { workspaceId, accountLabel: ghl.accountLabel, privateIntegrationToken: ghl.privateIntegrationToken, locationId: ghl.locationId, externalAccountId: ghl.externalAccountId || undefined, apiBaseUrl: ghl.apiBaseUrl }); setGhl((current) => ({ ...current, privateIntegrationToken: "" })); }}>
+                <Field label="Account label" value={ghl.accountLabel} onChange={(value) => setGhl((current) => ({ ...current, accountLabel: value }))} />
+                <Field label="Location ID" value={ghl.locationId} onChange={(value) => setGhl((current) => ({ ...current, locationId: value }))} />
+                <Field label="External account ID" value={ghl.externalAccountId} onChange={(value) => setGhl((current) => ({ ...current, externalAccountId: value }))} />
+                <Field label="API base URL" value={ghl.apiBaseUrl} onChange={(value) => setGhl((current) => ({ ...current, apiBaseUrl: value }))} />
+                <Field label="Private integration token" type="password" value={ghl.privateIntegrationToken} onChange={(value) => setGhl((current) => ({ ...current, privateIntegrationToken: value }))} />
+                <button className={styles.primary} type="submit" disabled={working === "connect-ghl"}><Save />Save GoHighLevel account</button>
+              </form>
+            </ConnectionCard>
+
+            <ConnectionCard title="JobTread" description="Store the JobTread grant key server-side for the reporting workspace. This is not your JobTread password.">
+              <form className={styles.formGrid} onSubmit={(event: FormEvent<HTMLFormElement>) => { event.preventDefault(); void postAction("/api/connect/jobtread", "connect-jobtread", { workspaceId, accountLabel: jobtread.accountLabel, apiToken: jobtread.apiToken, externalAccountId: jobtread.externalAccountId || undefined, apiBaseUrl: jobtread.apiBaseUrl }); setJobtread((current) => ({ ...current, apiToken: "" })); }}>
+                <Field label="Account label" value={jobtread.accountLabel} onChange={(value) => setJobtread((current) => ({ ...current, accountLabel: value }))} />
+                <Field label="External account ID" value={jobtread.externalAccountId} onChange={(value) => setJobtread((current) => ({ ...current, externalAccountId: value }))} />
+                <Field label="API base URL" value={jobtread.apiBaseUrl} onChange={(value) => setJobtread((current) => ({ ...current, apiBaseUrl: value }))} />
+                <Field label="Grant key" type="password" value={jobtread.apiToken} onChange={(value) => setJobtread((current) => ({ ...current, apiToken: value }))} />
+                <button className={styles.primary} type="submit" disabled={working === "connect-jobtread"}><Save />Save JobTread account</button>
+              </form>
+            </ConnectionCard>
+          </section>
+
+          <section className={styles.grid}>
+            <Panel title={`Connected accounts (${accounts.length})`} icon={<Link2 />}>
+              <div className={styles.accountList}>
+                {accounts.length ? accounts.map((account) => {
+                  const previewState = previews[account.id];
+                  const requestState = previewRequests[account.id] ?? defaultPreviewRequest();
+                  const filters = previewFilters[account.id] ?? defaultPreviewFilters(previewState?.filters);
+                  const filteredRows = previewState ? applyPreviewFilters(previewState.rows, previewState.filters, filters) : [];
+                  return (
+                    <article key={account.id} className={styles.accountCard}>
+                      <div className={styles.accountHeader}>
+                        <div className={styles.accountSummary}>
+                          <strong>{account.accountLabel || providerLabel(account.provider)}</strong>
+                          <small>{providerLabel(account.provider)}</small>
+                        </div>
+                        <div className={styles.accountMeta}>
+                          <span>{account.status}</span>
+                          {account.expiresAt ? <span>Expires {formatDateTime(account.expiresAt)}</span> : null}
+                        </div>
+                      </div>
+                      <p className={styles.copy}>{describeAccount(account)}</p>
+                      <div className={styles.formGrid}>
+                        <Field label="Preview row limit" value={requestState.limit} onChange={(value) => updatePreviewRequest(account.id, "limit", value)} />
+                        <Field label="Preview start date" type="date" value={requestState.startDate} onChange={(value) => updatePreviewRequest(account.id, "startDate", value)} />
+                        <Field label="Preview end date" type="date" value={requestState.endDate} onChange={(value) => updatePreviewRequest(account.id, "endDate", value)} />
+                      </div>
+                      <div className={styles.actionRow}>
+                        <button className={styles.secondary} type="button" disabled={working === `sync-${account.id}`} onClick={() => postAction("/api/metrics/contractor/sync", `sync-${account.id}`, { workspaceId, connectedAccountId: account.id })}><RefreshCw />Cache sync (optional)</button>
+                        <button className={styles.ghost} type="button" disabled={working === `preview-${account.id}`} onClick={() => loadPreview(account.id)}><Database />{working === `preview-${account.id}` ? "Loading preview..." : "Preview live rows"}</button>
+                      </div>
+                      {previewState ? <SourcePreviewPanel preview={previewState} filters={filters} filteredRows={filteredRows} onFilterChange={(key, value) => updatePreviewFilter(account.id, key, value)} /> : null}
+                    </article>
+                  );
+                }) : <p className={styles.empty}>No connected accounts yet.</p>}
+              </div>
+            </Panel>
+
+            <Panel title={`Normalized sources (${sources.length})`} icon={<Database />}>
+              <div className={styles.sourceList}>
+                {sources.length ? sources.map((source) => (
+                  <article key={source.id} className={styles.sourceRow}>
+                    <div className={styles.sourceMeta}>
+                      <span>{providerLabel(source.provider)}</span>
+                      <strong>{source.display_name}</strong>
+                    </div>
+                    <div className={styles.sourceMeta}>
+                      <small>{source.status}</small>
+                      <small>Last synced {formatDateTime(source.last_synced_at || source.updated_at)}</small>
+                      {source.last_error ? <small className={styles.rowError}>{source.last_error}</small> : null}
+                    </div>
+                  </article>
+                )) : <p className={styles.empty}>No normalized sources yet. Connect an account when you are ready.</p>}
+              </div>
+            </Panel>
+          </section>
+        </div>
+      ) : null}
+    </main>
+  );
+}
+
+async function parseJsonResponse(response: Response, fallbackMessage: string) {
+  const raw = await response.text();
+  if (!raw) return {};
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {
+      error: raw.trim() || fallbackMessage,
+    };
+  }
+}
+
+function Gate({ title, body }: { title: string; body: string }) {
+  return <main className={styles.screen}><section className={styles.hero}><span>Contractor Metrics</span><h1>{title}</h1><p>{body}</p></section></main>;
+}
+
+function Panel({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {
+  return <section className={styles.panel}><div className={styles.panelHead}><span>{title}</span>{icon}</div>{children}</section>;
+}
+
+function ConnectionCard({ title, description, children }: { title: string; description: string; children: ReactNode }) {
+  return <section className={styles.panel}><div className={styles.panelHead}><span>{title}</span><Link2 /></div><p className={styles.copy}>{description}</p>{children}</section>;
+}
+
+function Pill({ label, value }: { label: string; value: string }) {
+  return <div className={styles.statusPill}><span>{label}</span><strong>{value}</strong></div>;
 }
 
 function MetricCard({ label, value, detail, delta, inspector }: { label: string; value: string; detail: string; delta?: string | null; inspector?: string }) {
