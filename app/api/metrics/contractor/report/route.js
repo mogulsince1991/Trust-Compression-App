@@ -10,6 +10,7 @@ import { buildReport } from "../../../../../lib/metrics/contractor/report.js";
 import { getContractorRuleSet } from "../../../../../lib/server/contractor-rule-sets";
 import { toRuntimeMetricRules } from "../../../../../lib/metrics/contractor/config";
 import { requireWorkspaceAccess } from "../../../../../lib/server/route-auth";
+import { recordActivity } from "../../../../../lib/server/activity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
