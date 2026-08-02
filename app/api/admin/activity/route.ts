@@ -230,4 +230,3 @@ function humanize(value: string) {
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(maximum, Math.max(minimum, Number.isFinite(value) ? Math.round(value) : minimum));
 }
-

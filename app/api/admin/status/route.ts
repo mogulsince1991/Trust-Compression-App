@@ -12,4 +12,3 @@ export async function GET(request: Request) {
     return NextResponse.json({ isAdmin: false, error: error instanceof Error ? error.message : "Access check failed." }, { status });
   }
 }
-

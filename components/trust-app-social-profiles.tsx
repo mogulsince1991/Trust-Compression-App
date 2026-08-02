@@ -1,6 +1,6 @@
 "use client";
 
-import { Facebook, Instagram, Linkedin, Loader2, RefreshCw, Trash2, UserRound, Youtube } from "lucide-react";
+import { ArrowUpRight, Facebook, Instagram, Linkedin, Loader2, RefreshCw, Trash2, UserRound, Youtube } from "lucide-react";
 import type { FormEvent } from "react";
 import { parseMetricSnapshot, socialProfileStatusLabel } from "@/lib/social-profiles";
 import { formatDateTime, type SocialProfileDraft, type SocialProfileRow } from "@/components/trust-app-shared";
@@ -24,6 +24,7 @@ export function SocialProfilesView({
   onSave,
   onAnalyze,
   onRemove,
+  onViewReport,
 }: {
   draft: SocialProfileDraft;
   profiles: SocialProfileRow[];
@@ -33,6 +34,7 @@ export function SocialProfilesView({
   onSave: (event: FormEvent<HTMLFormElement>) => void;
   onAnalyze: (profile: SocialProfileRow) => void;
   onRemove: (profile: SocialProfileRow) => void;
+  onViewReport: (profile: SocialProfileRow) => void;
 }) {
   const selected = profiles.find((profile) => profile.id === selectedProfileId) ?? profiles[0] ?? null;
   const snapshot = selected ? parseMetricSnapshot(selected.latestCachedMetrics) : null;
@@ -46,8 +48,8 @@ export function SocialProfilesView({
             <strong>{profiles.length} saved</strong>
           </div>
           <div className="tracking-panel-copy">
-            <h2>Save social profiles once, then reuse them whenever you want to rerun analysis.</h2>
-            <p>Keep the handle, profile URL, and business label attached to the workspace so the team can stop retyping the same inputs over and over.</p>
+            <h2>Save a channel once, then turn live YouTube data into a founder-readable report and reusable sales proof.</h2>
+            <p>Other platforms can be saved for later. YouTube profiles can be analyzed now to see what is working, what is missing, and what to import next.</p>
           </div>
           <form className="brief-grid social-profile-form" onSubmit={onSave}>
             <label>
@@ -116,6 +118,10 @@ export function SocialProfilesView({
                       <RefreshCw />
                       Analyze
                     </button>
+                    <button className="text-button compact" type="button" onClick={() => onViewReport(profile)}>
+                      <ArrowUpRight />
+                      View report
+                    </button>
                     <button className="text-button compact danger" type="button" onClick={() => onRemove(profile)}>
                       <Trash2 />
                       Remove
@@ -128,7 +134,7 @@ export function SocialProfilesView({
             <div className="tracking-empty-state social-profile-empty-state">
               <span>Saved profiles</span>
               <h3>No social profiles saved yet.</h3>
-              <p>No social profiles saved yet. Add a profile URL to start tracking performance.</p>
+              <p>No social profiles saved yet. Start with a YouTube channel URL to see what is working and what to import next.</p>
             </div>
           )}
         </section>

@@ -2,8 +2,10 @@
 
 import {
   Archive,
+  ArrowUpRight,
   ChevronDown,
   ChevronUp,
+  Import,
   Loader2,
   Plus,
   Route,
@@ -46,7 +48,8 @@ export function LibraryConfigurator({
   onAddAsset,
   onDeleteAsset,
   onArchive,
-  onSaveContext
+  onSaveContext,
+  onOpenSources
 }: {
   videos: DbVideo[];
   libraryAssets: LibraryAssetRow[];
@@ -62,6 +65,7 @@ export function LibraryConfigurator({
   onDeleteAsset: (asset: LibraryAssetRow) => void;
   onArchive: (video: DbVideo) => void;
   onSaveContext: (video: DbVideo, context: VideoContext) => void;
+  onOpenSources: () => void;
 }) {
   if (!videos.length) {
     return (
@@ -69,6 +73,15 @@ export function LibraryConfigurator({
         <span>No videos yet</span>
         <h2>Start by importing a public source.</h2>
         <p>Paste a YouTube video or a public Drive folder to build the library.</p>
+        <button className="wide-action library-empty-action" type="button" onClick={onOpenSources}>
+          <Import />
+          Import your first source
+        </button>
+        <div className="library-first-use-steps" aria-label="Library setup steps">
+          <article><strong>1</strong><span>Import</span><small>Bring in a public channel or video.</small></article>
+          <article><strong>2</strong><span>Curate</span><small>Add context so your team can find proof quickly.</small></article>
+          <article><strong>3</strong><span>Share</span><small>Build a journey and send it to a buyer.</small></article>
+        </div>
         <EmbeddedAssetsLibrary
           assets={libraryAssets}
           draft={assetDraft}
@@ -215,7 +228,9 @@ export function JourneysView({
   videos,
   shareUrl,
   onEdit,
-  onAdd
+  onAdd,
+  onOpenLibrary,
+  onOpenSources
 }: {
   journeys: JourneySummary[];
   folders: FolderRow[];
@@ -225,6 +240,8 @@ export function JourneysView({
   shareUrl?: string;
   onEdit: (journey: JourneySummary) => void;
   onAdd: (video: DbVideo) => void;
+  onOpenLibrary: () => void;
+  onOpenSources: () => void;
 }) {
   return (
     <section className="journey-workspace">
@@ -248,7 +265,19 @@ export function JourneysView({
           </article>
         ))}
       </aside>
-      <SequenceView title={draftAssets.length ? "Current journey" : "Journey draft"} groups={groups} videos={draftAssets.length ? draftAssets.filter((asset) => asset.videoId).map((asset) => videos.find((video) => video.id === asset.videoId)).filter(Boolean) as DbVideo[] : videos.slice(0, 6)} onAdd={onAdd} shareUrl={shareUrl} />
+      {draftAssets.length || videos.length ? (
+        <SequenceView title={draftAssets.length ? "Current journey" : "Journey draft"} groups={groups} videos={draftAssets.length ? draftAssets.filter((asset) => asset.videoId).map((asset) => videos.find((video) => video.id === asset.videoId)).filter(Boolean) as DbVideo[] : videos.slice(0, 6)} onAdd={onAdd} shareUrl={shareUrl} />
+      ) : (
+        <section className="prospect-brief journey-empty-state">
+          <span>Journey builder</span>
+          <h2>Start with proof your buyer can use.</h2>
+          <p>Import content first, then select the videos and cloud-hosted sales assets that belong in this journey.</p>
+          <div className="journey-empty-actions">
+            <button className="wide-action" type="button" onClick={onOpenSources}><Import />Import a source</button>
+            <button className="text-button" type="button" onClick={onOpenLibrary}><ArrowUpRight />Open library</button>
+          </div>
+        </section>
+      )}
     </section>
   );
 }

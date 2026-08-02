@@ -7,4 +7,3 @@ export const metadata = {
 export default function PlatformActivityPage() {
   return <PlatformActivityDashboard />;
 }
-

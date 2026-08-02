@@ -147,7 +147,7 @@ function UserTable({ rows }: { rows: Array<Record<string, any>> }) {
 }
 
 function Timeline({ rows }: { rows: Array<Record<string, any>> }) {
-  return <div className={styles.timeline}>{rows.map((row, index) => <div key={`${row.type}-${row.occurredAt}-${index}`}><span className={styles.timelineDot} /><div><strong>{row.label}</strong><p>{row.workspaceName} Â· {row.userEmail}</p></div><small>{formatDateTime(row.occurredAt)}</small></div>)}{!rows.length && <p className={styles.empty}>No matching activity.</p>}</div>;
+  return <div className={styles.timeline}>{rows.map((row, index) => <div key={`${row.type}-${row.occurredAt}-${index}`}><span className={styles.timelineDot} /><div><strong>{row.label}</strong><p>{row.workspaceName} · {row.userEmail}</p></div><small>{formatDateTime(row.occurredAt)}</small></div>)}{!rows.length && <p className={styles.empty}>No matching activity.</p>}</div>;
 }
 
 function formatDateTime(value?: string | null) {
@@ -157,4 +157,3 @@ function formatDateTime(value?: string | null) {
 
 function formatNumber(value: number) { return new Intl.NumberFormat().format(value ?? 0); }
 function csvCell(value: unknown) { return `"${String(value ?? "").replaceAll('"', '""')}"`; }
-

@@ -50,17 +50,6 @@ export function AuthFirstApp({
     return () => data.subscription.unsubscribe();
   }, [supabase]);
 
-  useEffect(() => {
-    if (!session) return;
-    const timer = window.setTimeout(() => {
-      const cards = Array.from(document.querySelectorAll<HTMLButtonElement>(".role-card"));
-      const libraryCard = cards.find((card) => card.textContent?.includes("Library Manager"));
-      (libraryCard ?? cards[0])?.click();
-    }, 60);
-
-    return () => window.clearTimeout(timer);
-  }, [session]);
-
   async function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!supabase || !email) return;

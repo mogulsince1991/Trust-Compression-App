@@ -86,4 +86,3 @@
   .timeline > div { grid-template-columns: 12px 1fr; }
   .timeline > div > small { grid-column: 2; }
 }
-

@@ -44,4 +44,3 @@ set role = excluded.role, active = true, updated_at = now();
 
 comment on table public.platform_admins is 'Service-role-only platform authorization. Workspace roles never grant platform access.';
 comment on table public.app_activity_events is 'Append-only, non-sensitive product activity audit stream.';
-

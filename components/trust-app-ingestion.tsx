@@ -106,7 +106,7 @@ const emptyJourneyEmbedDraft: JourneyEmbedDraft = {
 };
 
 const emptySocialProfileDraft: SocialProfileDraft = {
-  platform: "instagram",
+  platform: "youtube",
   profileUrl: "",
   username: "",
   displayName: "",
@@ -146,7 +146,7 @@ const roles: Record<RoleId, RoleDefinition> = {
 };
 
 const viewTitles: Record<ViewId, string> = {
-  library: "Trust Library",
+  library: "Library",
   sources: "Sources",
   socialProfiles: "Social Profiles",
   tracking: "Link Tracking",
@@ -210,6 +210,11 @@ export function TrustAppIngestion({
   const options = useMemo(() => buildOptions(videos, folders), [videos, folders]);
   const visibleVideos = useMemo(() => filterVideos(videos, query, filters), [videos, query, filters]);
   const smartGroups = useMemo(() => buildSmartGroups(visibleVideos), [visibleVideos]);
+  const workspaceNameCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const workspace of workspaces) counts.set(workspace.name, (counts.get(workspace.name) ?? 0) + 1);
+    return counts;
+  }, [workspaces]);
   const showCommandSearch = view === "library";
   const pageTitle = viewTitles[view];
   const currentWorkspace = workspaces.find((workspace) => workspace.id === workspaceId) ?? null;
@@ -502,413 +507,7 @@ export function TrustAppIngestion({
       const result = (await response.json()) as { imported?: number; updated?: number; skippedDuplicates?: number; duplicateCandidates?: number; importMode?: string; error?: string };
       if (!response.ok) throw new Error(result.error ?? "Could not import that source.");
       onSuccess?.();
-      setNotice(`Imported ${result.imported ?? 0}, updated ${result.updated ?? 0}, skipped ${result.skippedDuplicates ?? 0}, flagged ${result.duplicateCandidates ?? 0}.`);
-      await refreshWorkspace();
-      setView("library");
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not import that source.");
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function saveVideoContext(video: DbVideo, context: VideoContext) {
-    if (!session || !workspaceId) return;
-    setWorking(true);
-    setNotice("");
-    setError("");
-    try {
-      const response = await fetch(`/api/videos/${video.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({
-          workspaceId,
-          suggestedUse: context.suggestedUse,
-          salesCategory: context.salesCategory,
-          funnelStage: context.funnelStage,
-          proofType: context.proofType || context.salesCategory,
-          buyingStage: context.buyingStage || context.funnelStage,
-          tags: context.tags.split(",").map((tag) => tag.trim()).filter(Boolean),
-          customContext: {
-            notes: context.notes,
-            targetBuyer: context.targetBuyer,
-            objections: context.objections,
-            offer: context.offer
-          }
-        })
-      });
-      const result = (await response.json()) as { video?: DbVideo; error?: string };
-      if (!response.ok || !result.video) throw new Error(result.error ?? "Could not save context.");
-      setVideos((current) => current.map((item) => (item.id === video.id ? result.video! : item)));
-      setDraftAssets((current) =>
-        current.map((item) => (item.videoId === video.id ? buildJourneyAssetFromVideo(result.video!, item.position) : item))
-      );
-      setSelected(result.video);
-      setNotice("Video context saved and searchable.");
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not save context.");
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function archiveVideo(video: DbVideo) {
-    if (!session || !workspaceId) return;
-    setWorking(true);
-    setError("");
-    try {
-      const response = await fetch(`/api/videos/${video.id}?workspaceId=${encodeURIComponent(workspaceId)}`, { method: "DELETE", headers: { Authorization: `Bearer ${session.access_token}` } });
-      const result = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(result.error ?? "Could not archive video.");
-      setVideos((current) => current.filter((item) => item.id !== video.id));
-      setDraftAssets((current) => current.filter((item) => item.videoId !== video.id));
-      setSelected((current) => (current?.id === video.id ? videos.find((item) => item.id !== video.id) ?? null : current));
-      setNotice("Video archived. Existing journey metrics remain intact.");
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not archive video.");
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  function addToJourney(video: DbVideo) {
-    setDraftAssets((current) => {
-      if (current.some((item) => item.videoId === video.id)) return current;
-      return [...current, buildJourneyAssetFromVideo(video, current.length + 1)].map((item, index) => ({ ...item, position: index + 1 }));
-    });
-    if (!draft.title) {
-      setDraft((currentDraft) => ({ ...currentDraft, title: "Proof journey", heading: "A focused path through the videos that matter most.", description: "Watch these in order for a clearer view of the proof, questions, and next step." }));
-    }
-    setNotice(`Added "${video.title}" to the journey draft.`);
-  }
-
-  function addEmbeddedAsset() {
-    try {
-      const normalized = normalizeJourneyEmbed({ url: journeyEmbedDraft.url, title: journeyEmbedDraft.title });
-      const nextAsset: JourneyAsset = {
-        id: crypto.randomUUID(),
-        videoId: null,
-        assetType: normalized.assetType as JourneyAsset["assetType"],
-        sourcePlatform: normalized.sourcePlatform,
-        title: normalized.title,
-        sourceUrl: normalized.sourceUrl,
-        embedUrl: normalized.embedUrl,
-        thumbnailUrl: normalized.thumbnailUrl,
-        durationSeconds: null,
-        summary: null,
-        note: null,
-        position: draftAssets.length + 1,
-        metadata: normalized.metadata
-      };
-      setDraftAssets((current) => [...current, nextAsset].map((item, index) => ({ ...item, position: index + 1 })));
-      setJourneyEmbedDraft(emptyJourneyEmbedDraft);
-      if (!draft.title) {
-        setDraft((currentDraft) => ({ ...currentDraft, title: "Proof journey", heading: "A focused proof path through the assets that matter most.", description: "Swipe through the strongest proof, documents, and supporting material in sequence." }));
-      }
-      setNotice(`Added "${normalized.title}" to the journey draft.`);
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not add that asset.");
-    }
-  }
-
-  async function saveLibraryAsset() {
-    if (!workspaceId || !session) return;
-    setWorking(true);
-    setNotice("");
-    setError("");
-    try {
-      const response = await fetch("/api/library-assets", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          workspaceId,
-          title: libraryAssetDraft.title,
-          url: libraryAssetDraft.url
-        })
-      });
-      const result = (await response.json()) as { asset?: Record<string, any>; error?: string };
-      if (!response.ok || !result.asset) throw new Error(result.error ?? "Could not save the library asset.");
-      const nextAsset = mapLibraryAssetRow(result.asset);
-      setLibraryAssetDraft(emptyJourneyEmbedDraft);
-      setNotice(`Saved "${nextAsset.title}" to the workspace asset library.`);
-      await loadLibraryAssets(workspaceId);
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not save the library asset.");
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  function addLibraryAssetToJourney(asset: LibraryAssetRow) {
-    setDraftAssets((current) => {
-      const nextAsset: JourneyAsset = {
-        id: crypto.randomUUID(),
-        videoId: null,
-        libraryAssetId: asset.id,
-        assetType: asset.assetType,
-        sourcePlatform: asset.sourcePlatform,
-        title: asset.title,
-        sourceUrl: asset.sourceUrl,
-        embedUrl: asset.embedUrl,
-        thumbnailUrl: asset.thumbnailUrl,
-        durationSeconds: null,
-        summary: asset.summary,
-        note: null,
-        position: current.length + 1,
-        metadata: asset.metadata
-      };
-      return [...current, nextAsset].map((item, index) => ({ ...item, position: index + 1 }));
-    });
-    setNotice(`Added "${asset.title}" to the journey draft.`);
-  }
-
-  async function deleteLibraryAsset(asset: LibraryAssetRow) {
-    if (!workspaceId || !session) return;
-    setWorking(true);
-    setNotice("");
-    setError("");
-    try {
-      const response = await fetch(`/api/library-assets/${asset.id}?workspaceId=${encodeURIComponent(workspaceId)}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${session.access_token}` }
-      });
-      const result = (await response.json()) as { ok?: boolean; error?: string };
-      if (!response.ok) throw new Error(result.error ?? "Could not archive the library asset.");
-      setNotice(`Archived "${asset.title}" from the reusable asset library.`);
-      await loadLibraryAssets(workspaceId);
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not archive the library asset.");
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function switchWorkspace(nextWorkspaceId: string) {
-    if (!nextWorkspaceId || nextWorkspaceId === workspaceId) return;
-    setLoading(true);
-    setNotice("");
-    setError("");
-    setWorkspaceId(nextWorkspaceId);
-    rememberWorkspaceId(nextWorkspaceId);
-    setRenameWorkspaceName(workspaces.find((workspace) => workspace.id === nextWorkspaceId)?.name ?? "");
-    await refreshWorkspace(nextWorkspaceId);
-    setLoading(false);
-  }
-
-  async function createWorkspace(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!session) return;
-    setWorking(true);
-    setNotice("");
-    setError("");
-    try {
-      const response = await fetch("/api/workspaces", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ name: createWorkspaceName })
-      });
-      const result = (await response.json()) as { workspace?: Record<string, any>; error?: string };
-      if (!response.ok || !result.workspace) throw new Error(result.error ?? "Could not create workspace.");
-      const nextWorkspace = mapWorkspaceRow(result.workspace);
-      const nextWorkspaces = [...workspaces, nextWorkspace];
-      setWorkspaces(nextWorkspaces);
-      setCreateWorkspaceName("");
-      setWorkspaceId(nextWorkspace.id);
-      setRenameWorkspaceName(nextWorkspace.name);
-      rememberWorkspaceId(nextWorkspace.id);
-      await refreshWorkspace(nextWorkspace.id);
-      setNotice(`${nextWorkspace.name} is ready.`);
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not create workspace.");
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function renameWorkspace(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!workspaceId || !session || !canManageWorkspace) return;
-    setWorking(true);
-    setNotice("");
-    setError("");
-    try {
-      const response = await fetch(`/api/workspaces/${encodeURIComponent(workspaceId)}`, {
-        method: "PATCH",
-        headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ name: renameWorkspaceName })
-      });
-      const result = (await response.json()) as { workspace?: Record<string, any>; error?: string };
-      if (!response.ok || !result.workspace) throw new Error(result.error ?? "Could not update workspace.");
-      const updated = mapWorkspaceRow(result.workspace);
-      setWorkspaces((current) => current.map((workspace) => workspace.id === updated.id ? updated : workspace));
-      setRenameWorkspaceName(updated.name);
-      setNotice("Workspace name updated.");
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not update workspace.");
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function inviteWorkspaceMember(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!workspaceId || !session) return;
-    setWorking(true);
-    setNotice("");
-    setError("");
-    try {
-      const response = await fetch("/api/workspace/invites", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          workspaceId,
-          email: inviteDraft.email,
-          role: inviteDraft.role
-        })
-      });
-      const result = (await response.json()) as { invite?: Record<string, any>; error?: string };
-      if (!response.ok || !result.invite) throw new Error(result.error ?? "Could not invite teammate.");
-      setInviteDraft({ email: "", role: inviteDraft.role });
-      setNotice(`Invite ready for ${result.invite.email}.`);
-      await loadWorkspaceInvites(workspaceId);
-      await loadWorkspaceMembers(workspaceId);
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not invite teammate.");
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function updateWorkspaceMemberRole(member: WorkspaceMemberRow, role: string) {
-    if (!workspaceId || !session || !canManageWorkspace) return;
-    setWorking(true);
-    setNotice("");
-    setError("");
-    try {
-      const response = await fetch(`/api/workspaces/${encodeURIComponent(workspaceId)}/members`, {
-        method: "PATCH",
-        headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ membershipId: member.id, role })
-      });
-      const result = (await response.json()) as { member?: Record<string, any>; error?: string };
-      if (!response.ok) throw new Error(result.error ?? "Could not update member role.");
-      await loadWorkspaceMembers(workspaceId);
-      setNotice(`${member.displayName}'s role was updated.`);
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not update member role.");
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function removeWorkspaceMember(member: WorkspaceMemberRow) {
-    if (!workspaceId || !session || !canManageWorkspace) return;
-    if (!window.confirm(`Remove ${member.displayName} from this workspace?`)) return;
-    setWorking(true);
-    setNotice("");
-    setError("");
-    try {
-      const response = await fetch(`/api/workspaces/${encodeURIComponent(workspaceId)}/members`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ membershipId: member.id })
-      });
-      const result = (await response.json()) as { ok?: boolean; error?: string };
-      if (!response.ok) throw new Error(result.error ?? "Could not remove workspace member.");
-      await loadWorkspaceMembers(workspaceId);
-      setNotice(`${member.displayName} was removed from the workspace.`);
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not remove workspace member.");
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function revokeWorkspaceInvite(invite: WorkspaceInviteRow) {
-    if (!workspaceId || !session || !canManageWorkspace) return;
-    setWorking(true);
-    setNotice("");
-    setError("");
-    try {
-      const response = await fetch("/api/workspace/invites", {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceId, inviteId: invite.id })
-      });
-      const result = (await response.json()) as { ok?: boolean; error?: string };
-      if (!response.ok) throw new Error(result.error ?? "Could not revoke invitation.");
-      await loadWorkspaceInvites(workspaceId);
-      setNotice(`Invitation for ${invite.email} was revoked.`);
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not revoke invitation.");
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  function removeFromJourney(assetId: string) {
-    setDraftAssets((current) => current.filter((asset) => asset.id !== assetId).map((item, index) => ({ ...item, position: index + 1 })));
-  }
-
-  function moveDraftAsset(assetId: string, direction: -1 | 1) {
-    setDraftAssets((current) => {
-      const index = current.findIndex((asset) => asset.id === assetId);
-      const nextIndex = index + direction;
-      if (index < 0 || nextIndex < 0 || nextIndex >= current.length) return current;
-      const next = [...current];
-      const [item] = next.splice(index, 1);
-      next.splice(nextIndex, 0, item);
-      return next.map((asset, assetIndex) => ({ ...asset, position: assetIndex + 1 }));
-    });
-  }
-
-  function editJourney(journey: JourneySummary) {
-    setSelectedJourneyId(journey.id);
-    setDraft({
-      title: journey.title ?? "",
-      heading: journey.heading ?? "",
-      description: journey.description ?? "",
-      ctaLabel: journey.ctaLabel ?? "Continue the conversation",
-      ctaUrl: journey.ctaUrl ?? "",
-      folderName: folders.find((folder) => folder.id === journey.folderId)?.name ?? ""
-    });
-    setDraftAssets(journey.assets);
-    setShareUrl(journey.shareUrl ?? "");
-    setView("journeys");
-    setNotice("Editing saved journey.");
-  }
-
-  function hydrateJourneyDraft(journey: JourneySummary) {
-    setSelectedJourneyId(journey.id);
-    setDraft({
-      title: journey.title ?? "",
-      heading: journey.heading ?? "",
-      description: journey.description ?? "",
-      ctaLabel: journey.ctaLabel ?? "Continue the conversation",
-      ctaUrl: journey.ctaUrl ?? "",
-      folderName: folders.find((folder) => folder.id === journey.folderId)?.name ?? ""
-    });
-    setDraftAssets(journey.assets);
-    setShareUrl(journey.shareUrl ?? "");
-  }
-
-  function newJourney() {
-    setSelectedJourneyId(null);
-    setDraft(emptyDraft);
-    setDraftAssets([]);
-    setJourneyEmbedDraft(emptyJourneyEmbedDraft);
-    setShareUrl("");
-    setView("journeys");
-  }
-
-  async function generateJourney() {
-    const draftVideos = draftAssets.filter((asset) => asset.videoId).map((asset) => videos.find((video) => video.id === asset.videoId)).filter(Boolean) as DbVideo[];
+      …4252 tokens truncated…  const draftVideos = draftAssets.filter((asset) => asset.videoId).map((asset) => videos.find((video) => video.id === asset.videoId)).filter(Boolean) as DbVideo[];
     if (!draftVideos.length) return;
     setJourneyWorking(true);
     setNotice("");
@@ -1199,6 +798,13 @@ export function TrustAppIngestion({
     router.push("/");
   }
 
+  function openSocialProfileReport(profile: SocialProfileRow) {
+    setSelectedSocialProfileId(profile.id);
+    setSocialProfileReportId(profile.id);
+    setView("socialProfiles");
+    router.push(`/social-profiles/${encodeURIComponent(profile.id)}`);
+  }
+
   if (!roleId || !role) return <RoleGate onChoose={chooseRole} roles={roles} />;
   if (loading && !workspaceBooted) return <main className="role-gate"><Loader2 className="spin" /><h1>Opening workspace.</h1></main>;
   if (!supabase && isInternal) return <SimpleGate title="Supabase is not configured." body="Add the Supabase public URL and publishable key in Vercel." onBack={() => setRoleId(null)} />;
@@ -1213,7 +819,7 @@ export function TrustAppIngestion({
           <button className={view === "sources" ? "icon-button is-active" : "icon-button"} onClick={() => setView("sources")} aria-label="Sources" title="Sources"><Import /><span>Sources</span></button>
           <button className={view === "socialProfiles" ? "icon-button is-active" : "icon-button"} onClick={() => { setView("socialProfiles"); setSocialProfileReportId(null); router.push("/"); }} aria-label="Social Profiles" title="Social Profiles"><UserRound /><span>Social Profiles</span></button>
           <button className={view === "tracking" ? "icon-button is-active" : "icon-button"} onClick={() => setView("tracking")} aria-label="Link tracking" title="Link tracking"><Link2 /><span>Links</span></button>
-          <button className={view === "metrics" ? "icon-button is-active" : "icon-button"} onClick={() => setView("metrics")} aria-label="Sales metrics" title="Metrics"><BarChart3 /><span>Metrics</span></button>
+          <button className="icon-button" onClick={() => router.push("/contractor-metrics")} aria-label="Sales metrics" title="Metrics"><BarChart3 /><span>Metrics</span></button>
           <button className={view === "journeys" ? "icon-button is-active" : "icon-button"} onClick={newJourney} aria-label="Journeys" title="Journeys"><Route /><span>Journeys</span></button>
           <button className={view === "workspace" ? "icon-button is-active" : "icon-button"} onClick={() => setView("workspace")} aria-label="Workspace" title="Workspace"><Building2 /><span>Workspace</span></button>
           {isPlatformAdmin && <a className="icon-button" href="/admin/activity" aria-label="Platform activity" title="Platform activity"><ShieldCheck /><span>Admin</span></a>}
@@ -1229,9 +835,9 @@ export function TrustAppIngestion({
               <span>{currentWorkspace.role} workspace</span>
               <select value={workspaceId ?? ""} onChange={(event) => void switchWorkspace(event.target.value)}>
                 {workspaces.map((workspace) => (
-                  <option key={workspace.id} value={workspace.id}>
-                    {workspace.name}
-                  </option>
+                <option key={workspace.id} value={workspace.id}>
+                    {workspaceNameCounts.get(workspace.name) && workspaceNameCounts.get(workspace.name)! > 1 ? `${workspace.name} · ${workspace.slug}` : workspace.name}
+                </option>
                 ))}
               </select>
             </label>
@@ -1239,7 +845,7 @@ export function TrustAppIngestion({
           {showCommandSearch ? <label className="command-search"><Search /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={role.placeholder} /></label> : <div className="command-spacer" aria-hidden="true" />}
         </header>
 
-        {view === "library" && <LibraryFiltersBar filters={filters} options={options} onChange={setFilters} />}
+        {view === "library" && videos.length > 0 && <LibraryFiltersBar filters={filters} options={options} onChange={setFilters} />}
 
         {view !== "workspace" && (
           <section className="role-context is-quiet"><span>{role.label}</span><h2>{role.title}</h2><p>{role.description}</p></section>
@@ -1248,7 +854,7 @@ export function TrustAppIngestion({
 
         {view === "sources" && <SourcesView sources={sources} importing={working} onImport={importSource} onReimport={reimportSource} onDelete={deleteSource} />}
         {view === "workspace" && <WorkspaceView workspace={currentWorkspace} workspaces={workspaces} members={workspaceMembers} invites={workspaceInvites} canManage={canManageWorkspace} working={working} createName={createWorkspaceName} renameName={renameWorkspaceName} inviteDraft={inviteDraft} onCreateNameChange={setCreateWorkspaceName} onRenameNameChange={setRenameWorkspaceName} onInviteDraftChange={setInviteDraft} onCreate={createWorkspace} onRename={renameWorkspace} onInvite={inviteWorkspaceMember} onSwitch={switchWorkspace} onMemberRoleChange={updateWorkspaceMemberRole} onRemoveMember={removeWorkspaceMember} onRevokeInvite={revokeWorkspaceInvite} />}
-        {view === "library" && <LibraryConfigurator videos={visibleVideos} libraryAssets={libraryAssets} assetDraft={libraryAssetDraft} selected={selected} saving={working} options={options} onSelect={setSelected} onAdd={addToJourney} onAssetDraftChange={setLibraryAssetDraft} onSaveAsset={saveLibraryAsset} onAddAsset={addLibraryAssetToJourney} onDeleteAsset={deleteLibraryAsset} onArchive={archiveVideo} onSaveContext={saveVideoContext} />}
+        {view === "library" && <LibraryConfigurator videos={visibleVideos} libraryAssets={libraryAssets} assetDraft={libraryAssetDraft} selected={selected} saving={working} options={options} onSelect={setSelected} onAdd={addToJourney} onAssetDraftChange={setLibraryAssetDraft} onSaveAsset={saveLibraryAsset} onAddAsset={addLibraryAssetToJourney} onDeleteAsset={deleteLibraryAsset} onArchive={archiveVideo} onSaveContext={saveVideoContext} onOpenSources={() => setView("sources")} />}
         {view === "socialProfiles" && socialProfileReportId && (
           <SocialProfileReportPage
             profile={selectedReportProfile}
@@ -1269,11 +875,12 @@ export function TrustAppIngestion({
             onSave={saveSocialProfile}
             onAnalyze={analyzeSocialProfile}
             onRemove={removeSocialProfile}
+            onViewReport={openSocialProfileReport}
           />
         )}
         {view === "tracking" && <LinkTrackingView draft={trackingDraft} journeys={journeys} tracking={tracking} working={trackingWorking} onDraftChange={setTrackingDraft} onCreate={createTrackingLink} />}
         {view === "metrics" && <MetricsView metrics={metrics} videos={videos} sources={sources} journeys={journeys} contacts={contacts} tracking={tracking} />}
-        {view === "journeys" && <JourneysView journeys={journeys} folders={folders} draftAssets={draftAssets} groups={smartGroups} videos={visibleVideos} shareUrl={shareUrl} onEdit={editJourney} onAdd={addToJourney} />}
+        {view === "journeys" && <JourneysView journeys={journeys} folders={folders} draftAssets={draftAssets} groups={smartGroups} videos={visibleVideos} shareUrl={shareUrl} onEdit={editJourney} onAdd={addToJourney} onOpenLibrary={() => setView("library")} onOpenSources={() => setView("sources")} />}
         {isInternal && <JourneyTray draft={draft} assets={draftAssets} embedDraft={journeyEmbedDraft} working={journeyWorking} shareUrl={shareUrl} contacts={contacts} selectedJourneyId={selectedJourneyId} options={options} onDraftChange={setDraft} onEmbedDraftChange={setJourneyEmbedDraft} onAddEmbed={addEmbeddedAsset} onGenerate={generateJourney} onPublish={publishJourney} onMove={moveDraftAsset} onRemove={removeFromJourney} onCreateContactShare={createContactShare} />}
       </main>
     </div>

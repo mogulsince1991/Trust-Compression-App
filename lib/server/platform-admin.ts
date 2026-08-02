@@ -32,4 +32,3 @@ export async function requirePlatformAdmin(request: Request): Promise<PlatformAd
 
   return { user, role: admin.role, serviceSupabase };
 }
-

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { runSourceImport } from "@/lib/import-runner";
-import { createServiceSupabaseClient, createUserSupabaseClient } from "@/lib/supabase";
+import { createUserSupabaseClient } from "@/lib/supabase";
+import { createServiceSupabaseClient } from "@/lib/supabase";
 import { recordActivity } from "@/lib/server/activity";
 
 type ImportRequest = {

@@ -29,4 +29,3 @@ export async function recordActivity(serviceSupabase: SupabaseClient, input: Act
 
   if (error) console.error("Activity event could not be recorded", error.message);
 }
-

@@ -167,7 +167,7 @@ export function SourcesView({
             <span>Sources</span>
             <h1>Import public video sources</h1>
           </div>
-          <p>YouTube works now. Public Drive folders work when GOOGLE_DRIVE_API_KEY is set in Vercel.</p>
+          <p>Start with one public YouTube channel or video. Trust Compression turns it into searchable proof that your team can use in sales journeys.</p>
         </div>
         <form className="prospect-brief" onSubmit={onImport}>
           <div className="brief-grid">
@@ -180,6 +180,10 @@ export function SourcesView({
             {importing ? <Loader2 className="spin" /> : <Import />}
             Import source
           </button>
+          <div className="source-next-steps">
+            <span>What happens next</span>
+            <p>Import creates the library. From there, select proof, build a journey, and share a measurable link with a buyer.</p>
+          </div>
         </form>
       </section>
       <aside className="source-panel">

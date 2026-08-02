@@ -127,6 +127,8 @@ export async function POST(request) {
       savedRun = insertedRun;
     }
 
+    await recordActivity(serviceSupabase, { workspaceId, actorUserId: user.id, eventType: "contractor_report_generated", entityType: "contractor_report", entityId: savedReport?.id ?? null, surface: "contractor_metrics", metadata: { persisted: persist, comparison: Boolean(comparison) } });
+
     return NextResponse.json({
       reportId: savedReport?.id ?? null,
       reportRunId: savedRun?.id ?? null,

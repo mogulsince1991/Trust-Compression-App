@@ -1132,115 +1132,7 @@ div {
 .social-video-stats,
 .social-video-actions,
 .social-report-two-up,
-.social-recommendation-list,
-.social-recommendation-card,
-.social-recommendation-actions,
-.social-gap-list {
-  display: grid;
-}
-
-.social-report-page-shell {
-  gap: 18px;
-}
-
-.social-report-page-topline {
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: center;
-}
-
-.social-report-page-actions,
-.social-video-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
-}
-
-.social-report-hero,
-.social-report-two-up {
-  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
-  gap: 16px;
-}
-
-.social-report-hero-copy,
-.social-report-hero-card,
-.social-report-section-shell,
-.social-video-card,
-.social-recommendation-card,
-.social-gap-card {
-  padding: 18px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.social-report-hero-copy,
-.social-report-hero-card,
-.social-report-section-shell {
-  gap: 14px;
-}
-
-.social-report-hero-head {
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 14px;
-  align-items: start;
-}
-
-.social-report-hero-head h1 {
-  margin: 6px 0 10px;
-  font-size: clamp(34px, 5vw, 58px);
-  line-height: 0.94;
-  font-weight: 500;
-}
-
-.social-report-hero-head p,
-.social-report-hero-card p,
-.social-recommendation-card p,
-.social-gap-card p {
-  margin: 0;
-  color: var(--text-soft);
-  line-height: 1.6;
-}
-
-.social-report-hero-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.social-report-hero-meta span,
-.social-gap-card span {
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.social-report-source-note {
-  margin: 0;
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
-.social-report-hero-card > span,
-.social-video-card span,
-.social-recommendation-card span {
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.social-report-hero-card strong,
-.social-recommendation-card strong,
-.social-gap-card strong {
-  font-size: 26px;
-  line-height: 1.05;
-  font-weight: 500;
-}
-
-.social-report-mini-grid,
+.social-recommendation-l…504 tokens truncated…i-grid,
 .social-video-stats {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
@@ -2333,5 +2225,92 @@ div {
 
   .tray-item {
     grid-template-columns: 30px minmax(0, 1fr) auto auto;
+  }
+}
+
+.source-next-steps {
+  display: grid;
+  gap: 6px;
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.source-next-steps > span,
+.library-first-use-steps > article > span {
+  color: var(--text-muted);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.source-next-steps p {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.library-empty-action {
+  max-width: 340px;
+  margin-top: 8px;
+}
+
+.library-first-use-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.library-first-use-steps article {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.library-first-use-steps article > strong {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  font-size: 12px;
+}
+
+.library-first-use-steps small {
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.journey-empty-state {
+  align-content: start;
+  min-height: 360px;
+}
+
+.journey-empty-state h2 {
+  margin: 12px 0 4px;
+  font-size: clamp(28px, 4vw, 48px);
+}
+
+.journey-empty-state p {
+  max-width: 520px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.journey-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+@media (max-width: 820px) {
+  .library-first-use-steps {
+    grid-template-columns: 1fr;
   }
 }
