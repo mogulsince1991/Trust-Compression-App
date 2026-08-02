@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Route,
   Search,
+  ShieldCheck,
   Trash2,
   UserRound,
 } from "lucide-react";
@@ -202,6 +203,7 @@ export function TrustAppIngestion({
   const [shareUrl, setShareUrl] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
 
   const role = roleId ? roles[roleId] : null;
   const isInternal = roleId !== "prospect";
@@ -287,6 +289,23 @@ export function TrustAppIngestion({
       active = false;
     };
   }, [isInternal, session, supabase]);
+
+  useEffect(() => {
+    if (!session || !workspaceId) return;
+    const headers = { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" };
+
+    void fetch("/api/admin/status", { headers, cache: "no-store" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((payload) => setIsPlatformAdmin(payload?.isAdmin === true))
+      .catch(() => setIsPlatformAdmin(false));
+
+    void fetch("/api/activity", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ workspaceId, surface: view }),
+      keepalive: true,
+    });
+  }, [session, workspaceId]);
 
   async function loadVideos(nextWorkspaceId = workspaceId) {
     if (!supabase || !nextWorkspaceId) return;
@@ -1197,6 +1216,7 @@ export function TrustAppIngestion({
           <button className={view === "metrics" ? "icon-button is-active" : "icon-button"} onClick={() => setView("metrics")} aria-label="Sales metrics" title="Metrics"><BarChart3 /><span>Metrics</span></button>
           <button className={view === "journeys" ? "icon-button is-active" : "icon-button"} onClick={newJourney} aria-label="Journeys" title="Journeys"><Route /><span>Journeys</span></button>
           <button className={view === "workspace" ? "icon-button is-active" : "icon-button"} onClick={() => setView("workspace")} aria-label="Workspace" title="Workspace"><Building2 /><span>Workspace</span></button>
+          {isPlatformAdmin && <a className="icon-button" href="/admin/activity" aria-label="Platform activity" title="Platform activity"><ShieldCheck /><span>Admin</span></a>}
         </nav>
         {session && <button className="icon-button" onClick={() => supabase?.auth.signOut()} aria-label="Sign out" title="Sign out"><LogOut /><span>Exit</span></button>}
       </aside>
