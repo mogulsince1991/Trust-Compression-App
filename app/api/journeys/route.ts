@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceSupabaseClient, createUserSupabaseClient } from "@/lib/supabase";
 import { normalizeJourneyEmbed, type JourneyAssetType } from "@/lib/journey-embeds";
+import { recordActivity } from "@/lib/server/activity";
 
 type JourneyRequest = {
   workspaceId?: string;
@@ -165,6 +166,9 @@ export async function POST(request: Request) {
       }))
     );
     if (assetsError) throw assetsError;
+
+    const serviceSupabase = createServiceSupabaseClient();
+    if (serviceSupabase) await recordActivity(serviceSupabase, { workspaceId, actorUserId: user.id, eventType: "journey_created", entityType: "journey", entityId: journey.id, surface: "journeys", metadata: { assetCount: resolvedAssets.length } });
 
     return NextResponse.json({ id: journey.id, shareToken: journey.share_token, shareUrl: `/share/${journey.share_token}` });
   } catch (error) {
