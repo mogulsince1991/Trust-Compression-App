@@ -6,6 +6,7 @@ import {
   Check,
   Copy,
   Import,
+  KeyRound,
   Loader2,
   Plus,
   RefreshCw,
@@ -37,6 +38,15 @@ export type RoleDefinition = {
   description: string;
   view: ViewId;
   placeholder: string;
+};
+
+export type IntegrationKeyRow = {
+  id: string;
+  name: string;
+  key_prefix: string;
+  scopes: string[];
+  last_used_at: string | null;
+  created_at: string;
 };
 
 const noMagicLinkEmails = new Set(["admin@unmarked.media"]);
@@ -240,6 +250,9 @@ export function WorkspaceView({
   workspaces,
   members,
   invites,
+  integrationKeys,
+  integrationSecret,
+  mcpUrl,
   canManage,
   working,
   createName,
@@ -255,11 +268,16 @@ export function WorkspaceView({
   onMemberRoleChange,
   onRemoveMember,
   onRevokeInvite,
+  onCreateIntegrationKey,
+  onRevokeIntegrationKey,
 }: {
   workspace: WorkspaceRow | null;
   workspaces: WorkspaceRow[];
   members: WorkspaceMemberRow[];
   invites: WorkspaceInviteRow[];
+  integrationKeys: IntegrationKeyRow[];
+  integrationSecret: string;
+  mcpUrl: string;
   canManage: boolean;
   working: boolean;
   createName: string;
@@ -275,6 +293,8 @@ export function WorkspaceView({
   onMemberRoleChange: (member: WorkspaceMemberRow, role: string) => void;
   onRemoveMember: (member: WorkspaceMemberRow) => void;
   onRevokeInvite: (invite: WorkspaceInviteRow) => void;
+  onCreateIntegrationKey: () => void;
+  onRevokeIntegrationKey: (key: IntegrationKeyRow) => void;
 }) {
   const activeInvites = invites.filter((invite) => invite.status === "pending");
 
@@ -373,6 +393,37 @@ export function WorkspaceView({
               )) : <div className="workspace-empty"><Users /><p>No pending invitations.</p></div>}
             </div>
           </article>
+        </section>
+      )}
+
+      {canManage && (
+        <section className="workspace-panel workspace-team-panel">
+          <div className="mini-head"><span>Viktor and MCP access</span><KeyRound /></div>
+          <p>Connect external software to this workspace. The key can import YouTube sources and Google Drive links without exposing CRM or Supabase credentials.</p>
+          <div className="workspace-inline-form">
+            <label><span>Remote MCP URL</span><input value={mcpUrl || "https://trustcompression.unmarked.media/mcp"} readOnly /></label>
+            <button className="wide-action" type="button" disabled={working} onClick={onCreateIntegrationKey}><KeyRound />Create Viktor key</button>
+          </div>
+          {integrationSecret && (
+            <div className="source-next-steps">
+              <span>Copy this key now</span>
+              <p>The full secret is shown once. Add it to Viktor as a Bearer token.</p>
+              <div className="workspace-inline-form">
+                <label><span>Bearer token</span><input value={integrationSecret} readOnly /></label>
+                <button className="wide-action" type="button" onClick={() => void navigator.clipboard.writeText(integrationSecret)}><Copy />Copy key</button>
+              </div>
+            </div>
+          )}
+          <div className="workspace-member-list">
+            {integrationKeys.map((key) => (
+              <article className="workspace-member" key={key.id}>
+                <div className="workspace-avatar"><KeyRound /></div>
+                <div className="workspace-member-copy"><strong>{key.name}</strong><small>{key.key_prefix}... · {key.last_used_at ? `used ${formatDateTime(key.last_used_at)}` : "not used yet"}</small></div>
+                <span className="workspace-role-pill">Library import</span>
+                <button className="icon-mini danger" onClick={() => onRevokeIntegrationKey(key)} aria-label={`Revoke ${key.name}`}><Trash2 /></button>
+              </article>
+            ))}
+          </div>
         </section>
       )}
     </section>
@@ -541,3 +592,4 @@ export function readRememberedWorkspaceId(workspaces: WorkspaceRow[]) {
   const savedId = window.localStorage.getItem("trust-compression.workspace-id");
   return workspaces.find((workspace) => workspace.id === savedId)?.id ?? workspaces[0]?.id ?? null;
 }
+
