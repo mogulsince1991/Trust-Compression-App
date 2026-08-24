@@ -6,7 +6,7 @@ type RunSourceImportInput = {
   supabase: SupabaseClient;
   workspaceId: string;
   sourceUrl: string;
-  userId: string;
+  userId?: string;
   sourceId?: string;
 };
 
@@ -195,7 +195,7 @@ async function persistImportedVideo({ supabase, workspaceId, sourceId, sourceUrl
       salesCategory: smart.category,
       funnelStage: smart.stage
     },
-    created_by: userId,
+    created_by: userId ?? null,
     updated_at: new Date().toISOString()
   };
 
@@ -311,3 +311,4 @@ function normalizeTitle(value: string) {
     .trim()
     .replace(/\s+/g, " ");
 }
+
