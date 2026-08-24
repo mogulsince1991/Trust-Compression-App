@@ -37,6 +37,7 @@ import {
   SimpleGate,
   SourcesView,
   WorkspaceView,
+  type IntegrationKeyRow,
   type ViewId,
 } from "@/components/trust-app-shell";
 import { LinkTrackingView, MetricsView } from "@/components/trust-app-attribution-ui";
@@ -172,6 +173,9 @@ export function TrustAppIngestion({
   const [libraryAssets, setLibraryAssets] = useState<LibraryAssetRow[]>([]);
   const [workspaceInvites, setWorkspaceInvites] = useState<WorkspaceInviteRow[]>([]);
   const [workspaceMembers, setWorkspaceMembers] = useState<WorkspaceMemberRow[]>([]);
+  const [integrationKeys, setIntegrationKeys] = useState<IntegrationKeyRow[]>([]);
+  const [integrationSecret, setIntegrationSecret] = useState("");
+  const [mcpUrl, setMcpUrl] = useState("");
   const [videos, setVideos] = useState<DbVideo[]>([]);
   const [sources, setSources] = useState<SourceRow[]>([]);
   const [journeys, setJourneys] = useState<JourneySummary[]>([]);
@@ -240,6 +244,8 @@ export function TrustAppIngestion({
         setLibraryAssets([]);
         setWorkspaceInvites([]);
         setWorkspaceMembers([]);
+        setIntegrationKeys([]);
+        setIntegrationSecret("");
         setVideos([]);
         setSources([]);
         setJourneys([]);
@@ -383,6 +389,20 @@ export function TrustAppIngestion({
     setWorkspaceMembers((result.members ?? []).map(mapWorkspaceMemberRow));
   }
 
+  async function loadIntegrationKeys(nextWorkspaceId = workspaceId) {
+    if (!session || !nextWorkspaceId) return;
+    const response = await fetch(`/api/workspaces/${encodeURIComponent(nextWorkspaceId)}/integration-keys`, {
+      headers: { Authorization: `Bearer ${session.access_token}` }
+    });
+    if (!response.ok) {
+      setIntegrationKeys([]);
+      return;
+    }
+    const result = (await response.json()) as { keys?: IntegrationKeyRow[]; mcpUrl?: string };
+    setIntegrationKeys(result.keys ?? []);
+    setMcpUrl(result.mcpUrl ?? "");
+  }
+
   async function loadSources(nextWorkspaceId = workspaceId) {
     if (!supabase || !nextWorkspaceId) return;
     const { data } = await supabase.from("sources").select("id,platform,account_label,status,last_synced_at,error,metadata").eq("workspace_id", nextWorkspaceId).order("created_at", { ascending: false });
@@ -454,7 +474,8 @@ export function TrustAppIngestion({
       loadSocialProfiles(nextWorkspaceId),
       loadLibraryAssets(nextWorkspaceId),
       loadWorkspaceInvites(nextWorkspaceId),
-      loadWorkspaceMembers(nextWorkspaceId)
+      loadWorkspaceMembers(nextWorkspaceId),
+      loadIntegrationKeys(nextWorkspaceId)
     ]);
     const [nextJourneys] = await Promise.all([loadJourneys(nextWorkspaceId), loadTracking(nextWorkspaceId)]);
     await loadMetrics(nextWorkspaceId, nextJourneys ?? []);
@@ -852,6 +873,52 @@ export function TrustAppIngestion({
       setNotice(`Invitation for ${invite.email} was revoked.`);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Could not revoke invitation.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function createIntegrationKey() {
+    if (!workspaceId || !session || !canManageWorkspace) return;
+    setWorking(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/workspaces/${encodeURIComponent(workspaceId)}/integration-keys`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Viktor" })
+      });
+      const result = (await response.json()) as { secret?: string; mcpUrl?: string; error?: string };
+      if (!response.ok || !result.secret) throw new Error(result.error ?? "Could not create the Viktor key.");
+      setIntegrationSecret(result.secret);
+      setMcpUrl(result.mcpUrl ?? mcpUrl);
+      await loadIntegrationKeys(workspaceId);
+      setNotice("Viktor key created. Copy it now; the full key will not be shown again.");
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not create the Viktor key.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function revokeIntegrationKey(key: IntegrationKeyRow) {
+    if (!workspaceId || !session || !canManageWorkspace) return;
+    if (!window.confirm(`Revoke ${key.name}? Viktor will stop importing immediately.`)) return;
+    setWorking(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/workspaces/${encodeURIComponent(workspaceId)}/integration-keys`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ keyId: key.id })
+      });
+      const result = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Could not revoke the integration key.");
+      setIntegrationSecret("");
+      await loadIntegrationKeys(workspaceId);
+      setNotice("Integration key revoked.");
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not revoke the integration key.");
     } finally {
       setWorking(false);
     }
@@ -1259,7 +1326,7 @@ export function TrustAppIngestion({
         {(notice || error) && <p style={{ margin: "0 6px 18px", color: error ? "#ffd4d4" : "#d8d1c5" }}>{error || notice}</p>}
 
         {view === "sources" && <SourcesView sources={sources} importing={working} onImport={importSource} onReimport={reimportSource} onDelete={deleteSource} />}
-        {view === "workspace" && <WorkspaceView workspace={currentWorkspace} workspaces={workspaces} members={workspaceMembers} invites={workspaceInvites} canManage={canManageWorkspace} working={working} createName={createWorkspaceName} renameName={renameWorkspaceName} inviteDraft={inviteDraft} onCreateNameChange={setCreateWorkspaceName} onRenameNameChange={setRenameWorkspaceName} onInviteDraftChange={setInviteDraft} onCreate={createWorkspace} onRename={renameWorkspace} onInvite={inviteWorkspaceMember} onSwitch={switchWorkspace} onMemberRoleChange={updateWorkspaceMemberRole} onRemoveMember={removeWorkspaceMember} onRevokeInvite={revokeWorkspaceInvite} />}
+        {view === "workspace" && <WorkspaceView workspace={currentWorkspace} workspaces={workspaces} members={workspaceMembers} invites={workspaceInvites} integrationKeys={integrationKeys} integrationSecret={integrationSecret} mcpUrl={mcpUrl} canManage={canManageWorkspace} working={working} createName={createWorkspaceName} renameName={renameWorkspaceName} inviteDraft={inviteDraft} onCreateNameChange={setCreateWorkspaceName} onRenameNameChange={setRenameWorkspaceName} onInviteDraftChange={setInviteDraft} onCreate={createWorkspace} onRename={renameWorkspace} onInvite={inviteWorkspaceMember} onSwitch={switchWorkspace} onMemberRoleChange={updateWorkspaceMemberRole} onRemoveMember={removeWorkspaceMember} onRevokeInvite={revokeWorkspaceInvite} onCreateIntegrationKey={createIntegrationKey} onRevokeIntegrationKey={revokeIntegrationKey} />}
         {view === "library" && <LibraryConfigurator videos={visibleVideos} libraryAssets={libraryAssets} assetDraft={libraryAssetDraft} selected={selected} saving={working} options={options} onSelect={setSelected} onAdd={addToJourney} onAssetDraftChange={setLibraryAssetDraft} onSaveAsset={saveLibraryAsset} onAddAsset={addLibraryAssetToJourney} onDeleteAsset={deleteLibraryAsset} onArchive={archiveVideo} onSaveContext={saveVideoContext} onOpenSources={() => setView("sources")} />}
         {view === "socialProfiles" && socialProfileReportId && (
           <SocialProfileReportPage
@@ -1292,3 +1359,4 @@ export function TrustAppIngestion({
     </div>
   );
 }
+
