@@ -20,6 +20,11 @@ type DriveFile = {
   videoMediaMetadata?: { durationMillis?: string; width?: number; height?: number };
 };
 
+type DriveVideo = DriveFile & {
+  folderId: string;
+  folderPath: string;
+};
+
 export async function POST(request: Request) {
   try {
     const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
@@ -54,7 +59,7 @@ export async function POST(request: Request) {
     if (account.status !== "connected" || !account.access_token) return NextResponse.json({ error: "Reconnect Google Drive before importing this folder." }, { status: 400 });
     if (account.expires_at && new Date(account.expires_at).getTime() <= Date.now()) return NextResponse.json({ error: "Google Drive access expired. Reconnect Google Drive." }, { status: 401 });
 
-    const files = await fetchDriveVideos(folderId, account.access_token);
+    const files = await fetchDriveVideosRecursively(folderId, account.access_token);
 
     const { data: source, error: sourceError } = await supabase
       .from("sources")
@@ -123,34 +128,56 @@ export async function POST(request: Request) {
   }
 }
 
-async function fetchDriveVideos(folderId: string, accessToken: string) {
-  const files: DriveFile[] = [];
-  let pageToken = "";
+const DRIVE_FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
+const MAX_DRIVE_FILES = 2500;
+const MAX_DRIVE_FOLDERS = 250;
 
-  do {
-    const params = new URLSearchParams({
-      q: `'${folderId}' in parents and trashed = false and mimeType contains 'video/'`,
-      fields: "nextPageToken,files(id,name,mimeType,description,thumbnailLink,webViewLink,createdTime,modifiedTime,size,videoMediaMetadata)",
-      pageSize: "100",
-      supportsAllDrives: "true",
-      includeItemsFromAllDrives: "true"
-    });
-    if (pageToken) params.set("pageToken", pageToken);
+async function fetchDriveVideosRecursively(rootFolderId: string, accessToken: string) {
+  const files: DriveVideo[] = [];
+  const queue = [{ id: rootFolderId, path: "" }];
+  const visited = new Set<string>();
 
-    const response = await fetch(`https://www.googleapis.com/drive/v3/files?${params.toString()}`, {
-      headers: { Authorization: `Bearer ${accessToken}` }
-    });
-    const data = (await response.json()) as { error?: { message?: string }; nextPageToken?: string; files?: DriveFile[] };
-    if (!response.ok) throw new Error(data.error?.message ?? "Google Drive folder import failed.");
-    files.push(...(data.files ?? []));
-    pageToken = data.nextPageToken ?? "";
-  } while (pageToken && files.length < 500);
+  while (queue.length && visited.size < MAX_DRIVE_FOLDERS && files.length < MAX_DRIVE_FILES) {
+    const folder = queue.shift()!;
+    if (visited.has(folder.id)) continue;
+    visited.add(folder.id);
 
-  if (!files.length) throw new Error("No video files were found in that Drive folder, or the connected account cannot access it.");
-  return files.slice(0, 500);
+    let pageToken = "";
+    do {
+      const params = new URLSearchParams({
+        q: `'${folder.id}' in parents and trashed = false`,
+        fields: "nextPageToken,files(id,name,mimeType,description,thumbnailLink,webViewLink,createdTime,modifiedTime,size,videoMediaMetadata)",
+        pageSize: "100",
+        supportsAllDrives: "true",
+        includeItemsFromAllDrives: "true"
+      });
+      if (pageToken) params.set("pageToken", pageToken);
+
+      const response = await fetch(`https://www.googleapis.com/drive/v3/files?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      const data = (await response.json()) as { error?: { message?: string }; nextPageToken?: string; files?: DriveFile[] };
+      if (!response.ok) throw new Error(data.error?.message ?? "Google Drive folder import failed.");
+
+      for (const file of data.files ?? []) {
+        if (file.mimeType === DRIVE_FOLDER_MIME_TYPE) {
+          if (queue.length + visited.size < MAX_DRIVE_FOLDERS) {
+            queue.push({ id: file.id, path: [folder.path, file.name ?? "Untitled folder"].filter(Boolean).join("/") });
+          }
+        } else if (file.mimeType?.startsWith("video/") && files.length < MAX_DRIVE_FILES) {
+          files.push({ ...file, folderId: folder.id, folderPath: folder.path });
+        }
+      }
+
+      pageToken = data.nextPageToken ?? "";
+    } while (pageToken && files.length < MAX_DRIVE_FILES);
+  }
+
+  if (!files.length) throw new Error("No video files were found in that Drive folder tree, or the connected account cannot access it.");
+  return files;
 }
 
-function driveFileToVideoPayload({ file, workspaceId, sourceId, folderUrl, folderId, userId }: { file: DriveFile; workspaceId: string; sourceId: string; folderUrl: string; folderId: string; userId: string }) {
+function driveFileToVideoPayload({ file, workspaceId, sourceId, folderUrl, folderId, userId }: { file: DriveVideo; workspaceId: string; sourceId: string; folderUrl: string; folderId: string; userId: string }) {
   return {
     workspace_id: workspaceId,
     source_id: sourceId,
@@ -173,7 +200,9 @@ function driveFileToVideoPayload({ file, workspaceId, sourceId, folderUrl, folde
     metadata: {
       importMode: "drive_oauth_readonly",
       sourceUrl: folderUrl,
-      folderId,
+      rootFolderId: folderId,
+      folderId: file.folderId,
+      folderPath: file.folderPath,
       mimeType: file.mimeType ?? "video/unknown",
       size: file.size ?? null,
       width: file.videoMediaMetadata?.width ?? null,

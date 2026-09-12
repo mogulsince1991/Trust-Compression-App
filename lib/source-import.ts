@@ -205,26 +205,59 @@ async function importDriveFolder(source: Extract<ParsedSource, { kind: "drive_fo
     throw new Error("Add GOOGLE_DRIVE_API_KEY or GOOGLE_API_KEY in Vercel to import public Google Drive folders. Single public Drive file links can be added without a key.");
   }
 
-  const params = new URLSearchParams({
-    key: apiKey,
-    q: `'${source.folderId}' in parents and trashed = false and mimeType contains 'video/'`,
-    fields: "files(id,name,mimeType,description,thumbnailLink,webViewLink,webContentLink,createdTime,modifiedTime,size,videoMediaMetadata)",
-    pageSize: "100",
-    supportsAllDrives: "true",
-    includeItemsFromAllDrives: "true"
-  });
-
-  const response = await fetch(`https://www.googleapis.com/drive/v3/files?${params.toString()}`, { next: { revalidate: 300 } });
-  const data = (await response.json()) as {
-    error?: { message?: string };
-    files?: Array<DriveFile>;
-  };
-
-  if (!response.ok) throw new Error(data.error?.message ?? "Google Drive import failed.");
-  const files = data.files ?? [];
+  const files = await fetchPublicDriveFolderTree(source.folderId, apiKey);
   if (!files.length) throw new Error("No public video files were found in that Google Drive folder, or the folder is not shared publicly.");
 
-  return files.map((file) => driveFileToVideo(file.id, file, file.webViewLink ?? `https://drive.google.com/file/d/${file.id}/view`, "drive_public_folder", source.folderId));
+  return files.map(({ file, folderId, folderPath }) =>
+    driveFileToVideo(file.id, file, file.webViewLink ?? `https://drive.google.com/file/d/${file.id}/view`, "drive_public_folder", folderId, folderPath)
+  );
+}
+
+const DRIVE_FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
+const MAX_DRIVE_FILES = 2500;
+const MAX_DRIVE_FOLDERS = 250;
+
+async function fetchPublicDriveFolderTree(rootFolderId: string, apiKey: string) {
+  const videos: Array<{ file: DriveFile; folderId: string; folderPath: string }> = [];
+  const queue = [{ id: rootFolderId, path: "" }];
+  const visited = new Set<string>();
+
+  while (queue.length && visited.size < MAX_DRIVE_FOLDERS && videos.length < MAX_DRIVE_FILES) {
+    const folder = queue.shift()!;
+    if (visited.has(folder.id)) continue;
+    visited.add(folder.id);
+
+    let pageToken = "";
+    do {
+      const params = new URLSearchParams({
+        key: apiKey,
+        q: `'${folder.id}' in parents and trashed = false`,
+        fields: "nextPageToken,files(id,name,mimeType,description,thumbnailLink,webViewLink,webContentLink,createdTime,modifiedTime,size,videoMediaMetadata)",
+        pageSize: "100",
+        supportsAllDrives: "true",
+        includeItemsFromAllDrives: "true"
+      });
+      if (pageToken) params.set("pageToken", pageToken);
+
+      const response = await fetch(`https://www.googleapis.com/drive/v3/files?${params.toString()}`, { next: { revalidate: 300 } });
+      const data = (await response.json()) as { error?: { message?: string }; nextPageToken?: string; files?: DriveFile[] };
+      if (!response.ok) throw new Error(data.error?.message ?? "Google Drive import failed.");
+
+      for (const file of data.files ?? []) {
+        if (file.mimeType === DRIVE_FOLDER_MIME_TYPE) {
+          if (queue.length + visited.size < MAX_DRIVE_FOLDERS) {
+            queue.push({ id: file.id, path: [folder.path, file.name ?? "Untitled folder"].filter(Boolean).join("/") });
+          }
+        } else if (file.mimeType?.startsWith("video/") && videos.length < MAX_DRIVE_FILES) {
+          videos.push({ file, folderId: folder.id, folderPath: folder.path });
+        }
+      }
+
+      pageToken = data.nextPageToken ?? "";
+    } while (pageToken && videos.length < MAX_DRIVE_FILES);
+  }
+
+  return videos;
 }
 
 type DriveFile = {
@@ -241,7 +274,7 @@ type DriveFile = {
   videoMediaMetadata?: { durationMillis?: string; width?: number; height?: number };
 };
 
-function driveFileToVideo(fileId: string, file: DriveFile | null, sourceUrl: string, importMode: string, folderId?: string): ImportedVideo {
+function driveFileToVideo(fileId: string, file: DriveFile | null, sourceUrl: string, importMode: string, folderId?: string, folderPath?: string): ImportedVideo {
   return {
     externalId: fileId,
     title: file?.name ?? "Google Drive video",
@@ -255,6 +288,7 @@ function driveFileToVideo(fileId: string, file: DriveFile | null, sourceUrl: str
     metadata: {
       importMode,
       folderId: folderId ?? null,
+      folderPath: folderPath ?? "",
       mimeType: file?.mimeType ?? "video/unknown",
       size: file?.size ?? null,
       width: file?.videoMediaMetadata?.width ?? null,
