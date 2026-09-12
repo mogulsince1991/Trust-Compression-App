@@ -878,7 +878,7 @@ export function TrustAppIngestion({
     }
   }
 
-  async function createIntegrationKey() {
+  async function createIntegrationKey(name: string, allowedPhoneNumbers: string[]) {
     if (!workspaceId || !session || !canManageWorkspace) return;
     setWorking(true);
     setError("");
@@ -886,14 +886,14 @@ export function TrustAppIngestion({
       const response = await fetch(`/api/workspaces/${encodeURIComponent(workspaceId)}/integration-keys`, {
         method: "POST",
         headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ name: "Viktor" })
+        body: JSON.stringify({ name, allowedPhoneNumbers })
       });
       const result = (await response.json()) as { secret?: string; mcpUrl?: string; error?: string };
       if (!response.ok || !result.secret) throw new Error(result.error ?? "Could not create the Viktor key.");
       setIntegrationSecret(result.secret);
       setMcpUrl(result.mcpUrl ?? mcpUrl);
       await loadIntegrationKeys(workspaceId);
-      setNotice("Viktor key created. Copy it now; the full key will not be shown again.");
+      setNotice("MCP connector key created. Copy it now; the full key will not be shown again.");
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Could not create the Viktor key.");
     } finally {

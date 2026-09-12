@@ -45,6 +45,8 @@ export type IntegrationKeyRow = {
   name: string;
   key_prefix: string;
   scopes: string[];
+  allowed_phone_numbers: string[];
+  require_direct_message: boolean;
   last_used_at: string | null;
   created_at: string;
 };
@@ -293,10 +295,12 @@ export function WorkspaceView({
   onMemberRoleChange: (member: WorkspaceMemberRow, role: string) => void;
   onRemoveMember: (member: WorkspaceMemberRow) => void;
   onRevokeInvite: (invite: WorkspaceInviteRow) => void;
-  onCreateIntegrationKey: () => void;
+  onCreateIntegrationKey: (name: string, allowedPhoneNumbers: string[]) => void;
   onRevokeIntegrationKey: (key: IntegrationKeyRow) => void;
 }) {
   const activeInvites = invites.filter((invite) => invite.status === "pending");
+  const [connectorName, setConnectorName] = useState("Viktor");
+  const [allowedPhones, setAllowedPhones] = useState("");
 
   return (
     <section className="workspace-management">
@@ -398,11 +402,13 @@ export function WorkspaceView({
 
       {canManage && (
         <section className="workspace-panel workspace-team-panel">
-          <div className="mini-head"><span>Viktor and MCP access</span><KeyRound /></div>
-          <p>Connect external software to this workspace. The key can import YouTube sources and Google Drive links without exposing CRM or Supabase credentials.</p>
+          <div className="mini-head"><span>MCP connector access</span><KeyRound /></div>
+          <p>Authorize an external agent for this workspace. Journey tools only accept direct-message requests from phone numbers listed on the connector.</p>
           <div className="workspace-inline-form">
             <label><span>Remote MCP URL</span><input value={mcpUrl || "https://trustcompression.unmarked.media/mcp"} readOnly /></label>
-            <button className="wide-action" type="button" disabled={working} onClick={onCreateIntegrationKey}><KeyRound />Create Viktor key</button>
+            <label><span>Connector name</span><input value={connectorName} onChange={(event) => setConnectorName(event.target.value)} placeholder="Viktor" /></label>
+            <label><span>Allowed sender phones</span><input value={allowedPhones} onChange={(event) => setAllowedPhones(event.target.value)} placeholder="+12485551212, +13135551212" /></label>
+            <button className="wide-action" type="button" disabled={working || !allowedPhones.trim()} onClick={() => onCreateIntegrationKey(connectorName, allowedPhones.split(",").map((value) => value.trim()).filter(Boolean))}><KeyRound />Create connector key</button>
           </div>
           {integrationSecret && (
             <div className="source-next-steps">
@@ -418,8 +424,8 @@ export function WorkspaceView({
             {integrationKeys.map((key) => (
               <article className="workspace-member" key={key.id}>
                 <div className="workspace-avatar"><KeyRound /></div>
-                <div className="workspace-member-copy"><strong>{key.name}</strong><small>{key.key_prefix}... · {key.last_used_at ? `used ${formatDateTime(key.last_used_at)}` : "not used yet"}</small></div>
-                <span className="workspace-role-pill">Library import</span>
+                <div className="workspace-member-copy"><strong>{key.name}</strong><small>{key.key_prefix}... · {key.allowed_phone_numbers?.join(", ") || "no allowed senders"} · {key.last_used_at ? `used ${formatDateTime(key.last_used_at)}` : "not used yet"}</small></div>
+                <span className="workspace-role-pill">Library + journeys</span>
                 <button className="icon-mini danger" onClick={() => onRevokeIntegrationKey(key)} aria-label={`Revoke ${key.name}`}><Trash2 /></button>
               </article>
             ))}
