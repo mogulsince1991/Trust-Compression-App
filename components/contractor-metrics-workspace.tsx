@@ -76,7 +76,7 @@ const TABLE_OPTIONS = [
   { value: "unmatched_review", label: "Unmatched / Review Rows" },
 ];
 
-export function ContractorMetricsWorkspace() {
+export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorkspaceId?: string | null } = {}) {
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const [session, setSession] = useState<Session | null>(null);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
@@ -84,7 +84,7 @@ export function ContractorMetricsWorkspace() {
   const [working, setWorking] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
-  const [tab, setTab] = useState<TabId>("connections");
+  const [tab, setTab] = useState<TabId>("metrics");
   const [accounts, setAccounts] = useState<any[]>([]);
   const [sources, setSources] = useState<any[]>([]);
   const [reports, setReports] = useState<any[]>([]);
@@ -100,8 +100,8 @@ export function ContractorMetricsWorkspace() {
   const [previewFilters, setPreviewFilters] = useState<Record<string, PreviewFilterState>>({});
   const [previewRequests, setPreviewRequests] = useState<Record<string, PreviewRequestState>>({});
   const [clientName, setClientName] = useState("Trust Compression Contractor Report");
-  const [startDate, setStartDate] = useState("2026-06-01");
-  const [endDate, setEndDate] = useState("2026-06-30");
+  const [startDate, setStartDate] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`; });
+  const [endDate, setEndDate] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()).padStart(2, "0")}`; });
   const [ghl, setGhl] = useState(EMPTY_GHL);
   const [jobtread, setJobtread] = useState(EMPTY_JOBTREAD);
 
@@ -132,7 +132,7 @@ export function ContractorMetricsWorkspace() {
     let active = true;
     async function boot() {
       setLoading(true);
-      const { data, error: workspaceError } = await supabase.rpc("ensure_workspace", { workspace_name: "Trust Library" });
+      const { data, error: workspaceError } = activeWorkspaceId ? { data: activeWorkspaceId, error: null } : await supabase.rpc("ensure_workspace", { workspace_name: "Trust Library" });
       if (!active) return;
       if (workspaceError || !data) {
         setError(workspaceError?.message ?? "Could not open the workspace.");
@@ -147,7 +147,7 @@ export function ContractorMetricsWorkspace() {
     return () => {
       active = false;
     };
-  }, [session, supabase]);
+  }, [session, supabase, activeWorkspaceId]);
 
   useEffect(() => {
     if (!selectedRuleSetId) return;
@@ -156,8 +156,9 @@ export function ContractorMetricsWorkspace() {
   }, [selectedRuleSetId, ruleSets]);
 
   useEffect(() => {
-    if (accounts.length > 0 && tab === "connections") setTab("metrics");
-  }, [accounts.length, tab]);
+    const requested = new URLSearchParams(window.location.search).get("tab");
+    if (requested === "connections" || requested === "config") setTab(requested);
+  }, []);
 
   useEffect(() => {
     if (!metrics.length) {
@@ -551,11 +552,10 @@ export function ContractorMetricsWorkspace() {
   return (
     <main className={styles.screen}>
       <section className={styles.hero}>
-        <span>Contractor Metrics</span>
-        <h1>Live CRM reporting with source previews and a guided metrics builder.</h1>
-        <p>Run the contractor dashboard directly from connected CRMs, inspect live source rows before syncing, and tune the live reporting layout without dropping into raw JSON.</p>
+        <span>Marketing performance</span>
+        <h1>Reports</h1>
+        <p>Compare leads, sales, and spend. Choose a period, then run a report from your connected CRMs.</p>
         <div className={styles.heroActions}>
-          <Link href="/" className={styles.linkButton}>Open main app</Link>
           <button className={styles.secondary} type="button" disabled={working === "refresh"} onClick={() => refresh()}><RefreshCw />Refresh workspace</button>
           <button className={styles.primary} type="button" disabled={working === "report"} onClick={runReport}><Sparkles />{working === "report" ? "Generating..." : "Run contractor report"}</button>
         </div>

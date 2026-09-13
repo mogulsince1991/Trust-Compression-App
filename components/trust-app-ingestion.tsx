@@ -17,9 +17,16 @@ import {
   UserRound,
 } from "lucide-react";
 import type { FormEvent } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
+import { SageShell, sageRoutes, viewFromPath } from "./sage-shell";
+import { SageLibrary } from "./sage-library";
+import { SageJourneys, SageJourneyEditor } from "./sage-journeys";
+import { SageHome, SageRecipients } from "./sage-home";
+import dynamic from "next/dynamic";
+const ContractorMetricsWorkspace = dynamic(() => import("./contractor-metrics-workspace").then(m => m.ContractorMetricsWorkspace), { loading: () => <p role="status">Opening reports...</p> });
+const JourneyArchive = dynamic(() => import("./journey-archive").then(m => m.JourneyArchive), { loading: () => <p role="status">Opening archive...</p> });
 import { SocialProfileReportPage } from "@/components/social-profile-report-page";
 import {
   AuthGate,
@@ -147,6 +154,7 @@ const roles: Record<RoleId, RoleDefinition> = {
 };
 
 const viewTitles: Record<ViewId, string> = {
+  home: "Home", editor: "Journey editor", reports: "Reports", archive: "Archive",
   library: "Library",
   sources: "Sources",
   socialProfiles: "Social Profiles",
@@ -157,16 +165,23 @@ const viewTitles: Record<ViewId, string> = {
 };
 
 export function TrustAppIngestion({
-  initialView = "library",
+  initialView = "home",
   initialSocialProfileReportId = null,
 }: {
   initialView?: ViewId;
   initialSocialProfileReportId?: string | null;
 } = {}) {
   const router = useRouter();
+  const pathname = usePathname();
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const [roleId, setRoleId] = useState<RoleId | null>("libraryManager");
-  const [view, setView] = useState<ViewId>(initialView);
+  const [view, updateView] = useState<ViewId>(pathname.startsWith("/app") ? viewFromPath(pathname) : initialView);
+  function setView(next: ViewId) { updateView(next); router.push(`/app/${sageRoutes[next]}`, { scroll: true }); }
+  useEffect(() => {
+    if (pathname.startsWith("/app")) updateView(viewFromPath(pathname));
+    const reportId = pathname.startsWith("/app/settings/youtube/") ? pathname.split("/").pop() : null;
+    setSocialProfileReportId(reportId || null);
+  }, [pathname]);
   const [session, setSession] = useState<Session | null>(null);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [workspaces, setWorkspaces] = useState<WorkspaceRow[]>([]);
@@ -205,6 +220,11 @@ export function TrustAppIngestion({
   const [journeyWorking, setJourneyWorking] = useState(false);
   const [trackingWorking, setTrackingWorking] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
+  const [personalShareUrl, setPersonalShareUrl] = useState("");
+  const [savedDraft, setSavedDraft] = useState("");
+  const [draftReady, setDraftReady] = useState<string | null>(null);
+  const [draftStorageError, setDraftStorageError] = useState(false);
+  const switching = useRef(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
@@ -224,6 +244,35 @@ export function TrustAppIngestion({
   const currentWorkspace = workspaces.find((workspace) => workspace.id === workspaceId) ?? null;
   const canManageWorkspace = currentWorkspace?.role === "owner" || currentWorkspace?.role === "admin";
   const selectedReportProfile = socialProfileReportId ? socialProfiles.find((profile) => profile.id === socialProfileReportId) ?? null : null;
+  const draftSnapshot = JSON.stringify({ draft, assets: draftAssets });
+  const draftSaved = savedDraft === draftSnapshot;
+  const draftKey = workspaceId && session ? `trusttale-draft:${session.user.id}:${workspaceId}` : null;
+  const publishedJourney = journeys.find(j => j.id === selectedJourneyId)?.isPublic === true;
+
+  useEffect(() => {
+    if (!draftKey) return;
+    let stored: any = null;
+    try { const raw = sessionStorage.getItem(draftKey); if (raw) stored = JSON.parse(raw); } catch {}
+    setDraft(stored?.draft || emptyDraft);
+    setDraftAssets(Array.isArray(stored?.assets) ? stored.assets : []);
+    setSelectedJourneyId(stored?.journeyId || null);
+    setShareUrl(stored?.shareUrl || "");
+    setSavedDraft(stored?.savedDraft || "");
+    setPersonalShareUrl("");
+    setDraftReady(draftKey);
+  }, [draftKey]);
+
+  useEffect(() => {
+    if (!draftKey || draftReady !== draftKey) return;
+    try { sessionStorage.setItem(draftKey, JSON.stringify({ draft, assets: draftAssets, journeyId: selectedJourneyId, shareUrl, savedDraft })); setDraftStorageError(false); } catch { setDraftStorageError(true); }
+  }, [draftKey, draftReady, draft, draftAssets, selectedJourneyId, shareUrl, savedDraft]);
+
+  useEffect(() => {
+    if (draftSaved || (!draftAssets.length && !draft.title)) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [draftSaved, draftAssets.length, draft.title]);
 
   useEffect(() => {
     if (!supabase) {
@@ -713,15 +762,18 @@ export function TrustAppIngestion({
   }
 
   async function switchWorkspace(nextWorkspaceId: string) {
-    if (!nextWorkspaceId || nextWorkspaceId === workspaceId) return;
+    if (!nextWorkspaceId || nextWorkspaceId === workspaceId || switching.current || working || journeyWorking || trackingWorking) return;
+    switching.current = true;
     setLoading(true);
     setNotice("");
     setError("");
     setWorkspaceId(nextWorkspaceId);
+    setFolders([]); setVideos([]); setLibraryAssets([]); setSources([]); setJourneys([]); setContacts([]);
+    setTracking({ links: [], events: [], identities: [] }); setMetrics({ views: [] });
+    setIntegrationSecret(""); setSocialProfiles([]); setIntegrationKeys([]); setWorkspaceMembers([]); setWorkspaceInvites([]);
     rememberWorkspaceId(nextWorkspaceId);
     setRenameWorkspaceName(workspaces.find((workspace) => workspace.id === nextWorkspaceId)?.name ?? "");
-    await refreshWorkspace(nextWorkspaceId);
-    setLoading(false);
+    try { await refreshWorkspace(nextWorkspaceId); } finally { setLoading(false); switching.current = false; }
   }
 
   async function createWorkspace(event: FormEvent<HTMLFormElement>) {
@@ -962,6 +1014,7 @@ export function TrustAppIngestion({
   }
 
   function editJourney(journey: JourneySummary) {
+    if (!draftSaved && (draftAssets.length || draft.title) && !window.confirm("Replace the current unsaved draft with this journey?")) return;
     setSelectedJourneyId(journey.id);
     setDraft({
       title: journey.title ?? "",
@@ -973,7 +1026,9 @@ export function TrustAppIngestion({
     });
     setDraftAssets(journey.assets);
     setShareUrl(journey.shareUrl ?? "");
-    setView("journeys");
+    setPersonalShareUrl("");
+    setSavedDraft(JSON.stringify({ draft: { title: journey.title ?? "", heading: journey.heading ?? "", description: journey.description ?? "", ctaLabel: journey.ctaLabel ?? "Continue the conversation", ctaUrl: journey.ctaUrl ?? "", folderName: folders.find(f => f.id === journey.folderId)?.name ?? "" }, assets: journey.assets }));
+    setView("editor");
     setNotice("Editing saved journey.");
   }
 
@@ -989,15 +1044,18 @@ export function TrustAppIngestion({
     });
     setDraftAssets(journey.assets);
     setShareUrl(journey.shareUrl ?? "");
+    setSavedDraft(JSON.stringify({ draft: { title: journey.title ?? "", heading: journey.heading ?? "", description: journey.description ?? "", ctaLabel: journey.ctaLabel ?? "Continue the conversation", ctaUrl: journey.ctaUrl ?? "", folderName: folders.find(f => f.id === journey.folderId)?.name ?? "" }, assets: journey.assets }));
   }
 
   function newJourney() {
+    if (!draftSaved && (draftAssets.length || draft.title) && !window.confirm("Start a new journey and replace the current unsaved draft?")) return;
     setSelectedJourneyId(null);
     setDraft(emptyDraft);
     setDraftAssets([]);
     setJourneyEmbedDraft(emptyJourneyEmbedDraft);
     setShareUrl("");
-    setView("journeys");
+    setPersonalShareUrl(""); setSavedDraft("");
+    setView("editor");
   }
 
   async function generateJourney() {
@@ -1030,8 +1088,8 @@ export function TrustAppIngestion({
     }
   }
 
-  async function publishJourney() {
-    if (!workspaceId || !session || !draftAssets.length) return;
+  async function publishJourney(publish = true) {
+    if (!workspaceId || !session || !draftAssets.length || (!publish && publishedJourney)) return;
     setJourneyWorking(true);
     setNotice("");
     setError("");
@@ -1053,7 +1111,7 @@ export function TrustAppIngestion({
           note: asset.note,
           metadata: asset.metadata
         })),
-        publish: true
+        publish
       };
       const response = await fetch(selectedJourneyId ? `/api/journeys/${selectedJourneyId}` : "/api/journeys", { method: selectedJourneyId ? "PATCH" : "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` }, body: JSON.stringify(body) });
       const result = (await response.json()) as { id?: string; shareUrl?: string; error?: string };
@@ -1062,7 +1120,7 @@ export function TrustAppIngestion({
       const nextJourneyId = result.id ?? selectedJourneyId;
       setShareUrl(absoluteUrl);
       setSelectedJourneyId(nextJourneyId);
-      setNotice(selectedJourneyId ? "Journey updated. The share link is ready." : "Journey published. The share link is ready.");
+      setNotice(publish ? "Journey published. The share link is ready." : "Private draft saved.");
       const nextJourneys = await loadJourneys(workspaceId);
       await Promise.all([loadVideos(workspaceId), loadSources(workspaceId), loadContacts(workspaceId), loadSocialProfiles(workspaceId), loadTracking(workspaceId)]);
       await loadMetrics(workspaceId, nextJourneys ?? []);
@@ -1080,6 +1138,7 @@ export function TrustAppIngestion({
   async function createContactShare(contact: { contactId?: string; name?: string; email?: string; company?: string; phone?: string; crmSource?: string; externalId?: string }) {
     if (!workspaceId || !session || !selectedJourneyId) return;
     setJourneyWorking(true);
+    setPersonalShareUrl("");
     setError("");
     try {
       const response = await fetch(`/api/journeys/${selectedJourneyId}/send`, {
@@ -1102,7 +1161,7 @@ export function TrustAppIngestion({
       });
       const result = (await response.json()) as { shareUrl?: string; error?: string };
       if (!response.ok || !result.shareUrl) throw new Error(result.error ?? "Could not create contact link.");
-      setShareUrl(new URL(result.shareUrl, window.location.origin).toString());
+      setPersonalShareUrl(new URL(result.shareUrl, window.location.origin).toString());
       setNotice("Contact-specific journey link created.");
       await loadContacts();
     } catch (nextError) {
@@ -1280,8 +1339,7 @@ export function TrustAppIngestion({
 
   function goHome() {
     setSocialProfileReportId(null);
-    router.push("/");
-    setView("library");
+    setView("home");
     setNotice("");
     setError("");
   }
@@ -1289,14 +1347,13 @@ export function TrustAppIngestion({
   function closeSocialProfileReport() {
     setSocialProfileReportId(null);
     setView("socialProfiles");
-    router.push("/");
   }
 
   function openSocialProfileReport(profile: SocialProfileRow) {
     setSelectedSocialProfileId(profile.id);
     setSocialProfileReportId(profile.id);
     setView("socialProfiles");
-    router.push(`/social-profiles/${encodeURIComponent(profile.id)}`);
+    router.push(`/app/settings/youtube/${encodeURIComponent(profile.id)}`);
   }
 
   if (!roleId || !role) return <RoleGate onChoose={chooseRole} roles={roles} />;
@@ -1304,80 +1361,31 @@ export function TrustAppIngestion({
   if (!supabase && isInternal) return <SimpleGate title="Supabase is not configured." body="Add the Supabase public URL and publishable key in Vercel." onBack={() => setRoleId(null)} />;
   if (!session && isInternal) return <AuthGate role={role} supabase={supabase} onBack={() => setRoleId(null)} />;
 
-  return (
-    <div className="app">
-      <aside className="side" aria-label="Workspace">
-        <button className="mark" onClick={goHome} aria-label="Go to library home">T</button>
-        <nav className="side-nav">
-          <button className={view === "library" ? "icon-button is-active" : "icon-button"} onClick={() => setView("library")} aria-label="Library" title="Library"><Clapperboard /><span>Library</span></button>
-          <button className={view === "sources" ? "icon-button is-active" : "icon-button"} onClick={() => setView("sources")} aria-label="Sources" title="Sources"><Import /><span>Sources</span></button>
-          <button className={view === "socialProfiles" ? "icon-button is-active" : "icon-button"} onClick={() => { setView("socialProfiles"); setSocialProfileReportId(null); router.push("/"); }} aria-label="Social Profiles" title="Social Profiles"><UserRound /><span>Social Profiles</span></button>
-          <button className={view === "tracking" ? "icon-button is-active" : "icon-button"} onClick={() => setView("tracking")} aria-label="Link tracking" title="Link tracking"><Link2 /><span>Links</span></button>
-          <button className="icon-button" onClick={() => router.push("/contractor-metrics")} aria-label="Sales metrics" title="Metrics"><BarChart3 /><span>Metrics</span></button>
-          <button className={view === "journeys" ? "icon-button is-active" : "icon-button"} onClick={newJourney} aria-label="Journeys" title="Journeys"><Route /><span>Journeys</span></button>
-          <button className={view === "workspace" ? "icon-button is-active" : "icon-button"} onClick={() => setView("workspace")} aria-label="Workspace" title="Workspace"><Building2 /><span>Workspace</span></button>
-          {isPlatformAdmin && <a className="icon-button" href="/admin/activity" aria-label="Platform activity" title="Platform activity"><ShieldCheck /><span>Admin</span></a>}
-        </nav>
-        {session && <button className="icon-button" onClick={() => supabase?.auth.signOut()} aria-label="Sign out" title="Sign out"><LogOut /><span>Exit</span></button>}
-      </aside>
+  function addLibraryItems(items: JourneyAsset[]) {
+    setDraftAssets(current => {
+      const next = [...current];
+      for (const item of items) {
+        if (!next.some(a => item.videoId ? a.videoId === item.videoId : a.libraryAssetId === item.libraryAssetId)) next.push({ ...item, id: item.videoId ? `video:${item.videoId}` : `asset:${item.libraryAssetId}`, position: next.length + 1 });
+      }
+      return next;
+    });
+    setView("editor");
+  }
 
-      <main className="stage">
-        <header className="command-bar">
-          <div className="brand-line"><span>{role.label}</span><strong>{pageTitle}</strong></div>
-          {currentWorkspace && (
-            <label className="workspace-switcher">
-              <span>{currentWorkspace.role} workspace</span>
-              <select value={workspaceId ?? ""} onChange={(event) => void switchWorkspace(event.target.value)}>
-                {workspaces.map((workspace) => (
-                <option key={workspace.id} value={workspace.id}>
-                    {workspaceNameCounts.get(workspace.name) && workspaceNameCounts.get(workspace.name)! > 1 ? `${workspace.name} · ${workspace.slug}` : workspace.name}
-                </option>
-                ))}
-              </select>
-            </label>
-          )}
-          {showCommandSearch ? <label className="command-search"><Search /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={role.placeholder} /></label> : <div className="command-spacer" aria-hidden="true" />}
-        </header>
-
-        {view === "library" && videos.length > 0 && <LibraryFiltersBar filters={filters} options={options} onChange={setFilters} />}
-
-        {view !== "workspace" && (
-          <section className="role-context is-quiet"><span>{role.label}</span><h2>{role.title}</h2><p>{role.description}</p></section>
-        )}
-        {(notice || error) && <p style={{ margin: "0 6px 18px", color: error ? "#ffd4d4" : "#d8d1c5" }}>{error || notice}</p>}
-
-        {view === "sources" && <SourcesView sources={sources} importing={working} onImport={importSource} onReimport={reimportSource} onDelete={deleteSource} />}
-        {view === "workspace" && <WorkspaceView workspace={currentWorkspace} workspaces={workspaces} members={workspaceMembers} invites={workspaceInvites} integrationKeys={integrationKeys} integrationSecret={integrationSecret} mcpUrl={mcpUrl} canManage={canManageWorkspace} working={working} createName={createWorkspaceName} renameName={renameWorkspaceName} inviteDraft={inviteDraft} onCreateNameChange={setCreateWorkspaceName} onRenameNameChange={setRenameWorkspaceName} onInviteDraftChange={setInviteDraft} onCreate={createWorkspace} onRename={renameWorkspace} onInvite={inviteWorkspaceMember} onSwitch={switchWorkspace} onMemberRoleChange={updateWorkspaceMemberRole} onRemoveMember={removeWorkspaceMember} onRevokeInvite={revokeWorkspaceInvite} onCreateIntegrationKey={createIntegrationKey} onAttachIntegrationKey={attachIntegrationKey} onRevokeIntegrationKey={revokeIntegrationKey} />}
-        {view === "library" && <LibraryConfigurator videos={visibleVideos} libraryAssets={libraryAssets} assetDraft={libraryAssetDraft} selected={selected} saving={working} options={options} onSelect={setSelected} onAdd={addToJourney} onAssetDraftChange={setLibraryAssetDraft} onSaveAsset={saveLibraryAsset} onAddAsset={addLibraryAssetToJourney} onDeleteAsset={deleteLibraryAsset} onArchive={archiveVideo} onSaveContext={saveVideoContext} onOpenSources={() => setView("sources")} />}
-        {view === "socialProfiles" && socialProfileReportId && (
-          <SocialProfileReportPage
-            profile={selectedReportProfile}
-            working={working}
-            onBack={closeSocialProfileReport}
-            onRefresh={() => selectedReportProfile ? analyzeSocialProfile(selectedReportProfile) : undefined}
-            onImportChannel={() => selectedReportProfile ? importSocialProfile(selectedReportProfile, "channel") : undefined}
-            onImportVideo={(videoId) => selectedReportProfile ? importSocialProfile(selectedReportProfile, "video", videoId) : undefined}
-          />
-        )}
-        {view === "socialProfiles" && !socialProfileReportId && (
-          <SocialProfilesView
-            draft={socialProfileDraft}
-            profiles={socialProfiles}
-            selectedProfileId={selectedSocialProfileId}
-            working={working}
-            onDraftChange={setSocialProfileDraft}
-            onSave={saveSocialProfile}
-            onAnalyze={analyzeSocialProfile}
-            onRemove={removeSocialProfile}
-            onViewReport={openSocialProfileReport}
-          />
-        )}
-        {view === "tracking" && <LinkTrackingView draft={trackingDraft} journeys={journeys} tracking={tracking} working={trackingWorking} onDraftChange={setTrackingDraft} onCreate={createTrackingLink} />}
-        {view === "metrics" && <MetricsView metrics={metrics} videos={videos} sources={sources} journeys={journeys} contacts={contacts} tracking={tracking} />}
-        {view === "journeys" && <JourneysView journeys={journeys} folders={folders} draftAssets={draftAssets} groups={smartGroups} videos={visibleVideos} shareUrl={shareUrl} onEdit={editJourney} onAdd={addToJourney} onOpenLibrary={() => setView("library")} onOpenSources={() => setView("sources")} />}
-        {isInternal && <JourneyTray draft={draft} assets={draftAssets} embedDraft={journeyEmbedDraft} working={journeyWorking} shareUrl={shareUrl} contacts={contacts} selectedJourneyId={selectedJourneyId} options={options} onDraftChange={setDraft} onEmbedDraftChange={setJourneyEmbedDraft} onAddEmbed={addEmbeddedAsset} onGenerate={generateJourney} onPublish={publishJourney} onMove={moveDraftAsset} onRemove={removeFromJourney} onCreateContactShare={createContactShare} />}
-      </main>
-    </div>
-  );
+  return <SageShell view={view} workspaces={workspaces} workspaceId={workspaceId} onSwitch={switchWorkspace} onNavigate={setView} onSignOut={() => void supabase?.auth.signOut()} isAdmin={isPlatformAdmin} busy={loading} notice={notice} error={error || (draftStorageError ? "Browser draft recovery is unavailable. Save your journey before leaving." : "")} onDismiss={() => { setNotice(""); setError(""); }}>
+    {view === "home" && <SageHome contentCount={videos.length + libraryAssets.length} journeys={journeys} metrics={metrics} onNavigate={setView} onNew={newJourney} onEdit={editJourney} draftCount={draftAssets.length} />}
+    {view === "library" && <SageLibrary key={workspaceId} videos={videos} libraryAssets={libraryAssets} assetDraft={libraryAssetDraft} onAssetDraftChange={setLibraryAssetDraft} onSaveAsset={saveLibraryAsset} saving={working} onArchive={archiveVideo} onDeleteAsset={deleteLibraryAsset} onSaveContext={saveVideoContext} onImport={() => setView("sources")} onAddItems={addLibraryItems} draftCount={draftAssets.length} onOpenDraft={() => setView("editor")} />}
+    {view === "journeys" && <SageJourneys onArchive={() => setView("archive")} journeys={journeys} onEdit={editJourney} onNew={newJourney} onResume={() => setView("editor")} hasDraft={draftAssets.length > 0 || Boolean(draft.title)} />}
+    {view === "editor" && <SageJourneyEditor key={workspaceId} draft={draft} assets={draftAssets} onChange={setDraft} onMove={moveDraftAsset} onRemove={removeFromJourney} onLibrary={() => setView("library")} onBack={() => setView("journeys")} onSave={publishJourney} onGenerate={generateJourney} working={journeyWorking} shareUrl={shareUrl} personalUrl={personalShareUrl} published={publishedJourney} contacts={contacts} onContactShare={createContactShare} saved={draftSaved} />}
+    {view === "metrics" && <><header className="sage-page-heading"><div><h1>Activity</h1><p>See how buyers engage with your proof.</p></div><button onClick={() => setView("tracking")}>Tracked links</button></header><MetricsView metrics={metrics} videos={videos} sources={sources} journeys={journeys} contacts={contacts} tracking={tracking} /><SageRecipients contacts={contacts} metrics={metrics} journeys={journeys} /></>}
+    {view === "tracking" && <><button className="sage-back" onClick={() => setView("metrics")}>Back to activity</button><LinkTrackingView draft={trackingDraft} journeys={journeys} tracking={tracking} working={trackingWorking} onDraftChange={setTrackingDraft} onCreate={createTrackingLink} /></>}
+    {view === "archive" && workspaceId && <JourneyArchive key={workspaceId} activeWorkspaceId={workspaceId} onChanged={() => void refreshWorkspace(workspaceId)} />}
+    {view === "reports" && workspaceId && <ContractorMetricsWorkspace key={workspaceId} activeWorkspaceId={workspaceId} />}
+    {["workspace", "sources", "socialProfiles"].includes(view) && <nav className="sage-settings-nav" aria-label="Settings sections"><button aria-current={view === "workspace" ? "page" : undefined} onClick={() => setView("workspace")}>Workspace & team</button><button aria-current={view === "sources" ? "page" : undefined} onClick={() => setView("sources")}>Content sources</button><button aria-current={view === "socialProfiles" ? "page" : undefined} onClick={() => setView("socialProfiles")}>YouTube insights</button><button onClick={() => { setView("reports"); router.push("/app/reports?tab=connections"); }}>CRM connections & spend</button></nav>}
+    {view === "sources" && <SourcesView sources={sources} importing={working} onImport={importSource} onReimport={reimportSource} onDelete={deleteSource} />}
+    {view === "workspace" && <WorkspaceView workspace={currentWorkspace} workspaces={workspaces} members={workspaceMembers} invites={workspaceInvites} integrationKeys={integrationKeys} integrationSecret={integrationSecret} mcpUrl={mcpUrl} canManage={canManageWorkspace} working={working} createName={createWorkspaceName} renameName={renameWorkspaceName} inviteDraft={inviteDraft} onCreateNameChange={setCreateWorkspaceName} onRenameNameChange={setRenameWorkspaceName} onInviteDraftChange={setInviteDraft} onCreate={createWorkspace} onRename={renameWorkspace} onInvite={inviteWorkspaceMember} onSwitch={switchWorkspace} onMemberRoleChange={updateWorkspaceMemberRole} onRemoveMember={removeWorkspaceMember} onRevokeInvite={revokeWorkspaceInvite} onCreateIntegrationKey={createIntegrationKey} onAttachIntegrationKey={attachIntegrationKey} onRevokeIntegrationKey={revokeIntegrationKey} />}
+    {view === "socialProfiles" && socialProfileReportId && <SocialProfileReportPage profile={selectedReportProfile} working={working} onBack={closeSocialProfileReport} onRefresh={() => selectedReportProfile ? analyzeSocialProfile(selectedReportProfile) : undefined} onImportChannel={() => selectedReportProfile ? importSocialProfile(selectedReportProfile, "channel") : undefined} onImportVideo={videoId => selectedReportProfile ? importSocialProfile(selectedReportProfile, "video", videoId) : undefined} />}
+    {view === "socialProfiles" && !socialProfileReportId && <SocialProfilesView draft={socialProfileDraft} profiles={socialProfiles} selectedProfileId={selectedSocialProfileId} working={working} onDraftChange={setSocialProfileDraft} onSave={saveSocialProfile} onAnalyze={analyzeSocialProfile} onRemove={removeSocialProfile} onViewReport={openSocialProfileReport} />}
+  </SageShell>;
 }
 

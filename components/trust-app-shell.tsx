@@ -30,7 +30,7 @@ import {
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 
 export type RoleId = "libraryManager" | "salesRep" | "owner" | "prospect";
-export type ViewId = "sources" | "library" | "socialProfiles" | "tracking" | "journeys" | "metrics" | "workspace";
+export type ViewId = "sources" | "library" | "socialProfiles" | "tracking" | "journeys" | "metrics" | "workspace" | "home" | "editor" | "reports" | "archive";
 
 export type RoleDefinition = {
   label: string;
@@ -178,9 +178,9 @@ export function SourcesView({
         <div className="collection-top">
           <div>
             <span>Sources</span>
-            <h1>Import public video sources</h1>
+            <h1>Import content</h1>
           </div>
-          <p>Start with one public YouTube channel or video. Trust Compression turns it into searchable proof that your team can use in sales journeys.</p>
+          <p>Add a public YouTube video, channel, playlist, or Google Drive folder. Your files stay with their original host.</p>
         </div>
         <form className="prospect-brief" onSubmit={onImport}>
           <div className="brief-grid">
@@ -406,16 +406,16 @@ export function WorkspaceView({
 
       {canManage && (
         <section className="workspace-panel workspace-team-panel">
-          <div className="mini-head"><span>MCP connector access</span><KeyRound /></div>
+          <div className="mini-head"><span>Connected assistants</span><KeyRound /></div>
           <p>Authorize an external agent for this workspace. Journey tools only accept direct-message requests from phone numbers listed on the connector.</p>
-          <div className="workspace-inline-form">
-            <label><span>Remote MCP URL</span><input value={mcpUrl || "https://trustcompression.unmarked.media/mcp"} readOnly /></label>
+          <details><summary>Set up an assistant or authorize a phone number</summary><div className="workspace-inline-form">
+            <label><span>Remote MCP URL</span><input value={mcpUrl || "https://app.trusttale.co/mcp"} readOnly /></label>
             <label><span>Connector name</span><input value={connectorName} onChange={(event) => setConnectorName(event.target.value)} placeholder="Viktor" /></label>
             <label><span>Allowed sender phones</span><input value={allowedPhones} onChange={(event) => setAllowedPhones(event.target.value)} placeholder="+12485551212, +13135551212" /></label>
             <button className="wide-action" type="button" disabled={working || !allowedPhones.trim()} onClick={() => onCreateIntegrationKey(connectorName, allowedPhones.split(",").map((value) => value.trim()).filter(Boolean))}><KeyRound />Create connector key</button>
             <label><span>Existing connector ID</span><input value={existingConnectorId} onChange={(event) => setExistingConnectorId(event.target.value)} placeholder="Paste the agency connector ID" /></label>
             <button className="wide-action" type="button" disabled={working || !allowedPhones.trim() || !existingConnectorId.trim()} onClick={() => onAttachIntegrationKey(existingConnectorId.trim(), allowedPhones.split(",").map((value) => value.trim()).filter(Boolean))}><KeyRound />Authorize existing connector</button>
-          </div>
+          </div></details>
           {integrationSecret && (
             <div className="source-next-steps">
               <span>Copy this key now</span>

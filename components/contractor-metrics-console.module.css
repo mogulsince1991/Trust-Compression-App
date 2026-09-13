@@ -4,7 +4,7 @@
   background:
     radial-gradient(circle at top left, rgba(255, 255, 255, 0.06), transparent 30%),
     linear-gradient(180deg, #050505, #090909 44%, #070707);
-  color: #f6f3ee;
+  color: var(--sage-text, #f6f3ee);
 }
 
 .hero {
@@ -19,7 +19,7 @@
 .inlineStat span,
 .wizardPreview span,
 .statusPill span {
-  color: #9d968d;
+  color: var(--sage-muted, #9d968d);
   font-size: 11px;
   line-height: 1;
   text-transform: uppercase;
@@ -42,7 +42,7 @@
 .sourceMeta small,
 .metricCard small,
 .wizardPreview small {
-  color: rgba(246, 243, 238, 0.7);
+  color: var(--sage-text, rgba(246, 243, 238, 0.7));
   line-height: 1.5;
 }
 
@@ -87,9 +87,9 @@
 .iconButton,
 .shellTab,
 .shellTabActive {
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #f6f3ee;
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--sage-line, rgba(255, 255, 255, 0.12));
+  color: var(--sage-text, #f6f3ee);
+  background: var(--sage-surface, rgba(255, 255, 255, 0.04));
 }
 
 .primary {
@@ -99,9 +99,9 @@
 }
 
 .secondary {
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  color: #f6f3ee;
-  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--sage-line, rgba(255, 255, 255, 0.16));
+  color: var(--sage-text, #f6f3ee);
+  background: var(--sage-surface, rgba(255, 255, 255, 0.08));
 }
 
 .linkButton:hover,
@@ -119,12 +119,12 @@
   margin: 0 0 18px;
   padding: 12px 14px;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--sage-line, rgba(255, 255, 255, 0.1));
 }
 
 .notice {
-  color: #efe8dc;
-  background: rgba(255, 255, 255, 0.05);
+  color: var(--sage-text, #efe8dc);
+  background: var(--sage-surface, rgba(255, 255, 255, 0.05));
 }
 
 .error,
@@ -162,8 +162,8 @@
 .panel {
   padding: 20px;
   border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid var(--sage-line, rgba(255, 255, 255, 0.09));
+  background: var(--sage-surface, rgba(255, 255, 255, 0.035));
   backdrop-filter: blur(20px);
 }
 
@@ -215,8 +215,8 @@
   gap: 6px;
   padding: 12px 14px;
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--sage-line, rgba(255, 255, 255, 0.08));
+  background: var(--sage-surface, rgba(255, 255, 255, 0.03));
 }
 
 .statusPill strong {
@@ -250,10 +250,10 @@
   min-height: 44px;
   padding: 0 12px;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--sage-line, rgba(255, 255, 255, 0.12));
   outline: 0;
-  color: #f6f3ee;
-  background: rgba(255, 255, 255, 0.045);
+  color: var(--sage-text, #f6f3ee);
+  background: var(--sage-surface, rgba(255, 255, 255, 0.045));
 }
 
 .formGrid textarea {
@@ -268,8 +268,8 @@
   align-content: start;
   padding: 14px;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--sage-surface, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--sage-line, rgba(255, 255, 255, 0.08));
 }
 
 .inlineStat strong {
@@ -295,8 +295,8 @@
 .layoutRow {
   padding: 14px;
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--sage-line, rgba(255, 255, 255, 0.08));
+  background: var(--sage-surface, rgba(255, 255, 255, 0.03));
 }
 
 .reportRow,
@@ -352,9 +352,9 @@
 .accountMeta span {
   padding: 6px 10px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(246, 243, 238, 0.82);
+  border: 1px solid var(--sage-line, rgba(255, 255, 255, 0.08));
+  background: var(--sage-surface, rgba(255, 255, 255, 0.04));
+  color: var(--sage-text, rgba(246, 243, 238, 0.82));
   font-size: 12px;
 }
 
@@ -372,8 +372,8 @@
   gap: 8px;
   padding: 16px;
   border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--sage-line, rgba(255, 255, 255, 0.08));
+  background: var(--sage-surface, rgba(255, 255, 255, 0.04));
 }
 
 .metricCardTop {
@@ -386,7 +386,7 @@
 .metricInfoIcon {
   width: 16px;
   height: 16px;
-  color: rgba(246, 243, 238, 0.54);
+  color: var(--sage-text, rgba(246, 243, 238, 0.54));
 }
 
 .metricCard strong {
@@ -396,7 +396,7 @@
 }
 
 .metricCard em {
-  color: #cfc7bb;
+  color: var(--sage-text, #cfc7bb);
   font-size: 12px;
   font-style: normal;
 }
@@ -407,9 +407,9 @@
   z-index: 3;
   padding: 12px 14px;
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(10, 10, 10, 0.96);
-  color: rgba(246, 243, 238, 0.84);
+  border: 1px solid var(--sage-line, rgba(255, 255, 255, 0.12));
+  background: var(--sage-surface, rgba(10, 10, 10, 0.96));
+  color: var(--sage-text, rgba(246, 243, 238, 0.84));
   line-height: 1.5;
   white-space: pre-wrap;
   opacity: 0;
@@ -456,8 +456,8 @@
   gap: 8px;
   padding: 0 12px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--sage-line, rgba(255, 255, 255, 0.12));
+  background: var(--sage-surface, rgba(255, 255, 255, 0.04));
 }
 
 .toggle input {
@@ -471,8 +471,8 @@
   margin: 2px 0 14px;
   padding: 14px;
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--sage-line, rgba(255, 255, 255, 0.08));
+  background: var(--sage-surface, rgba(255, 255, 255, 0.03));
 }
 
 .wizardPreview strong {
@@ -496,8 +496,8 @@
 
 .debugDisclosure {
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--sage-line, rgba(255, 255, 255, 0.08));
+  background: var(--sage-surface, rgba(255, 255, 255, 0.025));
 }
 
 .debugSummary {
@@ -526,9 +526,9 @@
 .previewFieldPill {
   padding: 6px 10px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(246, 243, 238, 0.72);
+  border: 1px solid var(--sage-line, rgba(255, 255, 255, 0.08));
+  background: var(--sage-surface, rgba(255, 255, 255, 0.04));
+  color: var(--sage-text, rgba(246, 243, 238, 0.72));
   font-size: 12px;
 }
 
@@ -558,10 +558,10 @@
   min-height: 44px;
   padding: 0 12px;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--sage-line, rgba(255, 255, 255, 0.12));
   outline: 0;
-  color: #f6f3ee;
-  background: rgba(255, 255, 255, 0.045);
+  color: var(--sage-text, #f6f3ee);
+  background: var(--sage-surface, rgba(255, 255, 255, 0.045));
 }
 
 .metricListItem,
@@ -572,16 +572,16 @@
   cursor: pointer;
   padding: 14px;
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
-  color: #f6f3ee;
+  border: 1px solid var(--sage-line, rgba(255, 255, 255, 0.08));
+  background: var(--sage-surface, rgba(255, 255, 255, 0.03));
+  color: var(--sage-text, #f6f3ee);
   display: grid;
   gap: 6px;
 }
 
 .metricListItemActive {
-  border-color: rgba(246, 243, 238, 0.36);
-  background: rgba(255, 255, 255, 0.07);
+  border-color: var(--sage-text, rgba(246, 243, 238, 0.36));
+  background: var(--sage-surface, rgba(255, 255, 255, 0.07));
 }
 
 .metricListItem strong,
@@ -632,7 +632,7 @@
 .tableWrap {
   overflow: auto;
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--sage-line, rgba(255, 255, 255, 0.08));
 }
 
 .table {
@@ -649,14 +649,14 @@
 }
 
 .table th {
-  color: #9d968d;
+  color: var(--sage-muted, #9d968d);
   font-size: 11px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 
 .table td {
-  color: rgba(246, 243, 238, 0.86);
+  color: var(--sage-text, rgba(246, 243, 238, 0.86));
   vertical-align: top;
 }
 
@@ -724,3 +724,11 @@
     font-size: clamp(34px, 10vw, 52px);
   }
 }
+
+:global(.sage-app) .screen { padding: 0; min-height: 0; background: transparent; }
+:global(.sage-app) .hero h1 { font-size: 32px; line-height: 1.2; margin-top: 8px; }
+:global(.sage-app) .heroActions { margin-top: 20px; }
+:global(.sage-app) .primary { background: var(--sage-text); color: var(--sage-surface); }
+:global(.sage-app) .metricCard { background: var(--sage-surface); }
+:global(.sage-app) .metricCard strong { font-size: 30px; overflow-wrap: anywhere; }
+:global(.sage-app) .panel { background: var(--sage-surface); }

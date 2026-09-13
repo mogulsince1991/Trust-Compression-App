@@ -531,7 +531,7 @@ function BottomPlayer({
   );
 }
 
-function ContextEditor({
+export function ContextEditor({
   video,
   saving,
   options,

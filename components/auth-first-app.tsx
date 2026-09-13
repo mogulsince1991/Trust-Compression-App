@@ -5,6 +5,7 @@ import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
+import { AppearanceControl } from "./sage-shell";
 import { TrustAppIngestion } from "@/components/trust-app-ingestion";
 
 const noMagicLinkEmails = new Set(["admin@unmarked.media"]);
@@ -13,10 +14,10 @@ function getAuthRedirectUrl() {
   return `${window.location.origin}/auth/callback`;
 }
 
-type AppView = "sources" | "library" | "socialProfiles" | "tracking" | "journeys" | "metrics";
+type AppView = import("./trust-app-shell").ViewId;
 
 export function AuthFirstApp({
-  initialView = "library",
+  initialView = "home",
   initialSocialProfileReportId = null,
 }: {
   initialView?: AppView;
@@ -30,6 +31,7 @@ export function AuthFirstApp({
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [working, setWorking] = useState(false);
+  const [mode, setMode] = useState<"password" | "link" | "signup">("password");
 
   useEffect(() => {
     if (!supabase) {
@@ -57,7 +59,8 @@ export function AuthFirstApp({
     setMessage("");
     setError("");
 
-    if (password.length >= 6) {
+    if (mode === "signup") { setWorking(false); await createAccount(); return; }
+    if (mode === "password") {
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
       setWorking(false);
       if (signInError) setError(signInError.message);
@@ -72,7 +75,7 @@ export function AuthFirstApp({
 
     const { error: otpError } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: getAuthRedirectUrl() }
+      options: { emailRedirectTo: getAuthRedirectUrl(), shouldCreateUser: false }
     });
     setWorking(false);
     if (otpError) setError(otpError.message);
@@ -116,26 +119,23 @@ export function AuthFirstApp({
   if (session) return <TrustAppIngestion initialView={initialView} initialSocialProfileReportId={initialSocialProfileReportId} />;
 
   return (
-    <main className="role-gate auth-first-screen">
-      <section className="gate-intro">
-        <span>Trust Compression</span>
-        <h1>Sign in to your company library.</h1>
-        <p>Your workspace controls your role and permissions. Create an account, use Google, or sign in with email.</p>
-      </section>
-      <form className="prospect-brief auth-card" onSubmit={signIn}>
-        <button className="wide-action auth-google" type="button" disabled={working} onClick={signInWithGoogle}>{working ? <Loader2 className="spin" /> : <ArrowUpRight />}Continue with Google</button>
-        <div className="auth-divider"><span>or</span></div>
-        <div className="brief-grid">
-          <label className="wide-field"><span>Email</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@company.com" required /></label>
-          <label className="wide-field"><span>Password</span><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Password or leave blank for magic link" /></label>
-        </div>
-        <div className="auth-actions">
-          <button className="wide-action" disabled={working} type="submit">{working ? <Loader2 className="spin" /> : <ArrowUpRight />}Sign in</button>
-          <button className="seed-button" disabled={working} type="button" onClick={createAccount}>Create account</button>
-        </div>
-        <p className="auth-hint">Leave password blank to receive a magic link. Use a password to create an account or sign in directly.</p>
-        {(message || error) && <p className={error ? "status-line is-error" : "status-line"}>{error || message}</p>}
-      </form>
-    </main>
+    <div className="sage-app sage-auth">
+      <header className="sage-auth-header"><a className="sage-wordmark" href="/">TrustTale<span className="sage-brand-dot" /></a><AppearanceControl /></header>
+      <main className="sage-auth-layout">
+        <section className="sage-auth-intro"><span className="sage-eyebrow">Proof. Ready to share.</span><h1>Turn your best work into your next conversation.</h1><p>Bring together videos, project stories, and documents. Share the right proof with each buyer, and see what connects.</p><div className="sage-auth-example"><span className="sage-badge is-live">A more confident buyer</span><h2>Show them.<br />Don't just tell them.</h2><p>One focused journey. Everything they need to take the next step.</p></div></section>
+        <form className="sage-panel sage-auth-card" onSubmit={signIn}>
+          <h2>{mode === "signup" ? "Create your account" : mode === "link" ? "Email me a sign-in link" : "Welcome back"}</h2>
+          <p>{mode === "signup" ? "Your company's proof, all in one place." : "Sign in to your workspace."}</p>
+          <button type="button" disabled={working} onClick={signInWithGoogle}>Continue with Google <ArrowUpRight /></button>
+          <div className="sage-auth-divider">or use email</div>
+          <label>Email<input type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@company.com" required /></label>
+          {mode !== "link" && <label>Password<input type="password" autoComplete={mode === "signup" ? "new-password" : "current-password"} value={password} onChange={e => setPassword(e.target.value)} minLength={mode === "signup" ? 6 : undefined} required /></label>}
+          <button className="sage-primary" disabled={working} type="submit">{working ? "Please wait..." : mode === "signup" ? "Create account" : mode === "link" ? "Send sign-in link" : "Sign in"}<ArrowUpRight /></button>
+          {mode === "password" && <button type="button" className="sage-auth-switch" onClick={() => { setMode("link"); setError(""); setMessage(""); }}>Sign in with an email link instead</button>}
+          <button type="button" className="sage-auth-switch" onClick={() => { setMode(mode === "signup" || mode === "link" ? "password" : "signup"); setError(""); setMessage(""); }}>{mode === "signup" || mode === "link" ? "Back to sign in" : "New to TrustTale? Create an account"}</button>
+          {(message || error) && <p className="sage-notice" role={error ? "alert" : "status"}>{error || message}</p>}
+        </form>
+      </main>
+    </div>
   );
 }

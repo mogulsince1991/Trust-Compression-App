@@ -6,10 +6,11 @@ import "./source-expansion.css";
 import "./product-overrides.css";
 import "./final-polish.css";
 import "./journey-mobile-fix.css";
+import "./sage.css";
 
 export const metadata: Metadata = {
-  title: "Trust Library",
-  description: "Turn existing video assets into searchable trust journeys."
+  title: "TrustTale",
+  description: "Bring together the proof that helps buyers choose you."
 };
 
 export default function RootLayout({

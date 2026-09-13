@@ -11,6 +11,7 @@ type JourneyRequest = {
   ctaLabel?: string;
   ctaUrl?: string;
   folderName?: string;
+  publish?: boolean;
   assets?: Array<{
     libraryAssetId?: string | null;
     videoId?: string | null;
@@ -139,8 +140,8 @@ export async function POST(request: Request) {
         cta_url: body.ctaUrl?.trim() || null,
         folder_id: folderId,
         cover_url: firstAsset?.thumbnail_url ?? null,
-        is_public: true,
-        published_at: new Date().toISOString(),
+        is_public: body.publish !== false,
+        published_at: body.publish === false ? null : new Date().toISOString(),
         created_by: user.id
       })
       .select("id,share_token")

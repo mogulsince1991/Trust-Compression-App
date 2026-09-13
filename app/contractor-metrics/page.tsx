@@ -1,5 +1,5 @@
-import { ContractorMetricsWorkspace } from "@/components/contractor-metrics-workspace";
+import { redirect } from "next/navigation";
 
 export default function ContractorMetricsPage() {
-  return <ContractorMetricsWorkspace />;
+  redirect("/app/reports");
 }

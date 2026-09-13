@@ -1,11 +1,5 @@
-import { AuthFirstApp } from "@/components/auth-first-app";
-import { SavedJourneysDock } from "@/components/saved-journeys-dock";
+import { redirect } from "next/navigation";
 
 export default function SocialProfileReportRoute({ params }: { params: { id: string } }) {
-  return (
-    <>
-      <AuthFirstApp initialView="socialProfiles" initialSocialProfileReportId={params.id} />
-      <SavedJourneysDock />
-    </>
-  );
+  redirect(`/app/settings/youtube/${encodeURIComponent(params.id)}`);
 }
