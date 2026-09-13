@@ -47,6 +47,7 @@ export type IntegrationKeyRow = {
   scopes: string[];
   allowed_phone_numbers: string[];
   require_direct_message: boolean;
+  is_owner?: boolean;
   last_used_at: string | null;
   created_at: string;
 };
@@ -271,6 +272,7 @@ export function WorkspaceView({
   onRemoveMember,
   onRevokeInvite,
   onCreateIntegrationKey,
+  onAttachIntegrationKey,
   onRevokeIntegrationKey,
 }: {
   workspace: WorkspaceRow | null;
@@ -296,11 +298,13 @@ export function WorkspaceView({
   onRemoveMember: (member: WorkspaceMemberRow) => void;
   onRevokeInvite: (invite: WorkspaceInviteRow) => void;
   onCreateIntegrationKey: (name: string, allowedPhoneNumbers: string[]) => void;
+  onAttachIntegrationKey: (connectorId: string, allowedPhoneNumbers: string[]) => void;
   onRevokeIntegrationKey: (key: IntegrationKeyRow) => void;
 }) {
   const activeInvites = invites.filter((invite) => invite.status === "pending");
   const [connectorName, setConnectorName] = useState("Viktor");
   const [allowedPhones, setAllowedPhones] = useState("");
+  const [existingConnectorId, setExistingConnectorId] = useState("");
 
   return (
     <section className="workspace-management">
@@ -409,6 +413,8 @@ export function WorkspaceView({
             <label><span>Connector name</span><input value={connectorName} onChange={(event) => setConnectorName(event.target.value)} placeholder="Viktor" /></label>
             <label><span>Allowed sender phones</span><input value={allowedPhones} onChange={(event) => setAllowedPhones(event.target.value)} placeholder="+12485551212, +13135551212" /></label>
             <button className="wide-action" type="button" disabled={working || !allowedPhones.trim()} onClick={() => onCreateIntegrationKey(connectorName, allowedPhones.split(",").map((value) => value.trim()).filter(Boolean))}><KeyRound />Create connector key</button>
+            <label><span>Existing connector ID</span><input value={existingConnectorId} onChange={(event) => setExistingConnectorId(event.target.value)} placeholder="Paste the agency connector ID" /></label>
+            <button className="wide-action" type="button" disabled={working || !allowedPhones.trim() || !existingConnectorId.trim()} onClick={() => onAttachIntegrationKey(existingConnectorId.trim(), allowedPhones.split(",").map((value) => value.trim()).filter(Boolean))}><KeyRound />Authorize existing connector</button>
           </div>
           {integrationSecret && (
             <div className="source-next-steps">
@@ -424,7 +430,7 @@ export function WorkspaceView({
             {integrationKeys.map((key) => (
               <article className="workspace-member" key={key.id}>
                 <div className="workspace-avatar"><KeyRound /></div>
-                <div className="workspace-member-copy"><strong>{key.name}</strong><small>{key.key_prefix}... · {key.allowed_phone_numbers?.join(", ") || "no allowed senders"} · {key.last_used_at ? `used ${formatDateTime(key.last_used_at)}` : "not used yet"}</small></div>
+                <div className="workspace-member-copy"><strong>{key.name}</strong><small>{key.key_prefix}... · {key.allowed_phone_numbers?.join(", ") || "no allowed senders"} · {key.last_used_at ? `used ${formatDateTime(key.last_used_at)}` : "not used yet"}</small><small>Connector ID: {key.id}</small></div>
                 <span className="workspace-role-pill">Library + journeys</span>
                 <button className="icon-mini danger" onClick={() => onRevokeIntegrationKey(key)} aria-label={`Revoke ${key.name}`}><Trash2 /></button>
               </article>

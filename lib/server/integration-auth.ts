@@ -49,6 +49,38 @@ export function requireDirectMessageAccess(
   return sender;
 }
 
+export async function resolveDirectMessageWorkspace(
+  serviceSupabase: NonNullable<ReturnType<typeof createServiceSupabaseClient>>,
+  key: { id: string; workspace_id: string; allowed_phone_numbers?: unknown; require_direct_message?: boolean | null },
+  input: { senderPhone?: unknown; messageChannel?: unknown; workspaceHint?: unknown }
+) {
+  if (key.require_direct_message !== false && input.messageChannel !== "direct_message") {
+    throw httpError(403, "Journey actions require a direct inbound message.");
+  }
+  const sender = normalizePhoneNumber(typeof input.senderPhone === "string" ? input.senderPhone : "");
+  const { data: routes, error } = await serviceSupabase
+    .from("workspace_integration_sender_routes")
+    .select("workspace_id")
+    .eq("integration_key_id", key.id)
+    .eq("phone_number", sender);
+  if (error) throw httpError(500, error.message);
+  if (routes?.length === 1) return { workspaceId: routes[0].workspace_id as string, sender };
+  if ((routes?.length ?? 0) > 1) {
+    const ids = routes!.map((route) => route.workspace_id as string);
+    const { data: workspaces, error: workspaceError } = await serviceSupabase.from("workspaces").select("id,name,slug").in("id", ids);
+    if (workspaceError) throw httpError(500, workspaceError.message);
+    const hint = typeof input.workspaceHint === "string" ? input.workspaceHint.trim().toLowerCase() : "";
+    const matches = hint ? (workspaces ?? []).filter((workspace) => workspace.id.toLowerCase() === hint || workspace.slug?.toLowerCase() === hint || workspace.name?.toLowerCase() === hint) : [];
+    if (matches.length === 1) return { workspaceId: matches[0].id as string, sender };
+    const options = (workspaces ?? []).map((workspace) => workspace.name).filter(Boolean).join(", ");
+    throw httpError(409, `This sender can access multiple workspaces. Ask which workspace they mean${options ? `: ${options}` : "."}`);
+  }
+
+  // Existing single-workspace connectors remain functional during migration.
+  requireDirectMessageAccess(key, input);
+  return { workspaceId: key.workspace_id, sender };
+}
+
 export function requireIntegrationScope(scopes: unknown, required: string) {
   const values = Array.isArray(scopes) ? scopes.map(String) : [];
   if (!values.includes(required) && !values.includes("admin")) {

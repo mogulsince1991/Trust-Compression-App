@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { requireDirectMessageAccess, requireIntegrationKey, requireIntegrationScope } from "@/lib/server/integration-auth";
+import { requireIntegrationKey, requireIntegrationScope, resolveDirectMessageWorkspace } from "@/lib/server/integration-auth";
 import { archiveIntegrationJourney, createIntegrationJourney, listIntegrationJourneys, searchIntegrationLibrary, updateIntegrationJourney } from "@/lib/server/integration-journeys";
 import { importLibrarySource } from "@/lib/server/library-import";
 import { recordActivity } from "@/lib/server/activity";
 
 type Rpc = { id?: string | number | null; method?: string; params?: Record<string, any> };
-const context = { sender_phone: { type: "string", description: "Direct-message sender phone number." }, message_channel: { type: "string", enum: ["direct_message"] }, source_contact_id: { type: "string" } };
+const context = { sender_phone: { type: "string", description: "Direct-message sender phone number." }, message_channel: { type: "string", enum: ["direct_message"] }, workspace_hint: { type: "string", description: "Workspace name, slug, or ID when the sender can access multiple workspaces." }, source_contact_id: { type: "string" } };
 const asset = { type: "object", properties: { video_id: { type: "string" }, library_asset_id: { type: "string" }, source_url: { type: "string" }, title: { type: "string" }, note: { type: "string" } }, additionalProperties: false };
 const tools = [
   { name: "import_library_source", description: "Import a YouTube source or save an embeddable cloud asset.", inputSchema: { type: "object", properties: { source_url: { type: "string" }, title: { type: "string" }, summary: { type: "string" }, mime_type: { type: "string" }, sharing: { type: "string" }, source_system: { type: "string" }, metadata: { type: "object" } }, required: ["source_url"], additionalProperties: false } },
@@ -37,15 +37,16 @@ export async function POST(request: Request) {
       if (!String(args.source_url || "").trim()) return fail(id, -32602, "source_url is required.");
       result = await importLibrarySource(serviceSupabase, { workspaceId: key.workspace_id, sourceUrl: args.source_url, userId: null, title: args.title, summary: args.summary, mimeType: args.mime_type, sharing: args.sharing, sourceSystem: args.source_system || key.name || "mcp", metadata: args.metadata });
     } else {
-      requireDirectMessageAccess(key, { senderPhone: args.sender_phone, messageChannel: args.message_channel });
-      if (name === "search_library") { requireIntegrationScope(key.scopes, "journeys:read"); result = await searchIntegrationLibrary(serviceSupabase, key.workspace_id, String(args.query || ""), Number(args.limit || 20)); }
-      else if (name === "list_journeys") { requireIntegrationScope(key.scopes, "journeys:read"); result = await listIntegrationJourneys(serviceSupabase, key.workspace_id, String(args.query || "")); }
-      else if (name === "create_journey") { requireIntegrationScope(key.scopes, "journeys:write"); result = await createIntegrationJourney(serviceSupabase, key.workspace_id, args); }
-      else if (name === "update_journey") { requireIntegrationScope(key.scopes, "journeys:write"); result = await updateIntegrationJourney(serviceSupabase, key.workspace_id, String(args.journey_id || ""), args); }
-      else if (name === "archive_journey") { requireIntegrationScope(key.scopes, "journeys:write"); result = await archiveIntegrationJourney(serviceSupabase, key.workspace_id, String(args.journey_id || "")); }
+      const route = await resolveDirectMessageWorkspace(serviceSupabase, key, { senderPhone: args.sender_phone, messageChannel: args.message_channel, workspaceHint: args.workspace_hint });
+      if (name === "search_library") { requireIntegrationScope(key.scopes, "journeys:read"); result = await searchIntegrationLibrary(serviceSupabase, route.workspaceId, String(args.query || ""), Number(args.limit || 20)); }
+      else if (name === "list_journeys") { requireIntegrationScope(key.scopes, "journeys:read"); result = await listIntegrationJourneys(serviceSupabase, route.workspaceId, String(args.query || "")); }
+      else if (name === "create_journey") { requireIntegrationScope(key.scopes, "journeys:write"); result = await createIntegrationJourney(serviceSupabase, route.workspaceId, args); }
+      else if (name === "update_journey") { requireIntegrationScope(key.scopes, "journeys:write"); result = await updateIntegrationJourney(serviceSupabase, route.workspaceId, String(args.journey_id || ""), args); }
+      else if (name === "archive_journey") { requireIntegrationScope(key.scopes, "journeys:write"); result = await archiveIntegrationJourney(serviceSupabase, route.workspaceId, String(args.journey_id || "")); }
       else return fail(id, -32602, "Unknown tool name.");
+      args._resolved_workspace_id = route.workspaceId;
     }
-    await recordActivity(serviceSupabase, { workspaceId: key.workspace_id, eventType: `mcp_${name}`, entityType: name.includes("journey") ? "journey" : "integration", surface: "mcp", metadata: { connectorId: key.id, directMessage: args.message_channel === "direct_message" } });
+    await recordActivity(serviceSupabase, { workspaceId: typeof args._resolved_workspace_id === "string" ? args._resolved_workspace_id : key.workspace_id, eventType: `mcp_${name}`, entityType: name.includes("journey") ? "journey" : "integration", surface: "mcp", metadata: { connectorId: key.id, directMessage: args.message_channel === "direct_message" } });
     return ok(id, { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result, isError: false });
   } catch (error) {
     const status = typeof error === "object" && error && "status" in error && typeof (error as any).status === "number" ? (error as any).status : 400;

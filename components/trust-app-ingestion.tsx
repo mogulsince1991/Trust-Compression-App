@@ -901,6 +901,27 @@ export function TrustAppIngestion({
     }
   }
 
+  async function attachIntegrationKey(connectorId: string, allowedPhoneNumbers: string[]) {
+    if (!workspaceId || !session || !canManageWorkspace) return;
+    setWorking(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/workspaces/${encodeURIComponent(workspaceId)}/integration-keys`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ connectorId, allowedPhoneNumbers })
+      });
+      const result = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Could not authorize the connector for this workspace.");
+      await loadIntegrationKeys(workspaceId);
+      setNotice("The existing MCP connector can now route authorized senders to this workspace.");
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not authorize the connector.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
   async function revokeIntegrationKey(key: IntegrationKeyRow) {
     if (!workspaceId || !session || !canManageWorkspace) return;
     if (!window.confirm(`Revoke ${key.name}? Viktor will stop importing immediately.`)) return;
@@ -1326,7 +1347,7 @@ export function TrustAppIngestion({
         {(notice || error) && <p style={{ margin: "0 6px 18px", color: error ? "#ffd4d4" : "#d8d1c5" }}>{error || notice}</p>}
 
         {view === "sources" && <SourcesView sources={sources} importing={working} onImport={importSource} onReimport={reimportSource} onDelete={deleteSource} />}
-        {view === "workspace" && <WorkspaceView workspace={currentWorkspace} workspaces={workspaces} members={workspaceMembers} invites={workspaceInvites} integrationKeys={integrationKeys} integrationSecret={integrationSecret} mcpUrl={mcpUrl} canManage={canManageWorkspace} working={working} createName={createWorkspaceName} renameName={renameWorkspaceName} inviteDraft={inviteDraft} onCreateNameChange={setCreateWorkspaceName} onRenameNameChange={setRenameWorkspaceName} onInviteDraftChange={setInviteDraft} onCreate={createWorkspace} onRename={renameWorkspace} onInvite={inviteWorkspaceMember} onSwitch={switchWorkspace} onMemberRoleChange={updateWorkspaceMemberRole} onRemoveMember={removeWorkspaceMember} onRevokeInvite={revokeWorkspaceInvite} onCreateIntegrationKey={createIntegrationKey} onRevokeIntegrationKey={revokeIntegrationKey} />}
+        {view === "workspace" && <WorkspaceView workspace={currentWorkspace} workspaces={workspaces} members={workspaceMembers} invites={workspaceInvites} integrationKeys={integrationKeys} integrationSecret={integrationSecret} mcpUrl={mcpUrl} canManage={canManageWorkspace} working={working} createName={createWorkspaceName} renameName={renameWorkspaceName} inviteDraft={inviteDraft} onCreateNameChange={setCreateWorkspaceName} onRenameNameChange={setRenameWorkspaceName} onInviteDraftChange={setInviteDraft} onCreate={createWorkspace} onRename={renameWorkspace} onInvite={inviteWorkspaceMember} onSwitch={switchWorkspace} onMemberRoleChange={updateWorkspaceMemberRole} onRemoveMember={removeWorkspaceMember} onRevokeInvite={revokeWorkspaceInvite} onCreateIntegrationKey={createIntegrationKey} onAttachIntegrationKey={attachIntegrationKey} onRevokeIntegrationKey={revokeIntegrationKey} />}
         {view === "library" && <LibraryConfigurator videos={visibleVideos} libraryAssets={libraryAssets} assetDraft={libraryAssetDraft} selected={selected} saving={working} options={options} onSelect={setSelected} onAdd={addToJourney} onAssetDraftChange={setLibraryAssetDraft} onSaveAsset={saveLibraryAsset} onAddAsset={addLibraryAssetToJourney} onDeleteAsset={deleteLibraryAsset} onArchive={archiveVideo} onSaveContext={saveVideoContext} onOpenSources={() => setView("sources")} />}
         {view === "socialProfiles" && socialProfileReportId && (
           <SocialProfileReportPage
