@@ -44,6 +44,7 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
   const youtubeHost = useRef<HTMLDivElement>(null);
   const sessionId = useRef<string>("");
   const trackedOpen = useRef(false);
+  const rootRef = useRef<HTMLElement>(null);
   const isYouTube = activeAsset?.embedUrl?.includes("youtube.com/embed");
   const orientation = imageOrientation?.id === activeAsset?.id ? imageOrientation.value : activeAsset ? inferOrientation(activeAsset) : "wide";
   const driveFileId = activeAsset?.assetType === "video" ? extractDriveFileId(activeAsset.sourceUrl ?? activeAsset.embedUrl) : null;
@@ -51,6 +52,37 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
   const activated = activatedId === activeAsset?.id;
   const loaded = loadedId === activeAsset?.id;
   const storageKey = `journey-resume:${journey.id}:${journey.send_id ?? "general"}`;
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (variant !== "embed" || preview || !root || window.parent === window) return;
+    let parentOrigin: string | null = null;
+    let pending = 0;
+    let lastHeight = 0;
+    function measure() {
+      cancelAnimationFrame(pending);
+      pending = requestAnimationFrame(() => {
+        if (!parentOrigin || !root) return;
+        const height = Math.ceil(Math.max(root.getBoundingClientRect().height, root.scrollHeight));
+        if (height === lastHeight) return;
+        lastHeight = height;
+        window.parent.postMessage({ type: "trusttale:resize", version: 1, height }, parentOrigin);
+      });
+    }
+    function initialize(event: MessageEvent) {
+      if (event.source !== window.parent || event.data?.type !== "trusttale:init" || event.data?.version !== 1) return;
+      if (!/^https?:\/\//.test(event.origin)) return;
+      parentOrigin = event.origin;
+      lastHeight = 0;
+      measure();
+    }
+    window.addEventListener("message", initialize);
+    const observer = new ResizeObserver(measure);
+    observer.observe(root);
+    // Only the non-sensitive handshake is broadcast; dimensions go to the verified parent.
+    window.parent.postMessage({ type: "trusttale:ready", version: 1 }, "*");
+    return () => { observer.disconnect(); cancelAnimationFrame(pending); window.removeEventListener("message", initialize); };
+  }, [variant, preview]);
 
   const embedUrl = useMemo(() => {
     if (!activeAsset?.embedUrl) return "";
@@ -99,7 +131,11 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
     const node = listRef.current;
     if (!node) return;
     const item = node.querySelector<HTMLElement>(`[data-index="${active}"]`);
-    item?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    if (item && node.clientHeight) {
+      const top = item.getBoundingClientRect().top - node.getBoundingClientRect().top + node.scrollTop;
+      if (top < node.scrollTop) node.scrollTop = top;
+      else if (top + item.offsetHeight > node.scrollTop + node.clientHeight) node.scrollTop = top + item.offsetHeight - node.clientHeight;
+    }
   }, [active]);
 
   useEffect(() => {
@@ -283,7 +319,7 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
   if (!activeAsset) return <main className="journey-experience"><p>No content is available in this journey.</p></main>;
 
   return (
-    <main className={`journey-experience is-${orientation} is-${variant}${expanded ? " is-expanded" : ""}${activeAsset.assetType !== "video" ? " is-document" : ""}`}>
+    <main ref={rootRef} className={`journey-experience is-${orientation} is-${variant}${expanded ? " is-expanded" : ""}${activeAsset.assetType !== "video" ? " is-document" : ""}`}>
       <header className="jx-header">
         <span>{variant === "embed" ? "Explore the proof" : "Selected for you"}</span>
         <h1>{journey.heading || journey.title}</h1>
@@ -331,7 +367,7 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
         <nav className="jx-controls" aria-label="Asset navigation">
           <button onClick={previous} disabled={active === 0} aria-label="Previous asset"><ChevronLeft /></button>
           <button className="jx-counter" onClick={() => setShowContents(v => !v)} aria-expanded={showContents}><List />{active + 1} of {journey.assets.length}<span>View all</span></button>
-          <button onClick={() => setExpanded(v => !v)} aria-label={expanded ? "Close expanded view" : "Expand viewer"}>{expanded ? <X /> : <Maximize2 />}</button>
+          {variant === "embed" ? fullUrl && <a className="jx-expand-link" href={fullUrl} target="_blank" rel="noreferrer" aria-label="Open full journey in a new tab"><ExternalLink /></a> : <button onClick={() => setExpanded(v => !v)} aria-label={expanded ? "Close expanded view" : "Expand viewer"}>{expanded ? <X /> : <Maximize2 />}</button>}
           <button onClick={next} disabled={active === journey.assets.length - 1} aria-label="Next asset"><ChevronRight /></button>
         </nav>
         {(slow || failed) && <div className="jx-help"><button onClick={retry}>Reload preview</button><span>Some providers require public sharing permissions.</span></div>}

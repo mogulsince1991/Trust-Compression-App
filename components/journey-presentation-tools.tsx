@@ -29,6 +29,8 @@ export function JourneyPresentationPreview({ draft, assets }: { draft: JourneyDr
 export function JourneyEmbedCode({ shareUrl }: { shareUrl: string }) {
   const [copied, setCopied] = useState(false);
   const [height, setHeight] = useState("760");
+  const [sizing, setSizing] = useState("auto");
+  const [copyError, setCopyError] = useState(false);
   let url = "";
   try {
     const source = new URL(shareUrl);
@@ -39,6 +41,15 @@ export function JourneyEmbedCode({ shareUrl }: { shareUrl: string }) {
   } catch {}
   if (!url) return null;
   const escaped = url.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
-  const code = `<iframe src="${escaped}" title="Explore our work" width="100%" height="${height}" style="border:0;border-radius:16px;" loading="lazy" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>`;
-  return <details className="sage-panel"><summary>Embed on a website or landing page</summary><p>Paste this into an HTML block. Visitors can expand into the full journey; scrolling stays inside the embed when needed.</p><label>Embed height<select value={height} onChange={e => setHeight(e.target.value)}><option value="600">Compact - 600px</option><option value="760">Standard - 760px</option><option value="960">Tall videos / documents - 960px</option></select></label><textarea readOnly value={code} aria-label="Journey embed code" onFocus={e => e.target.select()} /><button onClick={async () => { try { await navigator.clipboard.writeText(code); setCopied(true); } catch { setCopied(false); } }}>{copied ? "Embed code copied" : "Copy embed code"}</button></details>;
+  const scriptOrigin = new URL(url).origin;
+  const code = `<iframe${sizing === "auto" ? " data-trusttale-embed" : ""} src="${escaped}" title="Explore our work" width="100%" height="${height}" style="display:block;border:0;border-radius:16px;" loading="lazy" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>${sizing === "auto" ? `\n<script async src="${scriptOrigin}/trusttale-embed.js"></script>` : ""}`;
+  return <details className="sage-panel"><summary>Embed on a website or landing page</summary>
+    <p>Paste into a custom HTML block. Automatic sizing fits the journey to its content without cropping videos. Test on your published page, since some editors block scripts.</p>
+    <label>Sizing<select value={sizing} onChange={e => { setSizing(e.target.value); setCopied(false); }}><option value="auto">Automatic height (recommended)</option><option value="fixed">Fixed height (no script)</option></select></label>
+    <label>{sizing === "auto" ? "Initial / fallback height" : "Embed height"}<select value={height} onChange={e => { setHeight(e.target.value); setCopied(false); }}><option value="600">Compact - 600px</option><option value="760">Standard - 760px</option><option value="960">Tall videos / documents - 960px</option></select></label>
+    <p>Visitors can open the full journey in a new tab. If your builder strips scripts, choose fixed height; the journey remains scrollable. Existing embeds need this new snippet for automatic sizing.</p>
+    <textarea readOnly value={code} aria-label="Journey embed code" onFocus={e => e.target.select()} />
+    <button onClick={async () => { try { await navigator.clipboard.writeText(code); setCopied(true); setCopyError(false); } catch { setCopied(false); setCopyError(true); } }}>{copied ? "Embed code copied" : "Copy embed code"}</button>
+    <p role="status">{copyError ? "Clipboard access is blocked. Select the code above and copy it manually." : copied ? "Ready to paste into your landing page." : ""}</p>
+  </details>;
 }
