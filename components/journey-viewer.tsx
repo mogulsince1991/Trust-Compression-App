@@ -412,6 +412,7 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
         <h2 aria-live="polite">{displayTitle}</h2>
         {(activeAsset.note || activeAsset.summary) && <details className="jx-context"><summary>About this {activeAsset.assetType === "video" ? "video" : "document"}</summary><p>{activeAsset.note || activeAsset.summary}</p></details>}
         {activeAsset.sourceUrl && <a className="jx-original" href={activeAsset.sourceUrl} target="_blank" rel="noreferrer">Open original<ExternalLink size={16} /></a>}
+        {driveFileId && <details className="jx-context"><summary>Playback help</summary><p>If controls stay over the video, compare this same Google player without the journey layout.</p><a className="jx-original" href={`/drive-player-check/${encodeURIComponent(driveFileId)}`} target="_blank" rel="noreferrer">Compare plain Google player<ExternalLink size={16} /></a></details>}
         {variant === "embed" && fullUrl && <a className="jx-original" href={fullUrl} target="_blank" rel="noreferrer">Open full journey<ExternalLink size={16} /></a>}
       <section className={`jx-contents${showContents ? " is-open" : ""}`} ref={listRef} aria-label="Journey contents">
         {journey.assets.map((asset, index) => (
