@@ -110,7 +110,6 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
     let url: URL;
     try { url = new URL(activeAsset.embedUrl); } catch { return ""; }
     if (!["http:", "https:"].includes(url.protocol)) return "";
-    if (driveFileId) url = new URL(`https://drive.google.com/file/d/${encodeURIComponent(driveFileId)}/preview`);
     if (isYouTube) {
       url.searchParams.set("enablejsapi", "1");
       url.searchParams.set("playsinline", "1");
@@ -351,7 +350,7 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
       {resume && <div className="jx-resume"><span>Pick up where you left off on this browser?</span><button onClick={() => { positions.current.set(resume.assetId, resume.position); selectAsset(journey.assets.findIndex(a => a.id === resume.assetId)); setResume(null); }}>Continue</button><button onClick={restart}>Start over</button></div>}
       <div className="jx-layout">
       <section className="jx-stage" ref={stageRef} tabIndex={0} aria-label="Journey player" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-        <div className="jx-media" key={activeAsset.id}>
+        <div className={`jx-media${driveFileId ? " jx-drive-original" : ""}`} key={activeAsset.id}>
           {activated && directVideoUrl ? (
             <video
               ref={videoRef}
