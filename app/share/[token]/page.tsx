@@ -1,10 +1,12 @@
 import { notFound } from "next/navigation";
+import { HistoricalJourneyComparison } from "@/components/historical/journey-comparison";
 import { JourneyViewer, type PublicJourney } from "@/components/journey-viewer";
 import type { JourneyAssetType } from "@/lib/journey-embeds";
 import { createPublicSupabaseClient } from "@/lib/supabase";
 
 type SharePageProps = {
   params: { token: string };
+  searchParams?: { player?: string; asset?: string };
 };
 
 type JourneyRow = {
@@ -38,7 +40,7 @@ type JourneySendRow = {
   share_token: string;
 };
 
-export default async function SharePage({ params }: SharePageProps) {
+export default async function SharePage({ params, searchParams }: SharePageProps) {
   const supabase = createPublicSupabaseClient();
   if (!supabase) notFound();
 
@@ -77,6 +79,18 @@ export default async function SharePage({ params }: SharePageProps) {
     position: item.position,
     metadata: item.metadata
   }));
+
+  if (searchParams?.player === "june-13") {
+    const videos = orderedAssets.filter(asset => asset.assetType === "video");
+    const selected = videos.findIndex(asset => asset.id === searchParams.asset);
+    const ordered = selected > 0 ? [...videos.slice(selected), ...videos.slice(0, selected)] : videos;
+    if (!ordered.length) notFound();
+    return <HistoricalJourneyComparison journey={{ ...row, videos: ordered.map(asset => ({
+      id: asset.id, title: asset.title, summary: asset.summary, source_platform: asset.sourcePlatform,
+      source_url: asset.sourceUrl, embed_url: asset.embedUrl && /^https?:\/\//i.test(asset.embedUrl) ? asset.embedUrl : null,
+      thumbnail_url: asset.thumbnailUrl, duration_seconds: null
+    })) }} />;
+  }
 
   return (
     <JourneyViewer
