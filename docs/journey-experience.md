@@ -1,6 +1,8 @@
 # Journey presentation
 
-The public viewer now has separate standalone and inline-embed presentations. Both use explicit activation: no video or iframe loads before the buyer opens an asset. Drive uses its provider preview instead of proxying the original file through Vercel. Thumbnails use saved metadata; missing or inaccessible thumbnails have a title-based placeholder.
+The public viewer has separate standalone and inline-embed presentations. Both use explicit activation: no video or iframe loads before the buyer opens an asset. Drive now uses native video with byte-range streaming through Vercel, capped at 2 MiB per request. This restores the pre-redesign player type without native controls layered over the picture. Custom playback controls sit below the video. It does not transcode originals: large/high-bitrate or incompatible files can still buffer or fail, and bandwidth/function costs still apply. Google preview is an explicit fallback after error or slow loading, not an automatic switch.
+
+Drive public metadata is refreshed for the selected asset to obtain its filename and generated thumbnail. A same-origin image endpoint avoids persisting expiring Google thumbnail URLs as the only source. API-key access does not expose OAuth-private files. If Google has no thumbnail, the neutral placeholder is labeled unavailable; frame extraction is not implemented.
 
 Portrait stages use 9:16 dimensions, landscape stages use 16:9, and documents have a tall reading area. Buttons remain outside the media. Only standalone video-stage swipes navigate; document scrolling and embed/host-page scrolling never navigate. Third-party iframes capture their own gestures, so accessible buttons are always available.
 

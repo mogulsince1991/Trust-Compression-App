@@ -1,0 +1,36 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const ts = require('typescript');
+const code = ts.transpileModule(fs.readFileSync('app/api/media/drive/[id]/preview/route.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
+const exportsObject = {};
+let calls = [];
+let thumbnail = 'https://lh3.googleusercontent.com/test';
+const env = { GOOGLE_DRIVE_API_KEY: 'test-only' };
+vm.runInNewContext(code, { exports: exportsObject, require: () => ({ NextResponse: { json: (data, init) => Response.json(data, init) } }), URL, Response, AbortSignal, process: { env }, fetch: async (url) => {
+  calls.push(String(url));
+  if (String(url).includes('www.googleapis.com')) return Response.json({ name: 'Actual Drive title.mp4', thumbnailLink: thumbnail });
+  return new Response('test-image', { headers: { 'content-type': 'image/jpeg' } });
+} });
+const params = { params: { id: 'abcdefghij123' } };
+async function request(suffix = '') { return exportsObject.GET(new Request('https://app.example/preview' + suffix), params); }
+(async () => {
+  const metadata = await (await request()).json();
+  assert.equal(metadata.title, 'Actual Drive title.mp4');
+  assert.equal(metadata.thumbnailUrl, '/api/media/drive/abcdefghij123/preview?image=1');
+  assert.equal(JSON.stringify(metadata).includes('test-only'), false);
+  const image = await request('?image=1');
+  assert.equal(image.headers.get('content-type'), 'image/jpeg');
+  assert.equal(await image.text(), 'test-image');
+  thumbnail = 'https://evil.example/image'; calls = [];
+  assert.equal((await request('?image=1')).status, 404);
+  assert.equal(calls.length, 1);
+  thumbnail = null;
+  assert.equal((await (await request()).json()).thumbnailUrl, null);
+  calls = [];
+  assert.equal((await exportsObject.GET(new Request('https://app.example'), { params: { id: '../bad' } })).status, 400);
+  assert.equal(calls.length, 0);
+  delete env.GOOGLE_DRIVE_API_KEY;
+  assert.equal((await request()).status, 503);
+  console.log('Drive metadata, fresh thumbnail proxy, missing images, URL validation and unconfigured access passed.');
+})().catch(error => { console.error(error); process.exitCode = 1; });

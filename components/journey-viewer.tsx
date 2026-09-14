@@ -34,6 +34,12 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
   const [finished, setFinished] = useState(false);
   const [resume, setResume] = useState<{ assetId: string; position: number } | null>(null);
   const [imageOrientation, setImageOrientation] = useState<{ id: string; value: VideoOrientation } | null>(null);
+  const [drivePreview, setDrivePreview] = useState<{ id: string; title: string | null; thumbnailUrl: string | null } | null>(null);
+  const [brokenThumbnail, setBrokenThumbnail] = useState<string | null>(null);
+  const [googlePlayerId, setGooglePlayerId] = useState<string | null>(null);
+  const [nativeTime, setNativeTime] = useState(0);
+  const [nativeDuration, setNativeDuration] = useState(0);
+  const [muted, setMuted] = useState(false);
   const positions = useRef<Map<string, number>>(new Map());
   const stageRef = useRef<HTMLDivElement>(null);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
@@ -48,10 +54,26 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
   const isYouTube = activeAsset?.embedUrl?.includes("youtube.com/embed");
   const orientation = imageOrientation?.id === activeAsset?.id ? imageOrientation.value : activeAsset ? inferOrientation(activeAsset) : "wide";
   const driveFileId = activeAsset?.assetType === "video" ? extractDriveFileId(activeAsset.sourceUrl ?? activeAsset.embedUrl) : null;
-  const directVideoUrl = activeAsset?.assetType === "video" && /\.(mp4|webm|mov)(\?|$)/i.test(activeAsset.embedUrl ?? "") ? activeAsset!.embedUrl : null;
+  const directVideoUrl = driveFileId && googlePlayerId !== activeAsset?.id ? `/api/media/drive/${encodeURIComponent(driveFileId)}` : activeAsset?.assetType === "video" && /\.(mp4|webm|mov)(\?|$)/i.test(activeAsset.embedUrl ?? "") ? activeAsset!.embedUrl : null;
   const activated = activatedId === activeAsset?.id;
   const loaded = loadedId === activeAsset?.id;
   const storageKey = `journey-resume:${journey.id}:${journey.send_id ?? "general"}`;
+  const currentDrivePreview = drivePreview?.id === driveFileId ? drivePreview : null;
+  const displayTitle = currentDrivePreview?.title || activeAsset?.title || "Video";
+  const thumbnailUrl = currentDrivePreview?.thumbnailUrl || activeAsset?.thumbnailUrl;
+  const visibleThumbnail = thumbnailUrl && thumbnailUrl !== brokenThumbnail ? thumbnailUrl : null;
+
+  useEffect(() => {
+    if (!driveFileId || preview) return;
+    const controller = new AbortController();
+    fetch(`/api/media/drive/${encodeURIComponent(driveFileId)}/preview`, { signal: controller.signal })
+      .then(response => response.ok ? response.json() : null)
+      .then(data => {
+        if (!data || controller.signal.aborted) return;
+        setDrivePreview({ id: driveFileId, title: typeof data.title === "string" ? data.title : null, thumbnailUrl: typeof data.thumbnailUrl === "string" ? data.thumbnailUrl : null });
+      }).catch(() => { /* Playback remains available when public metadata cannot be read. */ });
+    return () => controller.abort();
+  }, [driveFileId, preview]);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -106,6 +128,8 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
     setFailed(false);
     setSlow(false);
     setFinished(false);
+    setNativeTime(0);
+    setNativeDuration(0);
   }, [activeAsset?.id]);
 
   useEffect(() => {
@@ -237,7 +261,7 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
       youtube?.destroy();
       host?.replaceChildren();
     };
-  }, [active, activeAsset, journey, variant, isYouTube, activated, embedUrl, storageKey, preview]);
+  }, [active, activeAsset, journey, variant, isYouTube, activated, embedUrl, directVideoUrl, storageKey, preview]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -333,12 +357,16 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
               ref={videoRef}
               src={directVideoUrl}
               title={activeAsset.title}
-              controls
+              controls={false}
+              disablePictureInPicture
               playsInline
               autoPlay
+              muted={muted}
               preload="metadata"
-              poster={activeAsset.thumbnailUrl ?? undefined}
-              onLoadedMetadata={event => { const video = event.currentTarget; const position = positions.current.get(activeAsset.id); if (position && position < video.duration) video.currentTime = position; setImageOrientation({ id: activeAsset.id, value: video.videoHeight > video.videoWidth ? "portrait" : "wide" }); }}
+              poster={visibleThumbnail ?? undefined}
+              onLoadedMetadata={event => { const video = event.currentTarget; setNativeDuration(Number.isFinite(video.duration) ? video.duration : 0); const position = positions.current.get(activeAsset.id); if (position && position < video.duration) video.currentTime = position; setImageOrientation({ id: activeAsset.id, value: video.videoHeight > video.videoWidth ? "portrait" : "wide" }); }}
+              onTimeUpdate={event => setNativeTime(event.currentTarget.currentTime)}
+              onClick={() => { const video = videoRef.current; if (!video) return; if (video.paused) void video.play().catch(() => setStarted(false)); else video.pause(); }}
               onLoadedData={() => setLoadedId(activeAsset.id)}
               onPlay={() => setStarted(true)}
               onPause={() => setStarted(false)}
@@ -358,12 +386,19 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
             />
           ) : null}
           {(!activated || !loaded || failed) && <div className={`jx-poster${activated && !failed ? " is-loading" : ""}`}>
-            {activeAsset.thumbnailUrl && <img src={activeAsset.thumbnailUrl} alt="" onError={e => { e.currentTarget.hidden = true; }} onLoad={e => { const image = e.currentTarget; if (inferOrientation(activeAsset) === "adaptive") setImageOrientation({ id: activeAsset.id, value: image.naturalHeight > image.naturalWidth ? "portrait" : "wide" }); }} />}
+            {visibleThumbnail && <img key={visibleThumbnail} src={visibleThumbnail} alt="" onError={() => setBrokenThumbnail(visibleThumbnail)} onLoad={e => { const image = e.currentTarget; if (inferOrientation(activeAsset) === "adaptive") setImageOrientation({ id: activeAsset.id, value: image.naturalHeight > image.naturalWidth ? "portrait" : "wide" }); }} />}
             <div className="jx-poster-content">
-              {failed ? <><p>We couldn't load this asset.</p><button onClick={retry}><RotateCcw />Try again</button></> : activated ? <p role="status">{slow ? "Taking longer than expected. You can open the original below." : "Loading your content..."}</p> : <><button className="jx-play" disabled={!embedUrl} onClick={() => { setActivatedId(activeAsset.id); setSlow(false); setFailed(false); }} aria-label={`${activeAsset.assetType === "video" ? "Play" : "Read"} ${activeAsset.title}`}>{activeAsset.assetType === "video" ? <Play /> : <FileText />}</button><strong>{activeAsset.title}</strong><span>{embedUrl ? activeAsset.assetType === "video" ? "Tap to play" : "Open document" : "Embedded preview unavailable"}</span></>}
+              {failed ? <><p>We couldn't load this asset.</p><button onClick={retry}><RotateCcw />Try again</button></> : activated ? <p role="status">{slow ? "Taking longer than expected. You can open the original below." : "Loading your content..."}</p> : <><button className="jx-play" disabled={!embedUrl} onClick={() => { setActivatedId(activeAsset.id); setSlow(false); setFailed(false); }} aria-label={`${activeAsset.assetType === "video" ? "Play" : "Read"} ${displayTitle}`}>{activeAsset.assetType === "video" ? <Play /> : <FileText />}</button><strong>{displayTitle}</strong><span>{embedUrl ? activeAsset.assetType === "video" ? "Tap to play" : "Open document" : "Embedded preview unavailable"}</span>{driveFileId && !visibleThumbnail && <small>Video thumbnail unavailable from Google Drive</small>}</>}
             </div>
           </div>}
         </div>
+        {activated && directVideoUrl && !failed && <div className="jx-playback-controls" aria-label="Playback controls">
+          <button onClick={() => { const video = videoRef.current; if (!video) return; if (video.paused) void video.play().catch(() => setStarted(false)); else video.pause(); }}>{started ? "Pause" : "Play"}</button>
+          <label className="jx-seek">Seek video<input type="range" min="0" max={nativeDuration || 1} step="0.1" value={Math.min(nativeTime, nativeDuration || 1)} disabled={!nativeDuration} onChange={event => { const video = videoRef.current; if (video) { video.currentTime = Number(event.target.value); setNativeTime(video.currentTime); } }} /></label>
+          <span>{Math.floor(nativeTime / 60)}:{String(Math.floor(nativeTime % 60)).padStart(2, "0")} / {Math.floor(nativeDuration / 60)}:{String(Math.floor(nativeDuration % 60)).padStart(2, "0")}</span>
+          <button onClick={() => setMuted(value => !value)} aria-label={muted ? "Unmute video" : "Mute video"}>{muted ? "Unmute" : "Mute"}</button>
+        </div>}
+        {driveFileId && (failed || slow) && googlePlayerId !== activeAsset.id && <div className="jx-help"><span>Native playback unavailable or slow?</span><button onClick={() => { setGooglePlayerId(activeAsset.id); setLoadedId(null); setFailed(false); setSlow(false); }}>Use Google player</button><small>Google's controls and overlays apply in this mode.</small></div>}
         <nav className="jx-controls" aria-label="Asset navigation">
           <button onClick={previous} disabled={active === 0} aria-label="Previous asset"><ChevronLeft /></button>
           <button className="jx-counter" onClick={() => setShowContents(v => !v)} aria-expanded={showContents}><List />{active + 1} of {journey.assets.length}<span>View all</span></button>
@@ -374,7 +409,7 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
       </section>
       <aside className="jx-details">
         <span className="jx-kind">{formatJourneyAssetLabel(activeAsset)}{activeAsset.durationSeconds ? ` / ${Math.ceil(activeAsset.durationSeconds / 60)} min` : ""}</span>
-        <h2 aria-live="polite">{activeAsset.title}</h2>
+        <h2 aria-live="polite">{displayTitle}</h2>
         {(activeAsset.note || activeAsset.summary || journey.description) && <details className="jx-context"><summary>About this {activeAsset.assetType === "video" ? "video" : "document"}</summary><p>{activeAsset.note || activeAsset.summary || journey.description}</p></details>}
         {activeAsset.sourceUrl && <a className="jx-original" href={activeAsset.sourceUrl} target="_blank" rel="noreferrer">Open original<ExternalLink size={16} /></a>}
         {variant === "embed" && fullUrl && <a className="jx-original" href={fullUrl} target="_blank" rel="noreferrer">Open full journey<ExternalLink size={16} /></a>}

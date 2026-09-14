@@ -196,7 +196,19 @@ export async function importYouTubeSource(source: Extract<ParsedSource, { platfo
 }
 
 async function importDriveSource(source: Extract<ParsedSource, { platform: "google_drive" }>, apiKey?: string): Promise<ImportedVideo[]> {
-  if (source.kind === "drive_file") return [driveFileToVideo(source.fileId, null, source.canonicalUrl, "drive_public_file")];
+  if (source.kind === "drive_file") {
+    let file: DriveFile | null = null;
+    if (apiKey) {
+      const url = new URL(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(source.fileId)}`);
+      url.searchParams.set("key", apiKey);
+      url.searchParams.set("fields", "id,name,mimeType,description,thumbnailLink,createdTime,modifiedTime,size,videoMediaMetadata");
+      try {
+        const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
+        if (response.ok) file = await response.json();
+      } catch { /* Public embeds remain usable if metadata lookup is unavailable. */ }
+    }
+    return [driveFileToVideo(source.fileId, file, source.canonicalUrl, "drive_public_file")];
+  }
   return importDriveFolder(source, apiKey);
 }
 

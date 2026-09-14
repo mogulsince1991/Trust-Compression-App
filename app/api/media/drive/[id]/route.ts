@@ -19,17 +19,36 @@ export async function GET(request: Request, { params }: { params: { id: string }
   upstreamUrl.searchParams.set("alt", "media");
   upstreamUrl.searchParams.set("key", apiKey);
 
-  const range = request.headers.get("range");
-  const upstream = await fetch(upstreamUrl, {
-    headers: range ? { range } : undefined,
-    cache: "no-store",
-  });
+  // Never ask Drive for the whole original. Bound open-ended browser ranges to 2 MiB.
+  const requestedRange = request.headers.get("range");
+  const match = requestedRange?.match(/^bytes=(\d+)-(\d*)$/);
+  const suffix = requestedRange?.match(/^bytes=-(\d+)$/);
+  if (requestedRange && !match && !suffix) return new Response(null, { status: 416 });
+  const start = match ? Number(match[1]) : 0;
+  const end = match?.[2] ? Number(match[2]) : start + 2097151;
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || end < start) return new Response(null, { status: 416 });
+  const range = suffix ? `bytes=-${Math.min(Number(suffix[1]), 2097152)}` : `bytes=${start}-${Math.min(end, start + 2097151)}`;
+  let upstream: Response;
+  try {
+    upstream = await fetch(upstreamUrl, {
+      headers: { range },
+      cache: "no-store",
+      signal: request.signal,
+    });
+  } catch {
+    return NextResponse.json({ error: "Drive stream is unavailable." }, { status: 502 });
+  }
 
   if (!upstream.ok || !upstream.body) {
     return NextResponse.json(
       { error: upstream.status === 404 ? "Drive video not found." : "Drive video could not be streamed." },
       { status: upstream.status === 403 || upstream.status === 404 ? upstream.status : 502 },
     );
+  }
+
+  if (upstream.status !== 206 || !upstream.headers.get("content-range")) {
+    await upstream.body.cancel();
+    return NextResponse.json({ error: "Drive did not support partial playback for this file." }, { status: 502 });
   }
 
   const headers = new Headers();
@@ -40,6 +59,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
   headers.set("cache-control", "private, max-age=300");
   headers.set("content-disposition", "inline");
   headers.set("x-content-type-options", "nosniff");
+  headers.set("accept-ranges", "bytes");
 
   return new Response(upstream.body, {
     status: upstream.status,
