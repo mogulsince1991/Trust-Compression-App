@@ -4,6 +4,9 @@
 .journey-experience h1 { font-size:clamp(18px,2vw,26px); line-height:1.2; letter-spacing:-.025em; }
 .jx-header span,.jx-kind { color:var(--jx-muted); font-size:12px; }
 .jx-header { display:grid; gap:6px; }
+.jx-header .jx-subheadline { color:var(--jx-muted); font-size:clamp(14px,1.5vw,18px); line-height:1.5; white-space:pre-line; max-width:75ch; }
+.jx-volume { display:grid; gap:4px; width:100px; }
+.jx-volume input { width:100%; min-height:32px; accent-color:#5c946e; }
 .jx-layout { display:grid; grid-template-columns:minmax(0,1fr) minmax(240px,320px); gap:32px; flex:1; min-height:0; }
 .jx-stage { min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; }
 .jx-media { position:relative; width:100%; aspect-ratio:16/9; max-height:calc(100svh - 210px); background:#080a08; border-radius:16px; overflow:hidden; }
