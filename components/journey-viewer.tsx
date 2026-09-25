@@ -34,7 +34,7 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
   const [finished, setFinished] = useState(false);
   const [resume, setResume] = useState<{ assetId: string; position: number } | null>(null);
   const [imageOrientation, setImageOrientation] = useState<{ id: string; value: VideoOrientation } | null>(null);
-  const [drivePreview, setDrivePreview] = useState<{ id: string; title: string | null; thumbnailUrl: string | null } | null>(null);
+  const [drivePreview, setDrivePreview] = useState<{ id: string; title: string | null; thumbnailUrl: string | null; width: number; height: number } | null>(null);
   const [brokenThumbnail, setBrokenThumbnail] = useState<string | null>(null);
   const [nativeTime, setNativeTime] = useState(0);
   const [nativeDuration, setNativeDuration] = useState(0);
@@ -51,25 +51,29 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
   const trackedOpen = useRef(false);
   const rootRef = useRef<HTMLElement>(null);
   const isYouTube = activeAsset?.embedUrl?.includes("youtube.com/embed");
-  const orientation = imageOrientation?.id === activeAsset?.id ? imageOrientation.value : activeAsset ? inferOrientation(activeAsset) : "wide";
   const driveFileId = activeAsset?.assetType === "video" ? extractDriveFileId(activeAsset.sourceUrl ?? activeAsset.embedUrl) : null;
   const directVideoUrl = !driveFileId && activeAsset?.assetType === "video" && /\.(mp4|webm|mov)(\?|$)/i.test(activeAsset.embedUrl ?? "") ? activeAsset!.embedUrl : null;
   const activated = activatedId === activeAsset?.id;
   const loaded = loadedId === activeAsset?.id;
   const storageKey = `journey-resume:${journey.id}:${journey.send_id ?? "general"}`;
   const currentDrivePreview = drivePreview?.id === driveFileId ? drivePreview : null;
+  const driveWidth = currentDrivePreview?.width || Number(activeAsset?.metadata?.width || activeAsset?.metadata?.videoWidth || 0);
+  const driveHeight = currentDrivePreview?.height || Number(activeAsset?.metadata?.height || activeAsset?.metadata?.videoHeight || 0);
+  const hasDriveDimensions = !!driveFileId && Number.isFinite(driveWidth) && Number.isFinite(driveHeight) && driveWidth > 0 && driveHeight > 0;
+  const orientation = hasDriveDimensions ? (driveHeight > driveWidth ? "portrait" : "wide") : imageOrientation?.id === activeAsset?.id ? imageOrientation.value : activeAsset ? inferOrientation(activeAsset) : "wide";
+  const driveRatio = hasDriveDimensions ? `${driveWidth} / ${driveHeight}` : orientation === "portrait" ? "9 / 16" : "16 / 9";
   const displayTitle = currentDrivePreview?.title || activeAsset?.title || "Video";
   const thumbnailUrl = currentDrivePreview?.thumbnailUrl || activeAsset?.thumbnailUrl;
   const visibleThumbnail = thumbnailUrl && thumbnailUrl !== brokenThumbnail ? thumbnailUrl : null;
 
   useEffect(() => {
-    if (!driveFileId || preview) return;
+    if (!driveFileId) return;
     const controller = new AbortController();
     fetch(`/api/media/drive/${encodeURIComponent(driveFileId)}/preview`, { signal: controller.signal })
       .then(response => response.ok ? response.json() : null)
       .then(data => {
         if (!data || controller.signal.aborted) return;
-        setDrivePreview({ id: driveFileId, title: typeof data.title === "string" ? data.title : null, thumbnailUrl: typeof data.thumbnailUrl === "string" ? data.thumbnailUrl : null });
+        setDrivePreview({ id: driveFileId, title: typeof data.title === "string" ? data.title : null, thumbnailUrl: typeof data.thumbnailUrl === "string" ? data.thumbnailUrl : null, width: Number(data.width) || 0, height: Number(data.height) || 0 });
       }).catch(() => { /* Playback remains available when public metadata cannot be read. */ });
     return () => controller.abort();
   }, [driveFileId, preview]);
@@ -350,7 +354,7 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
       {resume && <div className="jx-resume"><span>Pick up where you left off on this browser?</span><button onClick={() => { positions.current.set(resume.assetId, resume.position); selectAsset(journey.assets.findIndex(a => a.id === resume.assetId)); setResume(null); }}>Continue</button><button onClick={restart}>Start over</button></div>}
       <div className="jx-layout">
       <section className="jx-stage" ref={stageRef} tabIndex={0} aria-label="Journey player" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-        <div className={`jx-media${driveFileId ? " jx-drive-original" : ""}`} key={activeAsset.id}>
+        <div className={`jx-media${driveFileId ? " jx-drive-original" : ""}`} style={driveFileId ? { "--drive-ratio": driveRatio } as React.CSSProperties : undefined} key={activeAsset.id}>
           {activated && directVideoUrl ? (
             <video
               ref={videoRef}

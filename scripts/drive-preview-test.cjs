@@ -6,10 +6,11 @@ const code = ts.transpileModule(fs.readFileSync('app/api/media/drive/[id]/previe
 const exportsObject = {};
 let calls = [];
 let thumbnail = 'https://lh3.googleusercontent.com/test';
+let dimensions = { width: 1920, height: 1080 };
 const env = { GOOGLE_DRIVE_API_KEY: 'test-only' };
 vm.runInNewContext(code, { exports: exportsObject, require: () => ({ NextResponse: { json: (data, init) => Response.json(data, init) } }), URL, Response, AbortSignal, process: { env }, fetch: async (url) => {
   calls.push(String(url));
-  if (String(url).includes('www.googleapis.com')) return Response.json({ name: 'Actual Drive title.mp4', thumbnailLink: thumbnail });
+  if (String(url).includes('www.googleapis.com')) return Response.json({ name: 'Actual Drive title.mp4', thumbnailLink: thumbnail, videoMediaMetadata: dimensions });
   return new Response('test-image', { headers: { 'content-type': 'image/jpeg' } });
 } });
 const params = { params: { id: 'abcdefghij123' } };
@@ -17,6 +18,14 @@ async function request(suffix = '') { return exportsObject.GET(new Request('http
 (async () => {
   const metadata = await (await request()).json();
   assert.equal(metadata.title, 'Actual Drive title.mp4');
+  assert.equal(metadata.width, 1920);
+  assert.equal(metadata.height, 1080);
+  dimensions = { width: 1080, height: 1920 };
+  assert.equal((await (await request()).json()).height, 1920);
+  dimensions = { width: -1, height: 0 };
+  const missing = await (await request()).json();
+  assert.equal(missing.width, null);
+  assert.equal(missing.height, null);
   assert.equal(metadata.thumbnailUrl, '/api/media/drive/abcdefghij123/preview?image=1');
   assert.equal(JSON.stringify(metadata).includes('test-only'), false);
   const image = await request('?image=1');

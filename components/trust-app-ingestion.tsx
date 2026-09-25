@@ -1362,17 +1362,42 @@ export function TrustAppIngestion({
   if (!session && isInternal) return <AuthGate role={role} supabase={supabase} onBack={() => setRoleId(null)} />;
 
   function addLibraryItems(items: JourneyAsset[]) {
-    setDraftAssets(current => {
-      const next = [...current];
-      for (const item of items) {
-        if (!next.some(a => item.videoId ? a.videoId === item.videoId : a.libraryAssetId === item.libraryAssetId)) next.push({ ...item, id: item.videoId ? `video:${item.videoId}` : `asset:${item.libraryAssetId}`, position: next.length + 1 });
-      }
-      return next;
-    });
+    if (!draftKey || draftReady !== draftKey) {
+      setError("Your workspace draft is still loading. Please try again in a moment.");
+      return;
+    }
+    const next = [...draftAssets];
+    for (const item of items) {
+      const duplicate = next.some(a => item.videoId ? a.videoId === item.videoId : item.libraryAssetId ? a.libraryAssetId === item.libraryAssetId : a.id === item.id);
+      if (!duplicate) next.push({ ...item, id: item.videoId ? `video:${item.videoId}` : item.libraryAssetId ? `asset:${item.libraryAssetId}` : item.id, position: next.length + 1 });
+    }
+    const nextDraft = draft.title.trim() ? draft : { ...draft, title: "Proof journey" };
+    // Persist before navigation, which can remount the app on legacy library routes.
+    try {
+      sessionStorage.setItem(draftKey, JSON.stringify({ draft: nextDraft, assets: next, journeyId: selectedJourneyId, shareUrl, savedDraft }));
+    } catch {
+      setError("Could not preserve your draft for navigation. Please enable browser storage and try again.");
+      return;
+    }
+    setDraftAssets(next);
+    setDraft(nextDraft);
+    setNotice(next.length > draftAssets.length ? `Added ${next.length - draftAssets.length} asset(s). Save the journey to keep your changes.` : "These assets are already in your journey draft.");
     setView("editor");
   }
 
-  return <SageShell view={view} workspaces={workspaces} workspaceId={workspaceId} onSwitch={switchWorkspace} onNavigate={setView} onSignOut={() => void supabase?.auth.signOut()} isAdmin={isPlatformAdmin} busy={loading} notice={notice} error={error || (draftStorageError ? "Browser draft recovery is unavailable. Save your journey before leaving." : "")} onDismiss={() => { setNotice(""); setError(""); }}>
+  async function signOut() {
+    if (!supabase) return;
+    setError("");
+    try {
+      const { error: signOutError } = await supabase.auth.signOut({ scope: "local" });
+      if (signOutError) throw signOutError;
+      setSession(null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Sign out failed. Please try again.");
+    }
+  }
+
+  return <SageShell view={view} workspaces={workspaces} workspaceId={workspaceId} onSwitch={switchWorkspace} onNavigate={setView} onSignOut={() => void signOut()} isAdmin={isPlatformAdmin} busy={loading} notice={notice} error={error || (draftStorageError ? "Browser draft recovery is unavailable. Save your journey before leaving." : "")} onDismiss={() => { setNotice(""); setError(""); }}>
     {view === "home" && <SageHome contentCount={videos.length + libraryAssets.length} journeys={journeys} metrics={metrics} onNavigate={setView} onNew={newJourney} onEdit={editJourney} draftCount={draftAssets.length} />}
     {view === "library" && <SageLibrary key={workspaceId} videos={videos} libraryAssets={libraryAssets} assetDraft={libraryAssetDraft} onAssetDraftChange={setLibraryAssetDraft} onSaveAsset={saveLibraryAsset} saving={working} onArchive={archiveVideo} onDeleteAsset={deleteLibraryAsset} onSaveContext={saveVideoContext} onImport={() => setView("sources")} onAddItems={addLibraryItems} draftCount={draftAssets.length} onOpenDraft={() => setView("editor")} />}
     {view === "journeys" && <SageJourneys onArchive={() => setView("archive")} journeys={journeys} onEdit={editJourney} onNew={newJourney} onResume={() => setView("editor")} hasDraft={draftAssets.length > 0 || Boolean(draft.title)} />}

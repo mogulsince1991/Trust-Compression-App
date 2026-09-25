@@ -60,7 +60,8 @@ export default function AuthCallbackPage() {
       await new Promise((resolve) => window.setTimeout(resolve, 250));
       const { data: initialSession } = await supabase.auth.getSession();
 
-      if (initialSession.session) {
+      // A new authorization code must be exchanged, not skipped for an old session.
+      if (initialSession.session && !code) {
         setDiagnostic({
           status: "success",
           title: "Signed in.",

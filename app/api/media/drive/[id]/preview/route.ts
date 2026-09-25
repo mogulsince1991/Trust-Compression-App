@@ -13,7 +13,9 @@ export async function GET(request: Request, { params }: { params: { id: string }
     if (!response.ok) return NextResponse.json({ error: "Public Drive preview is unavailable." }, { status: 404 });
     const file = await response.json();
     if (new URL(request.url).searchParams.get("image") !== "1") {
-      return NextResponse.json({ title: file.name || null, thumbnailUrl: file.thumbnailLink ? `/api/media/drive/${params.id}/preview?image=1` : null }, { headers: { "Cache-Control": "public, max-age=300" } });
+      const width = Number(file.videoMediaMetadata?.width);
+      const height = Number(file.videoMediaMetadata?.height);
+      return NextResponse.json({ title: file.name || null, width: Number.isFinite(width) && width > 0 ? width : null, height: Number.isFinite(height) && height > 0 ? height : null, thumbnailUrl: file.thumbnailLink ? `/api/media/drive/${params.id}/preview?image=1` : null }, { headers: { "Cache-Control": "public, max-age=300" } });
     }
     const thumbnail = new URL(file.thumbnailLink || "https://invalid.invalid");
     if (thumbnail.protocol !== "https:" || !["googleusercontent.com", "google.com"].some(host => thumbnail.hostname === host || thumbnail.hostname.endsWith(`.${host}`))) {

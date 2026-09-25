@@ -39,17 +39,21 @@ export function AuthFirstApp({
       return;
     }
 
+    let active = true;
+    let authChanged = false;
     supabase.auth.getSession().then(({ data }) => {
+      if (!active || authChanged) return;
       setSession(data.session);
       setLoading(false);
     });
 
     const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      authChanged = true;
       setSession(nextSession);
       setLoading(false);
     });
 
-    return () => data.subscription.unsubscribe();
+    return () => { active = false; data.subscription.unsubscribe(); };
   }, [supabase]);
 
   async function signIn(event: FormEvent<HTMLFormElement>) {
@@ -109,14 +113,14 @@ export function AuthFirstApp({
     setError("");
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: getAuthRedirectUrl() }
+      options: { redirectTo: getAuthRedirectUrl(), queryParams: { prompt: "select_account" } }
     });
     setWorking(false);
     if (oauthError) setError(oauthError.message);
   }
 
   if (loading) return <main className="role-gate"><Loader2 className="spin" /><h1>Opening workspace.</h1></main>;
-  if (session) return <TrustAppIngestion initialView={initialView} initialSocialProfileReportId={initialSocialProfileReportId} />;
+  if (session) return <TrustAppIngestion key={session.user.id} initialView={initialView} initialSocialProfileReportId={initialSocialProfileReportId} />;
 
   return (
     <div className="sage-app sage-auth">

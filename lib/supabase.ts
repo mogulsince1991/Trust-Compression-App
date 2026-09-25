@@ -5,12 +5,16 @@ const supabaseUrl =
 const supabaseAnonKey =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "sb_publishable_DGHoaHgATffOCRCGOw9cDg_Y2hcL6cV";
 
+let browserClient: ReturnType<typeof createClient> | null = null;
+
 export function createBrowserSupabaseClient() {
   if (!supabaseUrl || !supabaseAnonKey) {
     return null;
   }
 
-  return createClient(supabaseUrl, supabaseAnonKey);
+  if (typeof window === "undefined") return createClient(supabaseUrl, supabaseAnonKey);
+  if (!browserClient) browserClient = createClient(supabaseUrl, supabaseAnonKey);
+  return browserClient;
 }
 
 export function createPublicSupabaseClient() {
