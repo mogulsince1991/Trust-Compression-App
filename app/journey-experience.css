@@ -93,4 +93,5 @@
 /* Larger Google viewport, uniformly scaled: the full picture stays visible. */
 @media(max-width:920px) {
   .jx-media.jx-drive-original iframe { width:133.333333%; height:133.333333%; transform:scale(.75); transform-origin:top left; }
+  .journey-experience.is-wide .jx-media.jx-drive-original iframe { width:200%; height:200%; transform:scale(.5); }
 }
