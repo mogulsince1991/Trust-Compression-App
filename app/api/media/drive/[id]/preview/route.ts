@@ -21,6 +21,10 @@ export async function GET(request: Request, { params }: { params: { id: string }
     if (thumbnail.protocol !== "https:" || !["googleusercontent.com", "google.com"].some(host => thumbnail.hostname === host || thumbnail.hostname.endsWith(`.${host}`))) {
       return new Response(null, { status: 404 });
     }
+    if (new URL(request.url).searchParams.get("size") === "1200") {
+      thumbnail.pathname = thumbnail.pathname.replace(/=s\d+(-[a-z]+)?$/i, "=s1200");
+      if (/^s\d+$/.test(thumbnail.searchParams.get("sz") || "")) thumbnail.searchParams.set("sz", "s1200");
+    }
     const image = await fetch(thumbnail, { redirect: "error", next: { revalidate: 300 }, signal: AbortSignal.timeout(8000) });
     const type = image.headers.get("content-type")?.split(";")[0] ?? "";
     if (!image.ok || !["image/jpeg", "image/png", "image/webp"].includes(type)) return new Response(null, { status: 404 });

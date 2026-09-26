@@ -1,0 +1,18 @@
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const vm = require("node:vm");
+const ts = require("typescript");
+const output = {};
+const code = ts.transpileModule(fs.readFileSync("components/asset-thumbnail.tsx", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+vm.runInNewContext(code, { exports: output, URL, require: () => ({}) });
+const youtube = { sourceUrl: "https://www.youtube.com/watch?v=abcdefghijk", thumbnailUrl: "https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg" };
+assert.equal(output.thumbnailCandidates(youtube, "high")[0], "https://i.ytimg.com/vi/abcdefghijk/maxresdefault.jpg");
+assert.equal(output.thumbnailCandidates(youtube, "high").length, 3);
+assert.equal(output.thumbnailCandidates(youtube)[0], youtube.thumbnailUrl);
+assert.equal(output.thumbnailCandidates({ ...youtube, metadata: { localThumbnailOverride: true } }, "high")[0], youtube.thumbnailUrl);
+assert.equal(output.thumbnailCandidates({ sourceUrl: "https://youtube.com.evil.example/watch?v=abcdefghijk" }, "high").length, 0);
+const drive = { sourceUrl: "https://drive.google.com/file/d/abcdefghijk/view", thumbnailUrl: "https://example.com/old.jpg" };
+assert.equal(output.thumbnailCandidates(drive, "high")[0], "/api/media/drive/abcdefghijk/preview?image=1&size=1200");
+assert.equal(output.thumbnailCandidates(drive, "high")[1], drive.thumbnailUrl);
+assert.equal(output.thumbnailCandidates({ sourceUrl: "invalid" }, "high").length, 0);
+console.log("HD journey covers: provider candidates, safe fallbacks, saved overrides and invalid sources passed.");

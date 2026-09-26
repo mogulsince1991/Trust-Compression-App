@@ -31,6 +31,12 @@ async function request(suffix = '') { return exportsObject.GET(new Request('http
   const image = await request('?image=1');
   assert.equal(image.headers.get('content-type'), 'image/jpeg');
   assert.equal(await image.text(), 'test-image');
+  thumbnail = 'https://lh3.googleusercontent.com/test=s220'; calls = [];
+  assert.equal((await request('?image=1&size=1200')).status, 200);
+  assert.equal(calls[1], 'https://lh3.googleusercontent.com/test=s1200');
+  calls = [];
+  await request('?image=1&size=99999');
+  assert.equal(calls[1], 'https://lh3.googleusercontent.com/test=s220', 'Arbitrary image sizes are not accepted');
   thumbnail = 'https://evil.example/image'; calls = [];
   assert.equal((await request('?image=1')).status, 404);
   assert.equal(calls.length, 1);
