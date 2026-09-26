@@ -22,6 +22,7 @@ import type { Session } from "@supabase/supabase-js";
 import { useRouter, usePathname } from "next/navigation";
 import { SageShell, sageRoutes, viewFromPath } from "./sage-shell";
 import { SageLibrary } from "./sage-library";
+import { LibrarySourceRefresh } from "./library-source-refresh";
 import { SageJourneys, SageJourneyEditor } from "./sage-journeys";
 import { SageHome, SageRecipients } from "./sage-home";
 import dynamic from "next/dynamic";
@@ -367,22 +368,29 @@ export function TrustAppIngestion({
     });
   }, [session, workspaceId]);
 
-  async function loadVideos(nextWorkspaceId = workspaceId) {
+  async function loadVideos(nextWorkspaceId = workspaceId, isActive = () => true) {
     if (!supabase || !nextWorkspaceId) return;
-    const { data, error: loadError } = await supabase
-      .from("videos")
-      .select("id,title,source_platform,source_url,embed_url,thumbnail_url,duration_seconds,summary,suggested_use,proof_type,buying_stage,sales_category,funnel_stage,published_at,created_at,metadata,tags")
-      .eq("workspace_id", nextWorkspaceId)
-      .is("deleted_at", null)
-      .order("published_at", { ascending: false, nullsFirst: false })
-      .order("created_at", { ascending: false });
+    const nextVideos: DbVideo[] = [];
+    for (let offset = 0; ; offset += 500) {
+      const { data, error: loadError } = await supabase
+        .from("videos")
+        .select("id,title,source_platform,source_url,embed_url,thumbnail_url,duration_seconds,summary,suggested_use,proof_type,buying_stage,sales_category,funnel_stage,published_at,created_at,metadata,tags")
+        .eq("workspace_id", nextWorkspaceId)
+        .is("deleted_at", null)
+        .order("published_at", { ascending: false, nullsFirst: false })
+        .order("created_at", { ascending: false })
+        .order("id")
+        .range(offset, offset + 499);
 
-    if (loadError) {
-      setError(loadError.message);
-      return;
+      if (!isActive()) return;
+      if (loadError) {
+        setError(loadError.message);
+        return;
+      }
+
+      nextVideos.push(...((data ?? []) as DbVideo[]));
+      if (!data || data.length < 500) break;
     }
-
-    const nextVideos = (data ?? []) as DbVideo[];
     setVideos(nextVideos);
     setSelected((current) => (current ? nextVideos.find((video) => video.id === current.id) ?? nextVideos[0] ?? null : nextVideos[0] ?? null));
   }
@@ -452,10 +460,10 @@ export function TrustAppIngestion({
     setMcpUrl(result.mcpUrl ?? "");
   }
 
-  async function loadSources(nextWorkspaceId = workspaceId) {
+  async function loadSources(nextWorkspaceId = workspaceId, isActive = () => true) {
     if (!supabase || !nextWorkspaceId) return;
     const { data } = await supabase.from("sources").select("id,platform,account_label,status,last_synced_at,error,metadata").eq("workspace_id", nextWorkspaceId).order("created_at", { ascending: false });
-    setSources((data ?? []) as SourceRow[]);
+    if (isActive()) setSources((data ?? []) as SourceRow[]);
   }
 
   async function loadJourneys(nextWorkspaceId = workspaceId) {
@@ -1399,6 +1407,7 @@ export function TrustAppIngestion({
 
   return <SageShell view={view} workspaces={workspaces} workspaceId={workspaceId} onSwitch={switchWorkspace} onNavigate={setView} onSignOut={() => void signOut()} isAdmin={isPlatformAdmin} busy={loading} notice={notice} error={error || (draftStorageError ? "Browser draft recovery is unavailable. Save your journey before leaving." : "")} onDismiss={() => { setNotice(""); setError(""); }}>
     {view === "home" && <SageHome contentCount={videos.length + libraryAssets.length} journeys={journeys} metrics={metrics} onNavigate={setView} onNew={newJourney} onEdit={editJourney} draftCount={draftAssets.length} />}
+    {view === "library" && workspaceBooted && session && workspaceId && <LibrarySourceRefresh key={workspaceId} workspaceId={workspaceId} userId={session.user.id} onComplete={async isActive => { await Promise.all([loadVideos(workspaceId, isActive), loadSources(workspaceId, isActive)]); }} />}
     {view === "library" && <SageLibrary key={workspaceId} videos={videos} libraryAssets={libraryAssets} assetDraft={libraryAssetDraft} onAssetDraftChange={setLibraryAssetDraft} onSaveAsset={saveLibraryAsset} saving={working} onArchive={archiveVideo} onDeleteAsset={deleteLibraryAsset} onSaveContext={saveVideoContext} onImport={() => setView("sources")} onAddItems={addLibraryItems} draftCount={draftAssets.length} onOpenDraft={() => setView("editor")} />}
     {view === "journeys" && <SageJourneys onArchive={() => setView("archive")} journeys={journeys} onEdit={editJourney} onNew={newJourney} onResume={() => setView("editor")} hasDraft={draftAssets.length > 0 || Boolean(draft.title)} />}
     {view === "editor" && <SageJourneyEditor key={workspaceId} draft={draft} assets={draftAssets} onChange={setDraft} onMove={moveDraftAsset} onRemove={removeFromJourney} onLibrary={() => setView("library")} onBack={() => setView("journeys")} onSave={publishJourney} onGenerate={generateJourney} working={journeyWorking} shareUrl={shareUrl} personalUrl={personalShareUrl} published={publishedJourney} contacts={contacts} onContactShare={createContactShare} saved={draftSaved} />}

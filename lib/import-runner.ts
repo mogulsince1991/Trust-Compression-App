@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { preserveCuratedFields } from "./source-refresh";
 import { classifyVideo } from "@/lib/smart-organize";
 import { importSourceVideos, parseSourceUrl, type ImportedVideo, type ParsedSource } from "@/lib/source-import";
 
@@ -8,6 +9,7 @@ type RunSourceImportInput = {
   sourceUrl: string;
   userId?: string;
   sourceId?: string;
+  fullRefresh?: boolean;
 };
 
 export type RunSourceImportResult = {
@@ -29,11 +31,11 @@ type ExistingVideo = {
   metadata: Record<string, unknown> | null;
 };
 
-export async function runSourceImport({ supabase, workspaceId, sourceUrl, userId, sourceId }: RunSourceImportInput): Promise<RunSourceImportResult> {
+export async function runSourceImport({ supabase, workspaceId, sourceUrl, userId, sourceId, fullRefresh = false }: RunSourceImportInput): Promise<RunSourceImportResult> {
   const parsed = parseSourceUrl(sourceUrl);
   const youtubeApiKey = getFirstEnv("YOUTUBE_API_KEY", "GOOGLE_YOUTUBE_API_KEY");
   const driveApiKey = getFirstEnv("GOOGLE_DRIVE_API_KEY", "GOOGLE_API_KEY");
-  const videos = await importSourceVideos(parsed, { youtubeApiKey, driveApiKey });
+  const videos = await importSourceVideos(parsed, { youtubeApiKey, driveApiKey, fullRefresh });
   const importMode = String(videos[0]?.metadata.importMode ?? "unknown");
 
   const source = sourceId ? await updateExistingSource(supabase, sourceId, workspaceId, parsed, sourceUrl, importMode) : await createSource(supabase, workspaceId, parsed, sourceUrl, importMode);
@@ -45,15 +47,19 @@ export async function runSourceImport({ supabase, workspaceId, sourceUrl, userId
   let duplicateCandidates = 0;
 
   try {
-    for (const video of videos) {
-      const result = await persistImportedVideo({ supabase, workspaceId, sourceId: source.id, sourceUrl, parsed, video, userId });
-      imported += result.imported;
-      updated += result.updated;
-      skippedDuplicates += result.skippedDuplicates;
-      duplicateCandidates += result.duplicateCandidates;
+    for (let offset = 0; offset < videos.length; offset += 5) {
+      const results = await Promise.allSettled(videos.slice(offset, offset + 5).map(video =>
+        persistImportedVideo({ supabase, workspaceId, sourceId: source.id, sourceUrl, parsed, video, userId })));
+      for (const result of results) {
+        if (result.status === "rejected") throw result.reason;
+        imported += result.value.imported;
+        updated += result.value.updated;
+        skippedDuplicates += result.value.skippedDuplicates;
+        duplicateCandidates += result.value.duplicateCandidates;
+      }
     }
 
-    await Promise.all([
+    const completion = await Promise.all([
       supabase
         .from("source_sync_runs")
         .update({
@@ -85,6 +91,7 @@ export async function runSourceImport({ supabase, workspaceId, sourceUrl, userId
         })
         .eq("id", source.id)
     ]);
+    for (const result of completion) if (result.error) throw new Error(result.error.message);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Source import failed.";
     await Promise.all([
@@ -192,15 +199,15 @@ async function persistImportedVideo({ supabase, workspaceId, sourceId, sourceUrl
       localTitleOverride,
       localThumbnailOverride,
       normalizedTitle: normalizeTitle(video.title),
-      salesCategory: smart.category,
-      funnelStage: smart.stage
+      salesCategory: existingMetadata.salesCategory ?? smart.category,
+      funnelStage: existingMetadata.funnelStage ?? smart.stage
     },
     created_by: userId ?? null,
     updated_at: new Date().toISOString()
   };
 
   if (existingId) {
-    const { error } = await supabase.from("videos").update(payload).eq("id", existingId);
+    const { error } = await supabase.from("videos").update(preserveCuratedFields(payload)).eq("id", existingId).eq("workspace_id", workspaceId);
     if (error) throw error;
     await upsertSourceLink(supabase, workspaceId, existingId, sourceId, parsed, video);
     return { imported: 0, updated: 1, skippedDuplicates: existingByLink ? 1 : 0, duplicateCandidates: 0 };

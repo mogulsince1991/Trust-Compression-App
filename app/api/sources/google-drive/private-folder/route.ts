@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { createUserSupabaseClient } from "@/lib/supabase";
+import { preserveCuratedFields } from "@/lib/source-refresh";
 
 type ImportPrivateDriveRequest = {
   workspaceId?: string;
   connectedAccountId?: string;
   folderUrl?: string;
+  sourceId?: string;
 };
 
 type DriveFile = {
@@ -61,18 +63,22 @@ export async function POST(request: Request) {
 
     const files = await fetchDriveVideosRecursively(folderId, account.access_token);
 
-    const { data: source, error: sourceError } = await supabase
-      .from("sources")
-      .insert({
+    const sourcePayload = {
         workspace_id: workspaceId,
         platform: "google_drive",
         connected_account_id: connectedAccountId,
         account_label: account.account_label || "Private Google Drive folder",
         status: "syncing",
         metadata: { sourceUrl: folderUrl, folderId, kind: "drive_private_folder", importMode: "drive_oauth_readonly" }
-      })
-      .select("id")
-      .single();
+      };
+    if (body.sourceId) {
+      const { data: existing } = await supabase.from("sources").select("id,metadata").eq("id", body.sourceId).eq("workspace_id", workspaceId).eq("connected_account_id", connectedAccountId).maybeSingle();
+      if (!existing || existing.metadata?.folderId !== folderId) return NextResponse.json({ error: "Source does not match this folder and workspace." }, { status: 404 });
+      sourcePayload.metadata = { ...existing.metadata, ...sourcePayload.metadata };
+    }
+    const { data: source, error: sourceError } = await (body.sourceId
+      ? supabase.from("sources").update(sourcePayload).eq("id", body.sourceId).eq("workspace_id", workspaceId)
+      : supabase.from("sources").insert(sourcePayload)).select("id").single();
 
     if (sourceError || !source) return NextResponse.json({ error: sourceError?.message ?? "Could not create Drive source." }, { status: 500 });
 
@@ -96,12 +102,11 @@ export async function POST(request: Request) {
         const { error } = await supabase
           .from("videos")
           .update({
-            ...payload,
+            ...preserveCuratedFields(payload),
             title: localTitleOverride ? existing.title : payload.title,
             thumbnail_url: localThumbnailOverride ? existing.thumbnail_url : payload.thumbnail_url,
             metadata: { ...metadata, ...(payload.metadata as Record<string, unknown>), localTitleOverride, localThumbnailOverride },
-            updated_at: new Date().toISOString(),
-            deleted_at: null
+            updated_at: new Date().toISOString()
           })
           .eq("id", existing.id);
         if (error) throw error;
@@ -113,14 +118,16 @@ export async function POST(request: Request) {
       }
     }
 
-    await supabase
+    const { error: completionError } = await supabase
       .from("sources")
       .update({
         status: "connected",
+        error: null,
         last_synced_at: new Date().toISOString(),
         metadata: { sourceUrl: folderUrl, folderId, kind: "drive_private_folder", importMode: "drive_oauth_readonly", imported, updated, total: files.length }
       })
       .eq("id", source.id);
+    if (completionError) throw new Error(completionError.message);
 
     return NextResponse.json({ sourceId: source.id, platform: "google_drive", kind: "drive_private_folder", importMode: "drive_oauth_readonly", imported, updated, skippedDuplicates: updated, duplicateCandidates: 0, total: files.length });
   } catch (error) {
@@ -137,9 +144,10 @@ async function fetchDriveVideosRecursively(rootFolderId: string, accessToken: st
   const queue = [{ id: rootFolderId, path: "" }];
   const visited = new Set<string>();
 
-  while (queue.length && visited.size < MAX_DRIVE_FOLDERS && files.length < MAX_DRIVE_FILES) {
+  while (queue.length) {
     const folder = queue.shift()!;
     if (visited.has(folder.id)) continue;
+    if (visited.size >= MAX_DRIVE_FOLDERS) throw new Error("Refresh exceeds 250 folders. Connect smaller subfolders.");
     visited.add(folder.id);
 
     let pageToken = "";
@@ -154,23 +162,22 @@ async function fetchDriveVideosRecursively(rootFolderId: string, accessToken: st
       if (pageToken) params.set("pageToken", pageToken);
 
       const response = await fetch(`https://www.googleapis.com/drive/v3/files?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${accessToken}` }
+        headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store", signal: AbortSignal.timeout(20000)
       });
       const data = (await response.json()) as { error?: { message?: string }; nextPageToken?: string; files?: DriveFile[] };
       if (!response.ok) throw new Error(data.error?.message ?? "Google Drive folder import failed.");
 
       for (const file of data.files ?? []) {
         if (file.mimeType === DRIVE_FOLDER_MIME_TYPE) {
-          if (queue.length + visited.size < MAX_DRIVE_FOLDERS) {
-            queue.push({ id: file.id, path: [folder.path, file.name ?? "Untitled folder"].filter(Boolean).join("/") });
-          }
-        } else if (file.mimeType?.startsWith("video/") && files.length < MAX_DRIVE_FILES) {
+          queue.push({ id: file.id, path: [folder.path, file.name ?? "Untitled folder"].filter(Boolean).join("/") });
+        } else if (file.mimeType?.startsWith("video/")) {
+          if (files.length >= MAX_DRIVE_FILES) throw new Error("Refresh exceeds 2,500 videos. Connect smaller subfolders.");
           files.push({ ...file, folderId: folder.id, folderPath: folder.path });
         }
       }
 
       pageToken = data.nextPageToken ?? "";
-    } while (pageToken && files.length < MAX_DRIVE_FILES);
+    } while (pageToken);
   }
 
   if (!files.length) throw new Error("No video files were found in that Drive folder tree, or the connected account cannot access it.");

@@ -153,12 +153,13 @@ export function parseSourceUrl(rawUrl: string): ParsedSource {
   throw new Error("Use a YouTube video, shorts, playlist, channel, /user, /c, @handle URL, or a public Drive folder/file URL.");
 }
 
-export async function importSourceVideos(source: ParsedSource, options: { youtubeApiKey?: string; driveApiKey?: string } = {}): Promise<ImportedVideo[]> {
+export async function importSourceVideos(source: ParsedSource, options: { youtubeApiKey?: string; driveApiKey?: string; fullRefresh?: boolean } = {}): Promise<ImportedVideo[]> {
   if (source.platform === "google_drive") return importDriveSource(source, options.driveApiKey);
-  return importYouTubeSource(source, options.youtubeApiKey);
+  return importYouTubeSource(source, options.youtubeApiKey, options.fullRefresh);
 }
 
-export async function importYouTubeSource(source: Extract<ParsedSource, { platform: "youtube" }>, apiKey?: string): Promise<ImportedVideo[]> {
+export async function importYouTubeSource(source: Extract<ParsedSource, { platform: "youtube" }>, apiKey?: string, fullRefresh = false): Promise<ImportedVideo[]> {
+  if (fullRefresh && !apiKey && source.kind !== "youtube_video") throw new Error("A YouTube API key is required to refresh the entire channel or playlist. Recent-upload feeds cannot provide a complete refresh.");
   if (source.kind === "youtube_video" && !apiKey) {
     return [await importYouTubeVideoWithOEmbed(source.videoId, source.canonicalUrl)];
   }
@@ -178,17 +179,18 @@ export async function importYouTubeSource(source: Extract<ParsedSource, { platfo
   }
 
   if (source.kind === "youtube_playlist") {
-    const ids = await fetchPlaylistVideoIds(source.playlistId, apiKey);
+    const ids = await fetchPlaylistVideoIds(source.playlistId, apiKey, fullRefresh);
     if (!ids.length) throw new Error("No public videos were found in that YouTube playlist.");
     return fetchYouTubeVideoDetails(ids, apiKey);
   }
 
   try {
     const playlistId = await resolveChannelUploadsPlaylist(source, apiKey);
-    const ids = await fetchPlaylistVideoIds(playlistId, apiKey);
+    const ids = await fetchPlaylistVideoIds(playlistId, apiKey, fullRefresh);
     if (!ids.length) throw new Error("No public uploads were found for that YouTube channel.");
     return fetchYouTubeVideoDetails(ids, apiKey);
   } catch (error) {
+    if (fullRefresh) throw error;
     const rssVideos = await importYouTubeChannelWithRss(source).catch(() => []);
     if (rssVideos.length) return rssVideos;
     throw error;
@@ -234,9 +236,10 @@ async function fetchPublicDriveFolderTree(rootFolderId: string, apiKey: string) 
   const queue = [{ id: rootFolderId, path: "" }];
   const visited = new Set<string>();
 
-  while (queue.length && visited.size < MAX_DRIVE_FOLDERS && videos.length < MAX_DRIVE_FILES) {
+  while (queue.length) {
     const folder = queue.shift()!;
     if (visited.has(folder.id)) continue;
+    if (visited.size >= MAX_DRIVE_FOLDERS) throw new Error("Folder refresh exceeds 250 folders. Connect smaller subfolders; existing content is unchanged.");
     visited.add(folder.id);
 
     let pageToken = "";
@@ -251,22 +254,21 @@ async function fetchPublicDriveFolderTree(rootFolderId: string, apiKey: string) 
       });
       if (pageToken) params.set("pageToken", pageToken);
 
-      const response = await fetch(`https://www.googleapis.com/drive/v3/files?${params.toString()}`, { next: { revalidate: 300 } });
+      const response = await fetch(`https://www.googleapis.com/drive/v3/files?${params.toString()}`, { cache: "no-store", signal: AbortSignal.timeout(20000) });
       const data = (await response.json()) as { error?: { message?: string }; nextPageToken?: string; files?: DriveFile[] };
       if (!response.ok) throw new Error(data.error?.message ?? "Google Drive import failed.");
 
       for (const file of data.files ?? []) {
         if (file.mimeType === DRIVE_FOLDER_MIME_TYPE) {
-          if (queue.length + visited.size < MAX_DRIVE_FOLDERS) {
-            queue.push({ id: file.id, path: [folder.path, file.name ?? "Untitled folder"].filter(Boolean).join("/") });
-          }
-        } else if (file.mimeType?.startsWith("video/") && videos.length < MAX_DRIVE_FILES) {
+          queue.push({ id: file.id, path: [folder.path, file.name ?? "Untitled folder"].filter(Boolean).join("/") });
+        } else if (file.mimeType?.startsWith("video/")) {
+          if (videos.length >= MAX_DRIVE_FILES) throw new Error("Folder refresh exceeds 2,500 videos. Connect smaller subfolders; existing content is unchanged.");
           videos.push({ file, folderId: folder.id, folderPath: folder.path });
         }
       }
 
       pageToken = data.nextPageToken ?? "";
-    } while (pageToken && videos.length < MAX_DRIVE_FILES);
+    } while (pageToken);
   }
 
   return videos;
@@ -433,12 +435,14 @@ async function resolveChannelUploadsPlaylist(source: Extract<ParsedSource, { kin
   return uploads;
 }
 
-async function fetchPlaylistVideoIds(playlistId: string, apiKey: string) {
+async function fetchPlaylistVideoIds(playlistId: string, apiKey: string, fullRefresh = false) {
   const ids: string[] = [];
   let pageToken = "";
-  const limit = getYouTubeImportLimit();
+  const limit = fullRefresh ? 2500 : getYouTubeImportLimit();
+  let pages = 0;
 
   while (ids.length < limit) {
+    if (++pages > 100) throw new Error("Playlist pagination exceeded the refresh limit. Connect smaller playlists.");
     const params = new URLSearchParams({ part: "contentDetails", key: apiKey, playlistId, maxResults: "50" });
     if (pageToken) params.set("pageToken", pageToken);
 
@@ -448,7 +452,8 @@ async function fetchPlaylistVideoIds(playlistId: string, apiKey: string) {
     if (!pageToken) break;
   }
 
-  return ids.slice(0, limit);
+  if (fullRefresh && pageToken) throw new Error("Refresh exceeds 2,500 videos. Connect smaller playlists; existing content is unchanged.");
+  return Array.from(new Set(ids.slice(0, limit)));
 }
 
 async function fetchYouTubeVideoDetails(videoIds: string[], apiKey: string) {
@@ -496,7 +501,7 @@ async function fetchYouTubeVideoDetails(videoIds: string[], apiKey: string) {
 }
 
 async function fetchYouTube<T>(url: string): Promise<T> {
-  const response = await fetch(url, { next: { revalidate: 300 } });
+  const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(20000) });
   const data = await response.json();
   if (!response.ok) throw new Error(data?.error?.message ?? "YouTube import failed.");
   return data as T;
