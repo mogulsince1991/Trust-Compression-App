@@ -1,4 +1,5 @@
 "use client";
+import { observedWatchSeconds } from "@/lib/playback-metrics";
 
 import { Copy, Loader2, MousePointerClick } from "lucide-react";
 import type { FormEvent } from "react";
@@ -75,6 +76,8 @@ export function MetricsView({
       </div>
 
       <div className="metrics-scoreboard">
+        <MetricCard label="Internal/test events excluded" value={String(metrics.internalCount || 0)} detail="Recorded separately from customer journey counts. Applies to new activity; older visits cannot reliably be reclassified." />
+        <MetricCard label="Measured watch time" value={`${Math.round(observedWatchSeconds(metrics.views) / 60)} min`} detail="Observed YouTube, Vimeo and direct-video playback only. Drive, Loom and social embeds: unavailable, not zero. Internal/test traffic excluded." />
         <MetricCard label="Journey opens" value={String(opens.length)} detail="Public or contact-specific journey page opens." />
         <MetricCard label="Video starts" value={String(starts.length)} detail="Videos started inside journeys." />
         <MetricCard label="Tracked redirects" value={String(redirects.length)} detail="First-click hits through /t/{slug}." />
@@ -84,6 +87,7 @@ export function MetricsView({
       </div>
 
       <div className="metrics-rank-grid">
+        <MetricPanel title="Measured playback by asset" countLabel="Supported players" emptyLabel="No measured playback yet. Drive watch time is unavailable." rows={journeys.flatMap(journey => journey.assets.map(asset => ({ title: asset.title, meta: journey.title, seconds: observedWatchSeconds(metrics.views.filter(event => event.journey_id === journey.id && event.asset_id === asset.id)) }))).filter(row => row.seconds > 0).sort((a, b) => b.seconds - a.seconds).slice(0, 10).map(row => ({ title: row.title, meta: row.meta, detail: `${Math.round(row.seconds)} seconds observed playback` }))} />
         <MetricPanel
           title="Top journeys"
           countLabel={`${journeyRows.length} journeys`}

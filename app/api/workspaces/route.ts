@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { internalBrowserToken } from "@/lib/server/analytics-exclusion";
 import { NextResponse } from "next/server";
 import { createServiceSupabaseClient, createUserSupabaseClient } from "@/lib/supabase";
 
@@ -33,7 +34,10 @@ export async function GET(request: Request) {
       })
       .filter(Boolean);
 
-    return NextResponse.json({ workspaces });
+    const response = NextResponse.json({ workspaces });
+    const host = new URL(request.url).hostname;
+    response.cookies.set("tt_internal", internalBrowserToken(workspaces.map((w: any) => w.id)), { httpOnly: true, secure: true, sameSite: "lax", path: "/", maxAge: 86400, ...(host === "trusttale.co" || host.endsWith(".trusttale.co") ? { domain: "trusttale.co" } : {}) });
+    return response;
   } catch (error) {
     return jsonError(error, "Could not load workspaces.");
   }

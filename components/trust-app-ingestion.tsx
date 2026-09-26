@@ -512,7 +512,7 @@ export function TrustAppIngestion({
       return;
     }
     const { data } = await supabase.from("journey_views").select("id,journey_id,video_id,asset_id,event_type,viewer_label,metadata,created_at").in("journey_id", journeyIds).order("created_at", { ascending: false });
-    setMetrics({ views: (data ?? []) as JourneyViewRow[] });
+    setMetrics({ views: (data ?? []).filter(row => !row.metadata?.excluded) as JourneyViewRow[], internalCount: (data ?? []).filter(row => row.metadata?.excluded).length });
   }
 
   async function refreshWorkspace(nextWorkspaceId = workspaceId) {

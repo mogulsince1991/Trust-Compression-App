@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { analyticsExclusion } from "@/lib/server/analytics-exclusion";
 import { createServiceSupabaseClient } from "@/lib/supabase";
 import { isTrackingEventType, sanitizeCurrency, sanitizeMetadata, sanitizeNumber, sanitizeText, sanitizeTimestamp, sanitizeUrl } from "@/lib/tracking";
 
@@ -39,6 +40,8 @@ export async function POST(request: Request) {
 
     if (linkError) return NextResponse.json({ error: linkError.message }, { status: 500 });
     if (!link) return NextResponse.json({ error: "Tracking link was not found." }, { status: 404 });
+    const exclusionReason = await analyticsExclusion(request, link.workspace_id, body.metadata?.browserExcluded === true);
+    if (exclusionReason) return NextResponse.json({ ok: true, excluded: true });
 
     const eventLabel = sanitizeText(body.eventLabel ?? (typeof body.metadata?.label === "string" ? body.metadata.label : null), 160);
     const eventValue = sanitizeNumber(body.eventValue ?? body.metadata?.value);

@@ -5,6 +5,10 @@ import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatJourneyAssetLabel, type JourneyAsset } from "@/components/trust-app-shared";
 import { PlaybackClock } from "@/lib/playback-clock";
+import { createBrowserSupabaseClient } from "@/lib/supabase";
+import { browserExcluded, setBrowserExcluded } from "@/lib/analytics-preferences";
+import { assetThumbnailUrl } from "./asset-thumbnail";
+import { VimeoPlayer } from "./vimeo-player";
 import { loadYouTubePlayer, type YouTubePlayer } from "@/lib/youtube-player";
 
 export type PublicJourney = {
@@ -39,6 +43,8 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
   const [nativeTime, setNativeTime] = useState(0);
   const [nativeDuration, setNativeDuration] = useState(0);
   const [muted, setMuted] = useState(false);
+  const [excludeBrowser, setExcludeBrowser] = useState(false);
+  useEffect(() => { setExcludeBrowser(browserExcluded()); }, []);
   const positions = useRef<Map<string, number>>(new Map());
   const stageRef = useRef<HTMLDivElement>(null);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
@@ -63,7 +69,7 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
   const orientation = hasDriveDimensions ? (driveHeight > driveWidth ? "portrait" : "wide") : imageOrientation?.id === activeAsset?.id ? imageOrientation.value : activeAsset ? inferOrientation(activeAsset) : "wide";
   const driveRatio = hasDriveDimensions ? `${driveWidth} / ${driveHeight}` : orientation === "portrait" ? "9 / 16" : "16 / 9";
   const displayTitle = currentDrivePreview?.title || activeAsset?.title || "Video";
-  const thumbnailUrl = currentDrivePreview?.thumbnailUrl || activeAsset?.thumbnailUrl;
+  const thumbnailUrl = currentDrivePreview?.thumbnailUrl || (activeAsset ? assetThumbnailUrl(activeAsset) : null);
   const visibleThumbnail = thumbnailUrl && thumbnailUrl !== brokenThumbnail ? thumbnailUrl : null;
 
   useEffect(() => {
@@ -377,7 +383,9 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
             />
           ) : activated && isYouTube ? (
             <div ref={youtubeHost} className="jx-youtube" />
-          ) : (activated || driveFileId) && embedUrl ? (
+          ) : activated && activeAsset.sourcePlatform === "vimeo" ? (
+            <VimeoPlayer url={embedUrl} title={displayTitle} onLoaded={() => setLoadedId(activeAsset.id)} onEvent={(eventType, metadata) => { if (!preview) void trackJourneyEvent({ journey, assetId: activeAsset.id, videoId: activeAsset.videoId, eventType, viewerId: getViewerId(), activeIndex: active, metadata: { ...metadata, surface: variant } }); }} />
+          ) : activated && embedUrl ? (
             <iframe
               key={embedUrl}
               src={embedUrl}
@@ -388,7 +396,7 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
               onError={() => setFailed(true)}
             />
           ) : null}
-          {!driveFileId && (!activated || !loaded || failed) && <div className={`jx-poster${activated && !failed ? " is-loading" : ""}`}>
+          {(!activated || !loaded || failed) && <div className={`jx-poster${activated && !failed ? " is-loading" : ""}`}>
             {visibleThumbnail && <img key={visibleThumbnail} src={visibleThumbnail} alt="" onError={() => setBrokenThumbnail(visibleThumbnail)} onLoad={e => { const image = e.currentTarget; if (inferOrientation(activeAsset) === "adaptive") setImageOrientation({ id: activeAsset.id, value: image.naturalHeight > image.naturalWidth ? "portrait" : "wide" }); }} />}
             <div className="jx-poster-content">
               {failed ? <><p>We couldn't load this asset.</p><button onClick={retry}><RotateCcw />Try again</button></> : activated ? <p role="status">{slow ? "Taking longer than expected. You can open the original below." : "Loading your content..."}</p> : <><button className="jx-play" disabled={!embedUrl} onClick={() => { setActivatedId(activeAsset.id); setSlow(false); setFailed(false); }} aria-label={`${activeAsset.assetType === "video" ? "Play" : "Read"} ${displayTitle}`}>{activeAsset.assetType === "video" ? <Play /> : <FileText />}</button><strong>{displayTitle}</strong><span>{embedUrl ? activeAsset.assetType === "video" ? "Tap to play" : "Open document" : "Embedded preview unavailable"}</span>{driveFileId && !visibleThumbnail && <small>Video thumbnail unavailable from Google Drive</small>}</>}
@@ -428,6 +436,7 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
       </aside>
       </div>
       <footer className="jx-footer">
+        <label><input type="checkbox" checked={excludeBrowser} onChange={event => { try { setBrowserExcluded(event.target.checked); setExcludeBrowser(event.target.checked); } catch { /* Browser storage unavailable. */ } }} /> Exclude this browser from analytics</label>
         <div>{finished ? <><strong>Ready for the next step?</strong><button onClick={restart}>Watch again</button></> : <span>{activeAsset.assetType !== "video" ? "Read at your own pace. Use the arrows to continue." : variant === "embed" ? "Explore at your own pace." : "Your proof, one story at a time."}</span>}</div>
       {journey.cta_url && (
         <a className="jx-cta" href={journey.cta_url} onClick={trackCtaClick} target="_blank" rel="noreferrer">
@@ -499,8 +508,11 @@ type JourneyEventPayload = {
 };
 
 async function trackJourneyEvent(payload: JourneyEventPayload) {
+  const session = await createBrowserSupabaseClient()?.auth.getSession();
+  const token = session?.data.session?.access_token;
   const metadata = {
     ...(payload.metadata ?? {}),
+    browserExcluded: browserExcluded(),
     viewerId: payload.viewerId,
     activeIndex: payload.activeIndex,
     sendId: payload.journey.send_id ?? null,
@@ -512,7 +524,7 @@ async function trackJourneyEvent(payload: JourneyEventPayload) {
   await fetch("/api/journey-events", {
     method: "POST",
     keepalive: true,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: JSON.stringify({
       journeyId: payload.journey.id,
       assetId: payload.assetId,

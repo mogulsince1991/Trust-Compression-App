@@ -1,0 +1,30 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const ts = require('typescript');
+function load(file, extra = {}) {
+  const exports = {};
+  vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.React } }).outputText, { exports, URL, Buffer, process, Date, require: name => name === 'node:crypto' ? require(name) : {}, ...extra });
+  return exports;
+}
+const { normalizeJourneyEmbed: normalize } = load('lib/journey-embeds.ts');
+assert.equal(normalize({ url: 'https://www.loom.com/share/' + 'a'.repeat(32) }).sourcePlatform, 'loom');
+assert.equal(normalize({ url: 'https://vimeo.com/123456/abcdef' }).embedUrl, 'https://player.vimeo.com/video/123456?h=abcdef');
+assert.equal(normalize({ url: 'https://player.vimeo.com/video/123456?h=secret' }).embedUrl, 'https://player.vimeo.com/video/123456?h=secret');
+assert.equal(normalize({ url: 'https://www.instagram.com/reel/abc123/' }).embedUrl, 'https://www.instagram.com/reel/abc123/embed/');
+assert.equal(normalize({ url: '<iframe src="https://www.facebook.com/plugins/video.php?href=https%3A%2F%2Fwww.facebook.com%2Fpage%2Fvideos%2F123"></iframe>' }).sourcePlatform, 'facebook');
+for (const url of ['javascript:alert(1)', 'https://youtube.com.evil.test/watch?v=abc', '<iframe src="https://evil.test/embed"></iframe>', 'https://www.facebook.com/plugins/video.php?href=https://evil.test', 'https://www.instagram.com/private-user/', 'https://vimeo.com/channels/foo']) assert.throws(() => normalize({ url }));
+const { observedWatchSeconds } = load('lib/playback-metrics.ts');
+const event = seconds => ({ journey_id: 'j', asset_id: 'a', viewer_label: 'v', metadata: { measurement: 'observed_playback', playbackSessionId: 's', secondsWatched: seconds } });
+assert.equal(observedWatchSeconds([event(10), event(20), event(15), event(20)]), 20);
+assert.equal(observedWatchSeconds([event(10), { ...event(100), metadata: { ...event(100).metadata, excluded: true } }]), 10);
+assert.equal(observedWatchSeconds([{ ...event(100), metadata: { secondsWatched: 100 } }]), 0);
+const old = process.env.SUPABASE_SERVICE_ROLE_KEY;
+process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-only-secret';
+const { internalBrowserToken, internalBrowserWorkspace } = load('lib/server/analytics-exclusion.ts');
+const cookie = 'tt_internal=' + internalBrowserToken(['workspace-one']);
+assert.equal(internalBrowserWorkspace(cookie, 'workspace-one'), true);
+assert.equal(internalBrowserWorkspace(cookie, 'workspace-two'), false);
+assert.equal(internalBrowserWorkspace(cookie + 'tampered', 'workspace-one'), false);
+if (old) process.env.SUPABASE_SERVICE_ROLE_KEY = old; else delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+console.log('Provider normalization, unlisted links, unsafe embeds, cumulative watch metrics and workspace-scoped browser signature passed.');

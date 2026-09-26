@@ -1,4 +1,5 @@
 "use client";
+import { AnalyticsSettings } from "./analytics-settings";
 
 import {
   ArrowUpRight,
@@ -350,6 +351,7 @@ export function WorkspaceView({
         </article>
       </section>
 
+      {workspace && <AnalyticsSettings key={workspace.id} workspaceId={workspace.id} canManage={canManage} />}
       <section className="workspace-panel workspace-team-panel">
         <div className="mini-head"><span>Team members</span><strong>{members.length}</strong></div>
         <div className="workspace-member-list">

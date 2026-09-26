@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { analyticsExclusion } from "@/lib/server/analytics-exclusion";
 import { createServiceSupabaseClient } from "@/lib/supabase";
 import { appendTrackingParams, sanitizeMetadata, sanitizeSearchParams } from "@/lib/tracking";
 
@@ -22,6 +23,12 @@ export async function GET(request: Request, { params }: RouteContext) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!link) return NextResponse.json({ error: "Tracking link was not found." }, { status: 404 });
+  try {
+    if (await analyticsExclusion(request, link.workspace_id)) return NextResponse.redirect(link.destination_url, { status: 302 });
+  } catch {
+    // Do not break the destination or pollute counts when exclusion lookup fails.
+    return NextResponse.redirect(link.destination_url, { status: 302 });
+  }
 
   const requestUrl = new URL(request.url);
   const visitId = crypto.randomUUID();

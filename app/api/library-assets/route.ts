@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { normalizeJourneyEmbed } from "@/lib/journey-embeds";
+import { enrichEmbed } from "@/lib/server/embed-metadata";
 import { httpError, requireWorkspaceAccess } from "@/lib/server/route-auth";
 
 type LibraryAssetRequest = {
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
     if (!body.url?.trim()) throw httpError(400, "Add a cloud URL or iframe embed code.");
 
     const { user, serviceSupabase } = await requireWorkspaceAccess(request, workspaceId);
-    const normalized = normalizeJourneyEmbed({ url: body.url, title: body.title ?? "" });
+    const normalized = await enrichEmbed(normalizeJourneyEmbed({ url: body.url, title: body.title ?? "" }), !!body.title?.trim());
 
     const { data: existing, error: existingError } = await serviceSupabase
       .from("library_assets")

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { AssetThumbnail } from "./asset-thumbnail";
 import { Archive, ArrowLeft, Code2, Edit3, ExternalLink, FolderTree, Link2, Loader2, RotateCcw, Send, Trash2, Video, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
@@ -14,6 +15,7 @@ type FolderRow = {
 };
 
 type JourneyVideo = {
+  sourceUrl?: string | null;
   id: string;
   title: string;
   thumbnailUrl: string | null;
@@ -54,6 +56,7 @@ type ManagedJourney = {
 };
 
 type ArchivedVideo = {
+  sourceUrl?: string | null;
   id: string;
   title: string;
   sourcePlatform: string | null;
@@ -397,7 +400,7 @@ export function JourneyArchive({ activeWorkspaceId, onChanged }: { activeWorkspa
             <div className="archive-list">
               {(payload.archivedVideos ?? []).map((video) => (
                 <article key={video.id} className="archive-video-card">
-                  <MediaThumb title={video.title} thumbnailUrl={video.thumbnailUrl} />
+                  <MediaThumb title={video.title} thumbnailUrl={video.thumbnailUrl} sourceUrl={video.sourceUrl} />
                   <div>
                     <strong>{video.title || "Untitled video"}</strong>
                     <small>{[video.sourcePlatform, video.salesCategory, video.funnelStage].filter(Boolean).join(" / ") || "No context set"}</small>
@@ -436,7 +439,7 @@ export function JourneyArchive({ activeWorkspaceId, onChanged }: { activeWorkspa
               <label><span>CTA URL</span><input value={editDraft.ctaUrl} onChange={(event) => setEditDraft({ ...editDraft, ctaUrl: event.target.value })} placeholder="https://..." /></label>
             </div>
             <div className="archive-modal-videos">
-              {editing.videos.map((video, index) => <MediaThumb key={`${video.id}-${index}`} title={video.title} thumbnailUrl={video.thumbnailUrl} />)}
+              {editing.videos.map((video, index) => <MediaThumb key={`${video.id}-${index}`} title={video.title} thumbnailUrl={video.thumbnailUrl} sourceUrl={video.sourceUrl} />)}
             </div>
             <div className="archive-modal-actions">
               <button onClick={() => setEditing(null)}>Cancel</button>
@@ -494,7 +497,7 @@ function JourneyCard({
         {journey.description && <p>{journey.description}</p>}
         <div className="archive-thumbs" aria-label="Journey videos">
           {journey.videos.slice(0, 6).map((video, index) => (
-            <MediaThumb key={`${video.id}-${index}`} title={video.title} thumbnailUrl={video.thumbnailUrl} />
+            <MediaThumb key={`${video.id}-${index}`} title={video.title} thumbnailUrl={video.thumbnailUrl} sourceUrl={video.sourceUrl} />
           ))}
           {journey.videos.length > 6 && <span className="archive-more">+{journey.videos.length - 6}</span>}
           {!journey.videos.length && <span className="archive-no-video"><Video size={15} /> No videos</span>}
@@ -551,9 +554,8 @@ function JourneyCard({
   );
 }
 
-function MediaThumb({ title, thumbnailUrl }: { title: string; thumbnailUrl: string | null }) {
-  if (thumbnailUrl) return <img src={thumbnailUrl} alt="" title={title} loading="lazy" />;
-  return <span className="archive-thumb-fallback"><Video size={16} /></span>;
+function MediaThumb({ title, thumbnailUrl, sourceUrl }: { title: string; thumbnailUrl: string | null; sourceUrl?: string | null }) {
+  return <AssetThumbnail asset={{ thumbnailUrl, sourceUrl }} />;
 }
 
 function EmptyState({ title, copy }: { title: string; copy: string }) {

@@ -20,7 +20,7 @@ export type NormalizedJourneyEmbed = {
 
 const OFFICE_EXTENSIONS = new Set(["doc", "docx", "ppt", "pptx", "xls", "xlsx"]);
 
-export function normalizeJourneyEmbed(input: { url: string; title?: string | null }) {
+export function normalizeJourneyEmbed(input: { url: string; title?: string | null }): NormalizedJourneyEmbed {
   const rawInput = input.url.trim();
   if (!rawInput) throw new Error("Add a cloud URL or iframe embed code before inserting an asset.");
 
@@ -35,10 +35,11 @@ export function normalizeJourneyEmbed(input: { url: string; title?: string | nul
   }
 
   const hostname = url.hostname.toLowerCase();
+  if (url.protocol !== "https:" || url.username || url.password) throw new Error("Use an HTTPS link without embedded credentials.");
   const pathname = url.pathname;
   const title = input.title?.trim() || iframeEmbed?.title || buildFallbackTitle(url);
 
-  if (hostname.includes("youtube.com") || hostname === "youtu.be") {
+  if (["youtube.com", "www.youtube.com", "m.youtube.com", "www.youtube-nocookie.com", "youtu.be"].includes(hostname)) {
     const videoId = readYouTubeVideoId(url);
     if (!videoId) throw new Error("That YouTube URL could not be converted into an embeddable player.");
     return {
@@ -50,6 +51,39 @@ export function normalizeJourneyEmbed(input: { url: string; title?: string | nul
       thumbnailUrl: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
       metadata: { provider: "youtube", videoId }
     };
+  }
+
+  if (["loom.com", "www.loom.com"].includes(hostname)) {
+    const id = pathname.match(/^\/(?:share|embed)\/([a-f0-9]{32})\/?$/i)?.[1];
+    if (!id) throw new Error("Use a Loom share or embed link.");
+    return { assetType: "video" as const, sourcePlatform: "loom", title, sourceUrl,
+      embedUrl: `https://www.loom.com/embed/${id}`, thumbnailUrl: null,
+      metadata: { provider: "loom", videoId: id, measurement: "unavailable" } };
+  }
+  if (["vimeo.com", "www.vimeo.com", "player.vimeo.com"].includes(hostname)) {
+    const match = pathname.match(/^\/(?:video\/)?(\d+)(?:\/([a-z0-9]+))?\/?$/i);
+    if (!match) throw new Error("Use a Vimeo video or player link.");
+    const hash = url.searchParams.get("h") || match[2];
+    const target = new URL(`https://player.vimeo.com/video/${match[1]}`);
+    if (hash) target.searchParams.set("h", hash);
+    return { assetType: "video" as const, sourcePlatform: "vimeo", title, sourceUrl,
+      embedUrl: target.toString(), thumbnailUrl: null,
+      metadata: { provider: "vimeo", videoId: match[1], measurement: "observed_playback" } };
+  }
+  if (["instagram.com", "www.instagram.com"].includes(hostname)) {
+    const match = pathname.match(/^\/(p|reel|tv)\/([\w-]+)(?:\/embed)?\/?$/);
+    if (!match) throw new Error("Use an individual public Instagram post or reel with embedding enabled.");
+    return { assetType: "video" as const, sourcePlatform: "instagram", title, sourceUrl,
+      embedUrl: `https://www.instagram.com/${match[1]}/${match[2]}/embed/`, thumbnailUrl: null,
+      metadata: { provider: "instagram", measurement: "unavailable" } };
+  }
+  if (["facebook.com", "www.facebook.com"].includes(hostname)) {
+    if (pathname !== "/plugins/video.php") throw new Error("For Facebook, paste the official video iframe embed code, not a profile or feed link.");
+    const href = new URL(url.searchParams.get("href") || "https://invalid.invalid");
+    if (href.protocol !== "https:" || !["facebook.com", "www.facebook.com"].includes(href.hostname)) throw new Error("Invalid Facebook video embed.");
+    return { assetType: "video" as const, sourcePlatform: "facebook", title, sourceUrl: href.toString(),
+      embedUrl: `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(href.toString())}&show_text=false`, thumbnailUrl: null,
+      metadata: { provider: "facebook", measurement: "unavailable" } };
   }
 
   if (hostname === "docs.google.com") {
@@ -109,6 +143,9 @@ export function normalizeJourneyEmbed(input: { url: string; title?: string | nul
   }
 
   const extension = readExtension(pathname);
+  if (["mp4", "webm", "mov"].includes(extension)) {
+    return { assetType: "video", sourcePlatform: "direct_video", title, sourceUrl, embedUrl: sourceUrl, thumbnailUrl: null, metadata: { provider: "direct_video", measurement: "observed_playback" } };
+  }
   if (extension === "pdf") {
     return {
       assetType: "pdf",
@@ -138,8 +175,11 @@ export function normalizeJourneyEmbed(input: { url: string; title?: string | nul
     pathname.includes("/embed") ||
     pathname.includes("/preview") ||
     url.searchParams.has("embed") ||
-    hostname.includes("gamma.app")
+    hostname === "gamma.app"
   ) {
+    if (!["gamma.app", "www.gamma.app", "fast.wistia.net", "fast.wistia.com", "www.tiktok.com"].includes(hostname)) {
+      throw new Error("This embed provider is not approved. Use YouTube, Vimeo, Loom, Drive, Instagram, Facebook, Wistia, TikTok, or Gamma.");
+    }
     return {
       assetType: "embed",
       sourcePlatform: hostname.replace(/^www\./, ""),

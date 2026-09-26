@@ -140,6 +140,7 @@ export type JourneyViewRow = {
 
 export type MetricsState = {
   views: JourneyViewRow[];
+  internalCount?: number;
 };
 
 export type TrackingLinkRow = {

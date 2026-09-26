@@ -157,6 +157,7 @@ function mapJourney(journey: any, origin: string) {
       .map((item) => ({
         id: item.video_id,
         title: item.videos?.title ?? item.title ?? "Untitled video",
+        sourceUrl: item.source_url ?? null,
         thumbnailUrl: item.videos?.thumbnail_url ?? item.thumbnail_url ?? null,
         sourcePlatform: item.videos?.source_platform ?? item.source_platform ?? null,
         durationSeconds: item.videos?.duration_seconds ?? null

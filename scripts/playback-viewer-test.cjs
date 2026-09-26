@@ -29,6 +29,10 @@ async function mount(provider, activated = true, preview = false) {
     require: (name) => {
       if (name === 'react') return react;
       if (name === 'lucide-react') return {};
+      if (name.includes('supabase')) return { createBrowserSupabaseClient: () => null };
+      if (name.includes('analytics-preferences')) return { browserExcluded: () => false };
+      if (name.includes('asset-thumbnail')) return { assetThumbnailUrl: () => null };
+      if (name.includes('vimeo-player')) return {};
       if (name.includes('trust-app-shared')) return { formatJourneyAssetLabel: () => 'Video' };
       if (name.includes('playback-clock')) return clockExports;
       if (name.includes('youtube-player')) return { loadYouTubePlayer: async () => ({ Player: function (_frame, options) { youtubeHandler = options.events.onStateChange; return youtube; } }) };
@@ -56,14 +60,17 @@ async function mount(provider, activated = true, preview = false) {
   } else {
     tick(0); assert.equal(requests.filter(r => r.eventType === 'asset_started').length, 0);
     play(); tick(1); tick(2); pause(); tick(2); tick(2);
+    await Promise.resolve(); await Promise.resolve();
     assert.equal(requests.filter(r => r.eventType === 'asset_started').length, 1);
     assert.equal(requests.filter(r => r.eventType === 'asset_progress').at(-1).metadata.secondsWatched, 2);
     play(); tick(20); tick(21); pause();
+    await Promise.resolve(); await Promise.resolve();
     assert.equal(requests.filter(r => r.eventType === 'asset_progress').at(-1).metadata.secondsWatched, 3);
     assert.equal(states[0], 0, 'does not advance on elapsed time');
     play(); tick(22);
     video.ended = true; youtubeState = 0;
     provider === 'native' ? listeners.get('ended')() : youtubeHandler({ data: 0 });
+    await Promise.resolve(); await Promise.resolve();
     assert.equal(states[0], 1, 'actual ended advances');
     assert.equal(requests.filter(r => r.eventType === 'asset_completed').length, 1);
     assert.equal(requests.filter(r => r.eventType === 'asset_completed')[0].metadata.percentWatched, 13, 'ending does not imply all content watched');
