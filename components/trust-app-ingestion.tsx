@@ -23,6 +23,9 @@ import { useRouter, usePathname } from "next/navigation";
 import { SageShell, sageRoutes, viewFromPath } from "./sage-shell";
 import { SageLibrary } from "./sage-library";
 import { LibrarySourceRefresh } from "./library-source-refresh";
+import { ReviewAccessSettings } from "./review-access-settings";
+import { ReviewSessionBanner } from "./review-session-banner";
+import { isReviewUser } from "@/lib/review-access";
 import { SageJourneys, SageJourneyEditor } from "./sage-journeys";
 import { SageHome, SageRecipients } from "./sage-home";
 import dynamic from "next/dynamic";
@@ -184,6 +187,7 @@ export function TrustAppIngestion({
     setSocialProfileReportId(reportId || null);
   }, [pathname]);
   const [session, setSession] = useState<Session | null>(null);
+  const reviewing = isReviewUser(session?.user);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [workspaces, setWorkspaces] = useState<WorkspaceRow[]>([]);
   const [libraryAssets, setLibraryAssets] = useState<LibraryAssetRow[]>([]);
@@ -352,7 +356,7 @@ export function TrustAppIngestion({
   }, [isInternal, session, supabase]);
 
   useEffect(() => {
-    if (!session || !workspaceId) return;
+    if (!session || !workspaceId || isReviewUser(session.user)) return;
     const headers = { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" };
 
     void fetch("/api/admin/status", { headers, cache: "no-store" })
@@ -1406,8 +1410,9 @@ export function TrustAppIngestion({
   }
 
   return <SageShell view={view} workspaces={workspaces} workspaceId={workspaceId} onSwitch={switchWorkspace} onNavigate={setView} onSignOut={() => void signOut()} isAdmin={isPlatformAdmin} busy={loading} notice={notice} error={error || (draftStorageError ? "Browser draft recovery is unavailable. Save your journey before leaving." : "")} onDismiss={() => { setNotice(""); setError(""); }}>
+    {reviewing && <ReviewSessionBanner expiresAt={String(session?.user.app_metadata.review_expires_at || "")} />}
     {view === "home" && <SageHome contentCount={videos.length + libraryAssets.length} journeys={journeys} metrics={metrics} onNavigate={setView} onNew={newJourney} onEdit={editJourney} draftCount={draftAssets.length} />}
-    {view === "library" && workspaceBooted && session && workspaceId && <LibrarySourceRefresh key={workspaceId} workspaceId={workspaceId} userId={session.user.id} onComplete={async isActive => { await Promise.all([loadVideos(workspaceId, isActive), loadSources(workspaceId, isActive)]); }} />}
+    {view === "library" && !reviewing && workspaceBooted && session && workspaceId && <LibrarySourceRefresh key={workspaceId} workspaceId={workspaceId} userId={session.user.id} onComplete={async isActive => { await Promise.all([loadVideos(workspaceId, isActive), loadSources(workspaceId, isActive)]); }} />}
     {view === "library" && <SageLibrary key={workspaceId} videos={videos} libraryAssets={libraryAssets} assetDraft={libraryAssetDraft} onAssetDraftChange={setLibraryAssetDraft} onSaveAsset={saveLibraryAsset} saving={working} onArchive={archiveVideo} onDeleteAsset={deleteLibraryAsset} onSaveContext={saveVideoContext} onImport={() => setView("sources")} onAddItems={addLibraryItems} draftCount={draftAssets.length} onOpenDraft={() => setView("editor")} />}
     {view === "journeys" && <SageJourneys onArchive={() => setView("archive")} journeys={journeys} onEdit={editJourney} onNew={newJourney} onResume={() => setView("editor")} hasDraft={draftAssets.length > 0 || Boolean(draft.title)} />}
     {view === "editor" && <SageJourneyEditor key={workspaceId} draft={draft} assets={draftAssets} onChange={setDraft} onMove={moveDraftAsset} onRemove={removeFromJourney} onLibrary={() => setView("library")} onBack={() => setView("journeys")} onSave={publishJourney} onGenerate={generateJourney} working={journeyWorking} shareUrl={shareUrl} personalUrl={personalShareUrl} published={publishedJourney} contacts={contacts} onContactShare={createContactShare} saved={draftSaved} />}
@@ -1418,6 +1423,7 @@ export function TrustAppIngestion({
     {["workspace", "sources", "socialProfiles"].includes(view) && <nav className="sage-settings-nav" aria-label="Settings sections"><button aria-current={view === "workspace" ? "page" : undefined} onClick={() => setView("workspace")}>Workspace & team</button><button aria-current={view === "sources" ? "page" : undefined} onClick={() => setView("sources")}>Content sources</button><button aria-current={view === "socialProfiles" ? "page" : undefined} onClick={() => setView("socialProfiles")}>YouTube insights</button><button onClick={() => { setView("reports"); router.push("/app/reports?tab=connections"); }}>CRM connections & spend</button></nav>}
     {view === "sources" && <SourcesView sources={sources} importing={working} onImport={importSource} onReimport={reimportSource} onDelete={deleteSource} />}
     {view === "workspace" && <WorkspaceView workspace={currentWorkspace} workspaces={workspaces} members={workspaceMembers} invites={workspaceInvites} integrationKeys={integrationKeys} integrationSecret={integrationSecret} mcpUrl={mcpUrl} canManage={canManageWorkspace} working={working} createName={createWorkspaceName} renameName={renameWorkspaceName} inviteDraft={inviteDraft} onCreateNameChange={setCreateWorkspaceName} onRenameNameChange={setRenameWorkspaceName} onInviteDraftChange={setInviteDraft} onCreate={createWorkspace} onRename={renameWorkspace} onInvite={inviteWorkspaceMember} onSwitch={switchWorkspace} onMemberRoleChange={updateWorkspaceMemberRole} onRemoveMember={removeWorkspaceMember} onRevokeInvite={revokeWorkspaceInvite} onCreateIntegrationKey={createIntegrationKey} onAttachIntegrationKey={attachIntegrationKey} onRevokeIntegrationKey={revokeIntegrationKey} />}
+    {view === "workspace" && isPlatformAdmin && !reviewing && <ReviewAccessSettings />}
     {view === "socialProfiles" && socialProfileReportId && <SocialProfileReportPage profile={selectedReportProfile} working={working} onBack={closeSocialProfileReport} onRefresh={() => selectedReportProfile ? analyzeSocialProfile(selectedReportProfile) : undefined} onImportChannel={() => selectedReportProfile ? importSocialProfile(selectedReportProfile, "channel") : undefined} onImportVideo={videoId => selectedReportProfile ? importSocialProfile(selectedReportProfile, "video", videoId) : undefined} />}
     {view === "socialProfiles" && !socialProfileReportId && <SocialProfilesView draft={socialProfileDraft} profiles={socialProfiles} selectedProfileId={selectedSocialProfileId} working={working} onDraftChange={setSocialProfileDraft} onSave={saveSocialProfile} onAnalyze={analyzeSocialProfile} onRemove={removeSocialProfile} onViewReport={openSocialProfileReport} />}
   </SageShell>;
