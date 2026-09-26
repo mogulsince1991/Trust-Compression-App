@@ -7,6 +7,8 @@ import type { FormEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 import styles from "./contractor-metrics-console.module.css";
+import { ContractorTotalSales } from "./contractor-total-sales";
+import { SALES_RULE } from "@/lib/metrics/contractor/salesDocuments.js";
 
 type AnyRecord = Record<string, any>;
 type SourcePreview = {
@@ -413,6 +415,7 @@ export function ContractorMetricsConsole() {
 
           {activeReport ? (
             <>
+              <ContractorTotalSales report={activeReport} />
               <section className={styles.grid}>
                 <Panel title="Executive Summary" icon={<Sparkles />}>
                   <div className={styles.summaryList}>{(activeReport.executiveSummary?.length ? activeReport.executiveSummary : ["Run the report to populate the owner summary."]).map((line: string, index: number) => <div key={`${index}-${line}`} className={styles.summaryRow}>{line}</div>)}</div>
@@ -687,8 +690,8 @@ function resolveTable(tableId: string, report: any) {
 }
 
 function fromStoredReport(report: any, ruleSet: any) {
-  if (!report) return null;
-  return { reportId: report.id, createdAt: report.created_at, ruleSet, sourceSnapshot: report.source_snapshot ?? {}, totals: report.totals ?? {}, breakdowns: report.breakdowns ?? {}, executiveSummary: report.detail?.executiveSummary ?? [], configuredMetrics: report.detail?.configuredMetrics ?? [], unmatched: report.detail?.unmatched ?? {}, dashboard: report.detail?.dashboard ?? {}, comparison: report.detail?.comparison ?? null };
+  if (!report || report.source_snapshot?.salesRuleVersion !== SALES_RULE.version) return null;
+  return { exportDatasets: report.detail?.exportDatasets, reportId: report.id, createdAt: report.created_at, ruleSet, sourceSnapshot: report.source_snapshot ?? {}, totals: report.totals ?? {}, breakdowns: report.breakdowns ?? {}, executiveSummary: report.detail?.executiveSummary ?? [], configuredMetrics: report.detail?.configuredMetrics ?? [], unmatched: report.detail?.unmatched ?? {}, dashboard: report.detail?.dashboard ?? {}, comparison: report.detail?.comparison ?? null };
 }
 
 function normalizeSections(sections?: any[]) {

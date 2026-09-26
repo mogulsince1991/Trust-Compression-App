@@ -10,6 +10,7 @@ type RunSourceImportInput = {
   userId?: string;
   sourceId?: string;
   fullRefresh?: boolean;
+  automatic?: boolean;
 };
 
 export type RunSourceImportResult = {
@@ -31,7 +32,7 @@ type ExistingVideo = {
   metadata: Record<string, unknown> | null;
 };
 
-export async function runSourceImport({ supabase, workspaceId, sourceUrl, userId, sourceId, fullRefresh = false }: RunSourceImportInput): Promise<RunSourceImportResult> {
+export async function runSourceImport({ supabase, workspaceId, sourceUrl, userId, sourceId, fullRefresh = false, automatic = false }: RunSourceImportInput): Promise<RunSourceImportResult> {
   const parsed = parseSourceUrl(sourceUrl);
   const youtubeApiKey = getFirstEnv("YOUTUBE_API_KEY", "GOOGLE_YOUTUBE_API_KEY");
   const driveApiKey = getFirstEnv("GOOGLE_DRIVE_API_KEY", "GOOGLE_API_KEY");
@@ -45,11 +46,22 @@ export async function runSourceImport({ supabase, workspaceId, sourceUrl, userId
   let updated = 0;
   let skippedDuplicates = 0;
   let duplicateCandidates = 0;
+  const known = new Set<string>();
+  if (automatic) {
+    for (let offset = 0; ; offset += 500) {
+      const { data, error } = await supabase.from("videos").select("external_id").eq("workspace_id", workspaceId).eq("source_platform", parsed.platform).order("id").range(offset, offset + 499);
+      if (error) throw error;
+      for (const row of data ?? []) if (row.external_id) known.add(row.external_id);
+      if (!data || data.length < 500) break;
+    }
+  }
+  const pending = automatic ? videos.filter(video => !known.has(video.externalId)) : videos;
+  skippedDuplicates = videos.length - pending.length;
 
   try {
-    for (let offset = 0; offset < videos.length; offset += 5) {
-      const results = await Promise.allSettled(videos.slice(offset, offset + 5).map(video =>
-        persistImportedVideo({ supabase, workspaceId, sourceId: source.id, sourceUrl, parsed, video, userId })));
+    for (let offset = 0; offset < pending.length; offset += 5) {
+      const results = await Promise.allSettled(pending.slice(offset, offset + 5).map(video =>
+        persistImportedVideo({ supabase, workspaceId, sourceId: source.id, sourceUrl, parsed, video, userId, automatic })));
       for (const result of results) {
         if (result.status === "rejected") throw result.reason;
         imported += result.value.imported;
@@ -82,6 +94,7 @@ export async function runSourceImport({ supabase, workspaceId, sourceUrl, userId
             sourceUrl,
             canonicalUrl: parsed.canonicalUrl,
             kind: parsed.kind,
+            channelId: videos[0]?.metadata.channelId ?? source.metadata?.channelId ?? null,
             importMode,
             imported,
             updated,
@@ -157,7 +170,7 @@ async function createSyncRun(supabase: SupabaseClient, workspaceId: string, sour
   return data as { id: string };
 }
 
-async function persistImportedVideo({ supabase, workspaceId, sourceId, sourceUrl, parsed, video, userId }: { supabase: SupabaseClient; workspaceId: string; sourceId: string; sourceUrl: string; parsed: ParsedSource; video: ImportedVideo; userId: string }) {
+async function persistImportedVideo({ supabase, workspaceId, sourceId, sourceUrl, parsed, video, userId, automatic = false }: { supabase: SupabaseClient; workspaceId: string; sourceId: string; sourceUrl: string; parsed: ParsedSource; video: ImportedVideo; userId: string; automatic?: boolean }) {
   const existingByLink = await findExistingBySourceLink(supabase, workspaceId, parsed.platform, video.externalId);
   const existingByLegacy = existingByLink ? null : await findExistingByLegacyKey(supabase, workspaceId, parsed.platform, video.externalId);
   const existingId = existingByLink?.video_id ?? existingByLegacy?.id ?? null;
@@ -213,7 +226,7 @@ async function persistImportedVideo({ supabase, workspaceId, sourceId, sourceUrl
     return { imported: 0, updated: 1, skippedDuplicates: existingByLink ? 1 : 0, duplicateCandidates: 0 };
   }
 
-  const likelyDuplicate = await findLikelyDuplicate(supabase, workspaceId, video);
+  const likelyDuplicate = automatic ? null : await findLikelyDuplicate(supabase, workspaceId, video);
   const { data: inserted, error } = await supabase.from("videos").insert(payload).select("id").single();
   if (error || !inserted) throw error ?? new Error("Could not insert imported video.");
 

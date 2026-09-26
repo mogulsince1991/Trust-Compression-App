@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
-import { collectionKinds } from "@/lib/source-refresh";
+import { uniqueCollections } from "@/lib/source-refresh";
 import { parseSourceUrl } from "@/lib/source-import";
 
 type Progress = { total: number; completed: number; errors: string[]; running: boolean };
@@ -30,11 +30,7 @@ function refreshCollections(key: string, workspaceId: string) {
         sources.push(...(data ?? []));
         if (!data || data.length < 500) break;
       }
-      const collections = sources.filter(source => {
-        if (collectionKinds.has(String(source.metadata?.kind))) return true;
-        try { return collectionKinds.has(parseSourceUrl(String(source.metadata?.sourceUrl ?? source.metadata?.canonicalUrl ?? "")).kind); }
-        catch { return false; }
-      });
+      const collections = uniqueCollections(sources, parseSourceUrl);
       update({ total: collections.length });
       // One source at a time keeps imports from competing for provider quotas.
       for (const source of collections) {
@@ -43,7 +39,7 @@ function refreshCollections(key: string, workspaceId: string) {
           if (!session || !key.startsWith(session.user.id + ":")) throw new Error("Sign in again to refresh your sources.");
           const response = await fetch(`/api/sources/${source.id}/reimport`, {
             method: "POST", headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ workspaceId, fullRefresh: true }),
+            body: JSON.stringify({ workspaceId, fullRefresh: true, automatic: true }),
             signal: AbortSignal.timeout(310000)
           });
           const result = await response.json().catch(() => ({}));
@@ -57,7 +53,7 @@ function refreshCollections(key: string, workspaceId: string) {
       update({ errors: [error instanceof Error ? error.message : "Could not load connected sources."] });
     } finally {
       update({ running: false });
-      activeRuns.delete(key);
+      // Retain the settled run: navigation and React remounts must not reimport.
     }
   })();
   return run;
@@ -65,7 +61,6 @@ function refreshCollections(key: string, workspaceId: string) {
 
 export function LibrarySourceRefresh({ workspaceId, userId, onComplete }: { workspaceId: string; userId: string; onComplete: (isActive: () => boolean) => Promise<void> }) {
   const [progress, setProgress] = useState<Progress>({ total: 0, completed: 0, errors: [], running: true });
-  const [attempt, setAttempt] = useState(0);
   const callback = useRef(onComplete);
   callback.current = onComplete;
   useEffect(() => {
@@ -80,15 +75,12 @@ export function LibrarySourceRefresh({ workspaceId, userId, onComplete }: { work
       catch { if (active) setProgress(value => ({ ...value, errors: [...value.errors, "Content refreshed, but the library could not reload. Try again."] })); }
     });
     return () => { active = false; run.listeners.delete(listener); };
-  }, [workspaceId, userId, attempt]);
+  }, [workspaceId, userId]);
 
-  if (!progress.running && !progress.total && !progress.errors.length) return null;
-  return <div className="library-refresh">
+  if (!progress.running || !progress.total) return null;
+  return <div className="library-refresh" style={{ position: "fixed", bottom: 80, right: 16, width: "auto", padding: "6px 10px", fontSize: 12, zIndex: 10 }}>
     <p role="status" aria-live="polite"><RefreshCw size={16} className={progress.running ? "spin" : ""} aria-hidden="true" />
-      {progress.running ? `Refreshing${progress.total ? ` ${progress.completed}/${progress.total} sources` : ""}...` : progress.errors.length ? "Some sources could not refresh" : "Connected sources refreshed"}
-      {progress.running && <small>You can keep using your content.</small>}
+      Checking connected collections...
     </p>
-    {!!progress.errors.length && <details><summary>View refresh details ({progress.errors.length})</summary><ul>{progress.errors.map((error, index) => <li key={index}>{error}</li>)}</ul></details>}
-    {!progress.running && <button type="button" onClick={() => setAttempt(value => value + 1)}>{progress.errors.length ? "Retry refresh" : "Refresh again"}</button>}
   </div>;
 }

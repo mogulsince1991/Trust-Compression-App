@@ -60,6 +60,7 @@ export async function GET() {
         status: "Sold",
         projectType: "Bathroom Remodel",
         revenue: "18000",
+        approvedSalesDocuments: [{ id: "sample-document", type: "customerOrder", name: "Builder's Agreement", status: "approved", historicallyApprovedAt: "2026-06-08T15:00:00Z", priceWithTax: 18000, number: 1 }],
         netSales: "18000",
         designConsultant: "Taylor Consultant",
         source: "Google Ads",
@@ -84,7 +85,7 @@ export async function GET() {
 
   return NextResponse.json({
     ok: true,
-    phase: "contractor-metrics-phase-1",
+    phase: "document-sales-v1",
     dataPolicy: "sample rows only; no customer cache, no credentials, no external API calls",
     totals: report.metrics.totals,
     byVendor: report.metrics.byVendor,

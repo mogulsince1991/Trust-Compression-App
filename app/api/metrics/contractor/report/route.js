@@ -11,9 +11,11 @@ import { getContractorRuleSet } from "../../../../../lib/server/contractor-rule-
 import { toRuntimeMetricRules } from "../../../../../lib/metrics/contractor/config";
 import { requireWorkspaceAccess } from "../../../../../lib/server/route-auth";
 import { recordActivity } from "../../../../../lib/server/activity";
+import { SALES_RULE } from "../../../../../lib/metrics/contractor/salesDocuments.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 export async function POST(request) {
   try {
@@ -27,7 +29,7 @@ export async function POST(request) {
     const persist = body.persist !== false;
 
     if (!workspaceId) return NextResponse.json({ error: "workspaceId is required." }, { status: 400 });
-    if (!isIsoDate(startDate) || !isIsoDate(endDate)) {
+    if (!isIsoDate(startDate) || !isIsoDate(endDate) || startDate > endDate) {
       return NextResponse.json({ error: "startDate and endDate must use YYYY-MM-DD." }, { status: 400 });
     }
 
@@ -79,6 +81,7 @@ export async function POST(request) {
             unmatched: current.unmatched,
             matchedRecords: current.detail.matchedRecords,
             attributionMatchedRecords: current.detail.attributionMatchedRecords,
+            exportDatasets: current.exportDatasets,
             debug: current.debug,
             configuredMetrics: current.configuredMetrics,
             dashboard: current.dashboard,
@@ -142,6 +145,7 @@ export async function POST(request) {
       unmatched: current.unmatched,
       dashboard: current.dashboard,
       debug: current.debug,
+      exportDatasets: current.exportDatasets,
       comparison: comparison
         ? {
             label: "Previous period",
@@ -185,9 +189,8 @@ async function generateReportPayload({ userSupabase, serviceSupabase, workspaceI
           return {
             provider: "gohighlevel",
             accountLabel,
-            snapshot: await fetchChunkedGoHighLevelSnapshot(account, {
-              startDate,
-              endDate,
+            snapshot: await fetchGoHighLevelSnapshot(account, {
+              limit: 100000, scanLimit: 100000, maxPages: 1000,
               timeZone: runtimeRules?.timezone,
             }),
             error: null,
@@ -231,6 +234,8 @@ async function generateReportPayload({ userSupabase, serviceSupabase, workspaceI
 
   const liveLeads = [];
   const liveJobs = [];
+  const failedSales = liveSnapshots.find(entry => entry?.error);
+  if (failedSales) throw new Error(`Sales report unavailable: ${failedSales.error}. No partial or legacy sales totals were used.`);
 
   for (const entry of liveSnapshots) {
     if (!entry?.snapshot) continue;
@@ -275,6 +280,8 @@ async function generateReportPayload({ userSupabase, serviceSupabase, workspaceI
     .filter((entry) => entry?.error)
     .map((entry) => `${entry.accountLabel} (${entry.provider}): ${entry.error}`);
   const sourceSnapshot = {
+    salesRuleVersion: SALES_RULE.version,
+    salesAuthority: "JobTread document approval history",
     leadRows: liveLeads.length,
     jobRows: liveJobs.length,
     spendRows: spendRows?.length ?? 0,
@@ -290,6 +297,7 @@ async function generateReportPayload({ userSupabase, serviceSupabase, workspaceI
   return {
     totals: report.metrics.totals,
     breakdowns: {
+      totalSalesReport: report.metrics.totalSalesReport,
       spend: report.metrics.spend,
       byVendor: report.metrics.byVendor,
       byCampaign: report.metrics.byCampaign,
@@ -305,6 +313,7 @@ async function generateReportPayload({ userSupabase, serviceSupabase, workspaceI
     dashboard: buildConfiguredDashboard({ ruleSet, report, context: metricContext }),
     debug: buildDebugPayload({ liveLeads, liveJobs, spendRows: spendRows ?? [], report }),
     sourceSnapshot,
+    exportDatasets: { rawLeads: liveLeads, rawJobs: liveJobs, spendRows, ...report.detail, ...report.metrics },
   };
 }
 
@@ -564,107 +573,9 @@ function toUploadedSpendRow(row) {
   };
 }
 
-async function fetchChunkedGoHighLevelSnapshot(account, { startDate, endDate, timeZone }) {
-  const windows = splitDateRangeIntoMonthlyWindows(startDate, endDate);
-  const leads = [];
-  let settings = null;
-  let displayName = account.account_label ?? "GoHighLevel";
-  let externalAccountId = null;
-
-  for (const window of windows) {
-    const snapshot = await fetchGoHighLevelSnapshotWithFallback(account, { ...window, timeZone });
-    displayName = snapshot.displayName ?? displayName;
-    externalAccountId = snapshot.externalAccountId ?? externalAccountId;
-    settings = snapshot.settings ?? settings;
-    leads.push(...(snapshot.leads ?? []));
-  }
-
-  return {
-    displayName,
-    externalAccountId,
-    leads: dedupeRows(leads, (row) => row.id ?? `${row.email ?? ""}:${row.phone ?? ""}:${row.createdDate ?? ""}`),
-    jobs: [],
-    spendRows: [],
-    settings,
-  };
-}
 
 async function fetchChunkedJobTreadSnapshot(account, { startDate, endDate, timeZone }) {
-  const fetchBounds = recommendJobTreadFetchBounds(startDate, endDate);
-  const snapshot = await fetchJobTreadSnapshot(account, {
-    startDate,
-    endDate,
-    timeZone,
-    limit: fetchBounds.limit,
-    maxPages: fetchBounds.maxPages,
-    filterToWindow: true,
-  });
-
-  return {
-    displayName: snapshot.displayName ?? account.account_label ?? "JobTread",
-    externalAccountId: snapshot.externalAccountId ?? null,
-    leads: [],
-    jobs: dedupeRows(snapshot.jobs ?? [], (row) => row.jobId ?? row.id ?? row.jobNumber),
-    spendRows: [],
-    settings: snapshot.settings ?? null,
-  };
-}
-
-function recommendJobTreadFetchBounds(startDate, endDate) {
-  const totalDays = inclusiveDayCount(startDate, endDate);
-
-  if (totalDays <= 45) {
-    return { limit: 1500, maxPages: 15 };
-  }
-  if (totalDays <= 120) {
-    return { limit: 3000, maxPages: 30 };
-  }
-  if (totalDays <= 370) {
-    return { limit: 6000, maxPages: 60 };
-  }
-  return { limit: 9000, maxPages: 90 };
-}
-
-async function fetchGoHighLevelSnapshotWithFallback(account, { startDate, endDate, timeZone }) {
-  try {
-    return await fetchGoHighLevelSnapshot(account, {
-      startDate,
-      endDate,
-      timeZone,
-      limit: 1000,
-      scanLimit: 2000,
-      maxPages: 20,
-    });
-  } catch (primaryError) {
-    return await fetchGoHighLevelSnapshot(account, {
-      startDate,
-      endDate,
-      timeZone,
-      limit: 500,
-      scanLimit: 1000,
-      maxPages: 10,
-    });
-  }
-}
-
-function splitDateRangeIntoMonthlyWindows(startDate, endDate) {
-  const windows = [];
-  const start = new Date(`${startDate}T00:00:00Z`);
-  const end = new Date(`${endDate}T00:00:00Z`);
-  let cursor = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
-
-  while (cursor <= end) {
-    const windowStart = cursor < start ? start : cursor;
-    const windowEnd = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 0));
-    const boundedEnd = windowEnd > end ? end : windowEnd;
-    windows.push({
-      startDate: toIsoDate(windowStart),
-      endDate: toIsoDate(boundedEnd),
-    });
-    cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1));
-  }
-
-  return windows;
+  return fetchJobTreadSnapshot(account, { startDate, endDate, timeZone, filterToWindow: true });
 }
 
 function dedupeRows(rows, keyFn) {

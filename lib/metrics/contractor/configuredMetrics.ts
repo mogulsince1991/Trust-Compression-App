@@ -1,7 +1,7 @@
 import { matchRecords } from "./match.js";
 import { analyzeClosingOutcomes } from "./outcomes.js";
-import { matchesVendor, sourceBucket } from "./attribution.js";
-import { isSoldJob } from "./domain.js";
+import { canonicalPaidVendor, paidVendorFor, matchesVendor, sourceBucket } from "./attribution.js";
+import { isSoldJob, inDateRange } from "./domain.js";
 import { normalizeJobTreadJobs, normalizeSpendRows, normalizeWindsorContacts } from "./normalize.js";
 import { easternDateTime, timeToClose, timeToCloseDays } from "./timeToClose.js";
 import type { ContractorCondition, ContractorMetricDefinition, ContractorRuleSetRecord } from "./config";
@@ -103,7 +103,7 @@ export function buildMetricEvaluationContext({
     })),
     { startDate, endDate, rules: report.runtimeRules }
   );
-  const normalizedJobs = normalizeJobTreadJobs(
+  const normalizedJobs = report.detail?.attributedJobs ?? normalizeJobTreadJobs(
     jobs.map((row) => ({
       id: row.external_id || row.id,
       jobId: row.external_id || row.id,
@@ -143,7 +143,7 @@ export function buildMetricEvaluationContext({
   );
 
   const attributionMatches = matchRecords(normalizedLeads, normalizedJobs).matched;
-  const joinedRecords = attributionMatches.map((match) => ({
+  const joinedRecords = normalizedJobs.map((job: any) => ({ job, lead: job.lead ?? attributionMatches.find((match: any) => match.job.id === job.id)?.lead ?? {} })).map((match: any) => ({
     ...match.job,
     job: match.job,
     lead: match.lead,
@@ -162,6 +162,8 @@ export function buildMetricEvaluationContext({
     rules: report.runtimeRules,
     datasets: {
       contacts: normalizedLeads,
+      sales_documents: report.metrics.totalSalesReport.rows,
+      net_sales_documents: report.metrics.totalSalesReport.rows.filter((row: any) => !row.cancelled),
       jobs: normalizedJobs,
       marketing_spend_rows: normalizedSpendRows,
       matched_jobs: joinedRecords.filter(
@@ -215,7 +217,13 @@ function buildGroupedMetricRows(
 
   for (const groupedSet of ruleSet.groupedMetricSets ?? []) {
     const baseDataset = context.datasets[groupedSet.object] ?? [];
-    const groupValues = uniqueGroupValues(baseDataset, groupedSet.groupBy);
+    const relevantJobs = context.datasets.sold_jobs ?? [];
+    const groupValues = groupedSet.id === "leads_by_source"
+      ? uniqueGroupValues([...baseDataset, ...context.datasets.jobs, ...relevantJobs], "source")
+      : groupedSet.id === "paid_channel_performance"
+        ? Array.from(new Set([...baseDataset.map(row => canonicalPaidVendor(row.vendor, context.rules)),
+          ...relevantJobs.map(job => paidVendorFor(job, context.rules)).filter(Boolean)])) as string[]
+        : uniqueGroupValues(baseDataset, groupedSet.groupBy);
     const rows = groupValues.map((groupValue) => {
       const scopedContext = createGroupedContext(context, groupedSet.id, groupValue);
       const metricValues = evaluateMetricIds(groupedSet.metricIds, metricsById, scopedContext);
@@ -354,8 +362,9 @@ function buildJobsSoldDetail(context: {
 
 function matchesGroupedRecord(groupedSetId: string, groupValue: string, datasetKey: string, record: any, rules: any) {
   if (groupedSetId === "paid_channel_performance") {
-    if (datasetKey === "marketing_spend_rows") return String(record.vendor || "Unassigned") === groupValue;
-    return matchesVendor(groupValue, record.lead ?? record.job ?? record, rules);
+    if (datasetKey === "marketing_spend_rows") return canonicalPaidVendor(record.vendor || "Unassigned", rules) === groupValue;
+    if (datasetKey === "sold_jobs" || datasetKey === "matched_sold_jobs") return paidVendorFor(record, rules) === groupValue;
+    return matchesVendor(groupValue, record, rules);
   }
   if (groupedSetId === "design_consultant_performance") {
     return String(readMetricField(record.job ?? record, "designConsultant") || "Unassigned") === groupValue;
@@ -401,6 +410,13 @@ function evaluateMetricDefinition(
     datasets: Record<string, any[]>;
   }
 ) {
+  // Sales datasets are already filtered by document recognition date. A legacy
+  // soldDate column must never re-filter those rows or switch back to job totals.
+  if (definition.id === "overall_sold_jobs") definition = { ...definition, object: "sold_jobs", dateField: null, conditions: [] };
+  if (["sold_jobs", "matched_sold_jobs"].includes(definition.object)) definition = {
+    ...definition, dateField: null,
+    conditions: (definition.conditions ?? []).filter(condition => !/soldDate|jobSoldDate|approvedOrderSoldDate/.test(condition.field ?? "")),
+  };
   const dataset = context.datasets[definition.object] ?? [];
   const filtered = dataset.filter((record) => {
     if (!recordMatchesDateField(record, definition, context)) return false;
@@ -424,11 +440,11 @@ function evaluateMetricDefinition(
 function recordMatchesDateField(
   record: any,
   definition: ContractorMetricDefinition,
-  context: { startDate: string; endDate: string }
+  context: { startDate: string; endDate: string; rules?: any }
 ) {
   if (!definition.dateField) return true;
   const rawValue = readMetricField(record, definition.dateField);
-  return compareBetween(rawValue, [`${context.startDate}T00:00:00`, `${context.endDate}T23:59:59`]);
+  return inDateRange(rawValue, context.startDate, context.endDate, context.rules?.timezone);
 }
 
 function recordMatchesConditions(
@@ -451,7 +467,7 @@ function evaluateCondition(
     return (condition.conditions ?? []).some((entry) => evaluateCondition(record, entry, context));
   }
   if (condition.classification === "sourceBucket") {
-    const bucket = sourceBucket(record.lead ?? record, context.rules);
+    const bucket = sourceBucket(record, context.rules);
     return compareValues(bucket, condition.operator, condition.value, condition.caseSensitive);
   }
   if (condition.ruleRef === "soldJob") {
@@ -466,6 +482,9 @@ function evaluateCondition(
   const value = Array.isArray(condition.value)
     ? condition.value.map((entry) => replaceContextKeyword(entry, context))
     : replaceContextKeyword(condition.value, context);
+  if (condition.operator === "between" && /date/i.test(condition.field ?? "") && Array.isArray(value)) {
+    return inDateRange(rawValue, String(value[0]).slice(0, 10), String(value[1]).slice(0, 10), context.rules.timezone);
+  }
   return compareValues(rawValue, condition.operator, value, condition.caseSensitive);
 }
 

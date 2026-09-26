@@ -1,5 +1,5 @@
-import { applyJobOverride } from "@/lib/metrics/contractor/jobOverrides.js";
 import { dateKeyInTimeZone } from "@/lib/metrics/contractor/domain.js";
+import { discoverSalesDocuments, documentCache, readAllPages } from "./document-history";
 
 const DEFAULT_JOBTREAD_API_BASE_URL = "https://api.jobtread.com";
 const DEFAULT_JOBTREAD_PAVE_PATH = "/pave";
@@ -23,12 +23,17 @@ export async function fetchJobTreadSnapshot(
   account: any,
   options?: { limit?: number; maxPages?: number; startDate?: string; endDate?: string; filterToWindow?: boolean; timeZone?: string }
 ) {
+  const cache = documentCache(account);
+  const cacheKey = `snapshot:${options?.startDate ?? "all"}:${options?.endDate ?? "all"}:${options?.timeZone ?? "America/New_York"}:${options?.filterToWindow === true}`;
+  const cached = await cache.get(cacheKey, 5 * 60 * 1000);
+  if (cached) return cached;
   const jobs = await fetchJobTreadRows(account, {
     limit: options?.limit ?? DEFAULT_MAX_JOBS,
     maxPages: options?.maxPages,
     startDate: options?.startDate,
     endDate: options?.endDate,
     includeAllRows: options?.filterToWindow !== true,
+    timeZone: options?.timeZone,
   });
   const metadata = account.metadata ?? {};
   const baseUrl = normalizeBaseUrl(
@@ -36,7 +41,7 @@ export async function fetchJobTreadSnapshot(
   );
   const pavePath = String(metadata.pavePath ?? process.env.JOBTREAD_PAVE_PATH ?? DEFAULT_JOBTREAD_PAVE_PATH);
 
-  return {
+  const snapshot = {
     displayName: account.account_label || "JobTread",
     externalAccountId: account.external_account_id || jobs[0]?.organizationId || account.id,
     leads: [],
@@ -49,6 +54,8 @@ export async function fetchJobTreadSnapshot(
       organizationId: jobs[0]?.organizationId ?? null,
     },
   };
+  await cache.put(cacheKey, snapshot);
+  return snapshot;
 }
 
 export async function fetchJobTreadPreview(
@@ -113,24 +120,32 @@ async function fetchJobTreadRows(
   const includeAllRows = options?.includeAllRows === true;
 
   const organizationId = await getOrganizationId({ baseUrl, pavePath, grantKey });
-  const jobs = await listJobs({ baseUrl, pavePath, grantKey, organizationId, pageSize, maxPages, maxJobs });
-  const detailRows = await mapInBatches(jobs, DETAIL_BATCH_SIZE, async (job) => {
+  const query = (query: Record<string, any>) => paveQuery({ baseUrl, pavePath, grantKey, query });
+  const documents = await discoverSalesDocuments(query, organizationId, account);
+  const jobs = await readAllPages(query, params => ({ organization: { $: { id: organizationId }, jobs: {
+    $: params, nodes: { id: {}, number: {}, createdAt: {} }, nextPage: {},
+  } } }), response => response.organization?.jobs);
+  const salesJobIds = new Set(documents.filter(doc => inOptionalDateRange(doc.historicallyApprovedAt, startDate, endDate, "America/New_York")).map(doc => doc.job.id));
+  const candidateMap = new Map(jobs.filter(job => includeAllRows || salesJobIds.has(job.id) || inOptionalDateRange(job.createdAt, startDate, endDate, timeZone)).map(job => [job.id, job]));
+  for (const doc of documents) if (salesJobIds.has(doc.job.id)) candidateMap.set(doc.job.id, doc.job);
+  const detailRows = await mapInBatches(Array.from(candidateMap.values()), DETAIL_BATCH_SIZE, async (job) => {
     const detail = await getJobDetail({ baseUrl, pavePath, grantKey, jobId: job.id });
-    if (!detail?.job) return null;
-    return applyJobOverride({ ...normalizeJob(detail.job), organizationId });
+    if (!detail?.job) throw new Error("JobTread did not return a required sales job.");
+    detail.job.documents = { nodes: documents.filter(doc => doc.job.id === job.id) };
+    return { ...normalizeJob(detail.job), organizationId };
   });
 
   const resolvedRows = detailRows.map((row) => ({
     ...row,
     inReportAppointment: inOptionalDateRange(row.appointmentDate, startDate, endDate, timeZone),
-    inReportSold: !matchesCancelledStatus(row) && inOptionalDateRange(row.soldDate, startDate, endDate, timeZone),
+    inReportSold: salesJobIds.has(row.jobId),
   }));
 
   const rows = includeAllRows
     ? resolvedRows
-    : resolvedRows.filter((row) => matchesReportDateWindow(row, startDate, endDate, timeZone));
+    : resolvedRows.filter((row) => row.inReportAppointment || row.inReportSold);
 
-  return rows.slice(0, maxJobs);
+  return rows;
 }
 
 function resolveJobTreadConnection(account: any) {
@@ -201,67 +216,6 @@ async function getOrganizationId({
   return String(organizationId);
 }
 
-async function listJobs({
-  baseUrl,
-  pavePath,
-  grantKey,
-  organizationId,
-  pageSize,
-  maxPages,
-  maxJobs,
-}: {
-  baseUrl: string;
-  pavePath: string;
-  grantKey: string;
-  organizationId: string;
-  pageSize: number;
-  maxPages: number;
-  maxJobs: number;
-}) {
-  const jobs = [];
-  let nextPage: string | null = null;
-
-  for (let pageIndex = 0; pageIndex < maxPages && jobs.length < maxJobs; pageIndex += 1) {
-    const params: Record<string, any> = {
-      size: pageSize,
-      sortBy: [{ field: "number", order: "desc" }],
-    };
-
-    if (nextPage) {
-      params.page = nextPage;
-    }
-
-    const payload = await paveQuery({
-      baseUrl,
-      pavePath,
-      grantKey,
-      query: {
-        organization: {
-          $: { id: organizationId },
-          jobs: {
-            $: params,
-            nodes: {
-              id: {},
-              name: {},
-              number: {},
-            },
-            nextPage: {},
-          },
-        },
-      },
-    });
-
-    const pageJobs = Array.isArray(payload?.organization?.jobs?.nodes) ? payload.organization.jobs.nodes : [];
-    jobs.push(...pageJobs);
-    nextPage = payload?.organization?.jobs?.nextPage ?? null;
-
-    if (!pageJobs.length || !nextPage) {
-      break;
-    }
-  }
-
-  return jobs.slice(0, maxJobs);
-}
 
 async function getJobDetail({
   baseUrl,
@@ -274,7 +228,7 @@ async function getJobDetail({
   grantKey: string;
   jobId: string;
 }) {
-  return paveQuery({
+  const payload = await paveQuery({
     baseUrl,
     pavePath,
     grantKey,
@@ -286,16 +240,17 @@ async function getJobDetail({
         number: {},
         createdAt: {},
         closedOn: {},
-        projectedPrice: {},
-        projectedPriceWithTax: {},
         location: {
           account: {
             name: {},
             primaryContact: {
+              id: {},
               name: {},
+              customFieldValues: { $: { size: 100 }, nodes: { value: {}, customField: { name: {} } }, nextPage: {} },
             },
             customFieldValues: {
               $: { size: DEFAULT_CUSTOM_FIELD_PAGE_SIZE },
+              nextPage: {},
               nodes: {
                 value: {},
                 customField: {
@@ -307,6 +262,7 @@ async function getJobDetail({
         },
         customFieldValues: {
           $: { size: DEFAULT_CUSTOM_FIELD_PAGE_SIZE },
+          nextPage: {},
           nodes: {
             value: {},
             customField: {
@@ -314,23 +270,24 @@ async function getJobDetail({
             },
           },
         },
-        documents: {
-          nodes: {
-            id: {},
-            type: {},
-            status: {},
-            closedAt: {},
-            signedAt: {},
-            issueDate: {},
-            name: {},
-            price: {},
-            priceWithTax: {},
-            amountPaid: {},
-          },
-        },
       },
     },
   });
+  for (const path of [[], ["location", "account"], ["location", "account", "primaryContact"]]) {
+    const owner = path.reduce((value: any, key) => value?.[key], payload.job);
+    if (!owner?.customFieldValues?.nextPage) continue;
+    owner.customFieldValues.nodes = await readAllPages(
+      query => paveQuery({ baseUrl, pavePath, grantKey, query }),
+      params => {
+        let fields: any = { customFieldValues: { $: params, nodes: { value: {}, customField: { name: {} } }, nextPage: {} } };
+        for (const key of [...path].reverse()) fields = { [key]: fields };
+        return { job: { $: { id: jobId }, ...fields } };
+      },
+      response => path.reduce((value: any, key) => value?.[key], response.job)?.customFieldValues,
+    );
+    owner.customFieldValues.nextPage = null;
+  }
+  return payload;
 }
 
 async function paveQuery({
@@ -362,6 +319,7 @@ async function paveQuery({
       },
     }),
     cache: "no-store",
+    signal: AbortSignal.timeout(25000),
   });
 
   rawText = await response.text();
@@ -376,6 +334,8 @@ async function paveQuery({
 function normalizeJob(job: any) {
   const fields = customFieldMap(job.customFieldValues?.nodes ?? []);
   const accountFields = customFieldMap(job.location?.account?.customFieldValues?.nodes ?? []);
+  const primary = job.location?.account?.primaryContact;
+  const contactFields = customFieldMap(primary?.customFieldValues?.nodes ?? []);
   const documents = Array.isArray(job.documents?.nodes) ? job.documents.nodes : [];
   const { soldDate: directSoldDate, soldDateSource } = readSoldDate(fields);
   const approvedOrderSoldDate = soldDateFromApprovedOrders(documents);
@@ -398,8 +358,10 @@ function normalizeJob(job: any) {
     jobId: job.id ?? null,
     jobNumber: job.number ?? null,
     customer: job.location?.account?.name ?? job.name ?? null,
-    email: firstField(fields, ["email", "customer_email"]) ?? firstField(accountFields, ["email", "customer_email"]),
-    phone: firstField(fields, ["phone", "customer_phone"]) ?? firstField(accountFields, ["phone", "customer_phone"]),
+    primaryContact: { id: primary?.id, name: primary?.name, email: firstField(contactFields, ["email", "email_address"]), phone: firstField(contactFields, ["phone", "phone_number", "mobile", "mobile_phone"]) },
+    approvedSalesDocuments: documents,
+    email: firstField(contactFields, ["email", "email_address"]) ?? firstField(fields, ["email", "customer_email"]) ?? firstField(accountFields, ["email", "customer_email"]),
+    phone: firstField(contactFields, ["phone", "phone_number", "mobile", "mobile_phone"]) ?? firstField(fields, ["phone", "customer_phone"]) ?? firstField(accountFields, ["phone", "customer_phone"]),
     appointmentDate: job.createdAt ?? null,
     createdAt: job.createdAt ?? null,
     closedOn: job.closedOn ?? null,
@@ -645,24 +607,6 @@ function inOptionalDateRange(value: unknown, startDate: string, endDate: string,
   return (!startDate || actual >= startDate) && (!endDate || actual <= endDate);
 }
 
-function matchesReportDateWindow(
-  row: { appointmentDate?: unknown; soldDate?: unknown; inReportAppointment?: boolean; inReportSold?: boolean },
-  startDate: string,
-  endDate: string,
-  timeZone: string
-) {
-  if (!startDate && !endDate) return true;
-  if (row.inReportAppointment === true || row.inReportSold === true) return true;
-  return (
-    inOptionalDateRange(row.appointmentDate, startDate, endDate, timeZone) ||
-    inOptionalDateRange(row.soldDate, startDate, endDate, timeZone)
-  );
-}
-
-function matchesCancelledStatus(row: { status?: unknown; cancelled?: unknown }) {
-  if (row.cancelled === true) return true;
-  return /cancel/i.test(String(row.status ?? ""));
-}
 
 function safeJson(value: string) {
   try {

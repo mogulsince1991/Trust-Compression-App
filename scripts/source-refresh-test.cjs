@@ -55,8 +55,9 @@ const providers = load("lib/source-import.ts", { fetch: async (url, options) => 
   let requests = 0;
   const db = { auth: { getSession: async () => ({ data: { session: { user: { id: "owner" }, access_token: "test" } } }) },
     from: () => { const query = { select: () => query, eq: () => query, order: () => query, range: async () => ({ data: [
-      { id: "playlist", account_label: "Playlist", metadata: { kind: "youtube_playlist" } },
-      { id: "folder", account_label: "Folder", metadata: { kind: "drive_private_folder" } },
+      { id: "playlist", account_label: "Playlist", metadata: { kind: "youtube_playlist", sourceUrl: "https://youtube.com/playlist?list=PLtest" } },
+      { id: "folder", account_label: "Folder", metadata: { kind: "drive_private_folder", sourceUrl: "https://drive.google.com/drive/folders/root" } },
+      { id: "duplicate-folder", account_label: "Duplicate", metadata: { kind: "drive_folder", sourceUrl: "https://drive.google.com/drive/folders/root?usp=sharing" } },
       { id: "single", metadata: { kind: "youtube_video" } }
     ] }) }; return query; } };
   const client = load("components/library-source-refresh.tsx", {
@@ -72,7 +73,7 @@ const providers = load("lib/source-import.ts", { fetch: async (url, options) => 
   assert.equal(a.progress.completed, 2);
   assert.match(a.progress.errors[0], /Folder: Reconnect Drive/);
   await client.testRefresh("owner:workspace", "workspace").done;
-  assert.equal(requests, 4, "A later library visit starts a fresh run");
+  assert.equal(requests, 2, "Navigation must not repeat a completed collection check");
   let source = { id: "source", workspace_id: "workspace", metadata: { kind: "youtube_playlist", sourceUrl: "https://youtube.com/playlist?list=PLtest" }, status: "connected" };
   let claimed = true, imported = 0, privateCalls = 0;
   const serverDb = {

@@ -18,6 +18,7 @@ export async function fetchGoHighLevelSnapshot(
     endDate: options?.endDate,
     scanLimit: options?.scanLimit ?? DEFAULT_SCAN_LIMIT,
     includeAllRows: true,
+    timeZone: options?.timeZone,
   });
   const metadata = account.metadata ?? {};
   const locationId = String(metadata.locationId ?? account.external_account_id ?? "").trim();
@@ -96,7 +97,9 @@ async function fetchGoHighLevelContacts(
   const apiVersion = String(metadata.apiVersion ?? process.env.GHL_API_VERSION ?? DEFAULT_GHL_VERSION);
 
   const leads = [];
-  let page = 1;
+  let cursor: { id: string; time: string } | null = null;
+  const seen = new Set<string>();
+  let complete = false;
   const limit = clampPositiveInteger(options?.limit, 100);
   const scanLimit = clampPositiveInteger(options?.scanLimit, Math.max(limit, DEFAULT_SCAN_LIMIT));
   const maxPages = clampPositiveInteger(options?.maxPages, DEFAULT_MAX_PAGES);
@@ -109,7 +112,10 @@ async function fetchGoHighLevelContacts(
     const requestUrl = new URL(contactsPath, baseUrl);
     requestUrl.searchParams.set("locationId", locationId);
     requestUrl.searchParams.set("limit", String(Math.min(scanLimit, 100)));
-    requestUrl.searchParams.set("page", String(page));
+    if (cursor) {
+      requestUrl.searchParams.set("startAfterId", cursor.id);
+      requestUrl.searchParams.set("startAfter", cursor.time);
+    }
 
     const response = await fetch(requestUrl.toString(), {
       headers: {
@@ -126,7 +132,12 @@ async function fetchGoHighLevelContacts(
     }
 
     const rows = extractArray(payload, ["contacts", "data.contacts", "data", "results"]);
-    if (!rows.length) break;
+    if (!rows.length) { complete = true; break; }
+    const last = rows.at(-1);
+    const nextId = String(payload.meta?.startAfterId ?? last?.id ?? "");
+    const nextTime = String(payload.meta?.startAfter ?? Date.parse(last?.dateAdded ?? ""));
+    if (!nextId || seen.has(nextId)) throw new Error("GoHighLevel contact pagination did not advance.");
+    seen.add(nextId);
 
     leads.push(
       ...rows.map((row: any) => ({
@@ -136,19 +147,23 @@ async function fetchGoHighLevelContacts(
         phone: row.phone ?? row.contact?.phone ?? null,
         source: row.source ?? row.attributionSource ?? row.contact_source ?? null,
         campaign: row.campaign ?? row.utmCampaign ?? row.contact_utm_campaign ?? null,
+        estimator: row.estimator ?? row.setter ?? null,
         createdDate: row.dateAdded ?? row.createdAt ?? row.createdOn ?? row.created_date ?? null,
         tags: row.tags ?? row.contactTags ?? [],
         notesSummary: row.notes ?? row.lastMessageBody ?? row.contact?.notes ?? null,
       }))
     );
 
-    if (rows.length < Math.min(scanLimit, 100)) break;
-    page += 1;
+    if (rows.length < Math.min(scanLimit, 100)) { complete = true; break; }
+    if (nextTime === "NaN") throw new Error("GoHighLevel did not return a usable pagination cursor.");
+    cursor = { id: nextId, time: nextTime };
   }
 
+  if (includeAllRows && !complete) throw new Error("GoHighLevel contact scan limit reached; attribution would be incomplete.");
   const filteredLeads = includeAllRows
     ? leads.filter((lead: any) => inOptionalDateRange(lead.createdDate, startDate, endDate, timeZone))
     : leads.filter((lead: any) => inOptionalDateRange(lead.createdDate, startDate, endDate, timeZone));
+  if (includeAllRows && filteredLeads.length > limit) throw new Error("GoHighLevel output limit reached; attribution would be incomplete.");
   return filteredLeads.slice(0, limit);
 }
 

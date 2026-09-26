@@ -7,6 +7,7 @@ type ImportPrivateDriveRequest = {
   connectedAccountId?: string;
   folderUrl?: string;
   sourceId?: string;
+  automatic?: boolean;
 };
 
 type DriveFile = {
@@ -84,8 +85,18 @@ export async function POST(request: Request) {
 
     let imported = 0;
     let updated = 0;
+    const known = new Set<string>();
+    if (body.automatic) {
+      for (let offset = 0; ; offset += 500) {
+        const { data, error } = await supabase.from("videos").select("external_id").eq("workspace_id", workspaceId).eq("source_platform", "google_drive").order("id").range(offset, offset + 499);
+        if (error) throw error;
+        for (const row of data ?? []) if (row.external_id) known.add(row.external_id);
+        if (!data || data.length < 500) break;
+      }
+    }
 
     for (const file of files) {
+      if (body.automatic && known.has(file.id)) continue;
       const payload = driveFileToVideoPayload({ file, workspaceId, sourceId: source.id, folderUrl, folderId, userId: user.id });
       const { data: existing } = await supabase
         .from("videos")

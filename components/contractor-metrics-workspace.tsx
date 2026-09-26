@@ -8,6 +8,8 @@ import type { Session } from "@supabase/supabase-js";
 import { createDefaultContractorRuleSet } from "@/lib/metrics/contractor/config";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 import styles from "./contractor-metrics-console.module.css";
+import { ContractorTotalSales } from "./contractor-total-sales";
+import { SALES_RULE } from "@/lib/metrics/contractor/salesDocuments.js";
 
 type AnyRecord = Record<string, any>;
 type TabId = "metrics" | "config" | "connections";
@@ -621,6 +623,7 @@ export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorksp
 
           {activeReport ? (
             <>
+              <ContractorTotalSales report={activeReport} />
               {sections.filter((section: any) => section.visible !== false).map((section: any) => {
                 if (section.kind === "summary") {
                   return (
@@ -788,18 +791,8 @@ export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorksp
           </Panel>
 
           <section className={styles.controlGrid}>
-            <Panel title="Sold job rule" icon={<Database />}>
+            <Panel title="Document sales rules" icon={<Database />}>
               <div className={styles.formGrid}>
-                <TextAreaField
-                  label="Sold date field priority"
-                  value={(ruleSetDraft.classifications?.soldJob?.soldDateFields ?? []).join("\n")}
-                  onChange={(value) => updateSoldJobConfig({ soldDateFields: parseLines(value) })}
-                />
-                <TextAreaField
-                  label="Revenue field priority"
-                  value={(ruleSetDraft.classifications?.soldJob?.revenueFields ?? []).join("\n")}
-                  onChange={(value) => updateSoldJobConfig({ revenueFields: parseLines(value) })}
-                />
                 <Field
                   label="Cancelled status pattern"
                   value={ruleSetDraft.classifications?.soldJob?.cancelledPattern ?? ""}
@@ -807,19 +800,19 @@ export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorksp
                 />
               </div>
               <p className={styles.copy}>
-                Revenue resolves from these JobTread columns in order. Blank rows fall through to the next configured field.
+                Sales use approved document history and price with tax, without job-value fallbacks. Dates are recognized in Eastern time. Job Sold Date is informational only.
               </p>
             </Panel>
 
             <Panel title="Current rule snapshot" icon={<Info />}>
               <div className={styles.reportList}>
                 <div className={styles.reportRow}>
-                  <strong>Sold date fields</strong>
-                  <small>{(ruleSetDraft.classifications?.soldJob?.soldDateFields ?? []).join(", ") || "None"}</small>
+                  <strong>Recognition</strong>
+                  <small>Document approval history · {SALES_RULE.version}</small>
                 </div>
                 <div className={styles.reportRow}>
                   <strong>Revenue fields</strong>
-                  <small>{(ruleSetDraft.classifications?.soldJob?.revenueFields ?? []).join(", ") || "None"}</small>
+                  <small>documents.priceWithTax · BA / CO / FS</small>
                 </div>
                 <div className={styles.reportRow}>
                   <strong>Cancelled pattern</strong>
@@ -1262,8 +1255,8 @@ function normalizeSections(sections?: any[]) {
 }
 
 function fromStoredReport(report: any, ruleSet: any) {
-  if (!report) return null;
-  return { reportId: report.id, createdAt: report.created_at, ruleSet, sourceSnapshot: report.source_snapshot ?? {}, totals: report.totals ?? {}, breakdowns: report.breakdowns ?? {}, executiveSummary: report.detail?.executiveSummary ?? [], configuredMetrics: report.detail?.configuredMetrics ?? [], unmatched: report.detail?.unmatched ?? {}, dashboard: report.detail?.dashboard ?? {}, debug: report.detail?.debug ?? null, comparison: report.detail?.comparison ?? null };
+  if (!report || report.source_snapshot?.salesRuleVersion !== SALES_RULE.version) return null;
+  return { exportDatasets: report.detail?.exportDatasets, reportId: report.id, createdAt: report.created_at, ruleSet, sourceSnapshot: report.source_snapshot ?? {}, totals: report.totals ?? {}, breakdowns: report.breakdowns ?? {}, executiveSummary: report.detail?.executiveSummary ?? [], configuredMetrics: report.detail?.configuredMetrics ?? [], unmatched: report.detail?.unmatched ?? {}, dashboard: report.detail?.dashboard ?? {}, debug: report.detail?.debug ?? null, comparison: report.detail?.comparison ?? null };
 }
 
 function providerLabel(provider: string) {

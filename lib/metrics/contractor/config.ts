@@ -1,3 +1,5 @@
+import { SALES_RULE } from "./salesDocuments.js";
+
 export type ContractorConditionOperator =
   | "equals"
   | "not_equals"
@@ -126,6 +128,18 @@ export type ContractorRuleSetRecord = {
 
 export const DEFAULT_CONTRACTOR_DATASETS: ContractorDatasetDefinition[] = [
   {
+    id: "jobtread.sales_documents", label: "Total Sales Documents", provider: "jobtread", object: "sales_documents", kind: "computed",
+    rowGrain: "One report sales row, possibly combining BA/CO/FS components.", dateField: null,
+    description: "Canonical gross document sales filtered by approval history in Eastern time.", isSystem: true,
+    fields: ["jobId", "jobNumber", "customerName", "documentId", "documentCode", "documentNumber", "documentDate", "approvalDate", "documentStatus", "documentCount", "amount", "amountBreakdown", "cancelled", "consultant", "setter", "source"],
+  },
+  {
+    id: "jobtread.net_sales_documents", label: "Net Sales Documents", provider: "jobtread", object: "net_sales_documents", kind: "computed",
+    rowGrain: "One non-canceled report sales row.", dateField: null,
+    description: "Canonical gross rows minus canceled rows. Distinct jobs may differ from document row count.", isSystem: true,
+    fields: ["jobId", "documentNumber", "documentCount", "amount", "source", "consultant", "approvalDate"],
+  },
+  {
     id: "gohighlevel.contacts",
     label: "GoHighLevel Contacts",
     provider: "gohighlevel",
@@ -188,13 +202,13 @@ export const DEFAULT_CONTRACTOR_DATASETS: ContractorDatasetDefinition[] = [
   },
   {
     id: "combined.matched_sold_jobs",
-    label: "Matched Sold Jobs",
+    label: "Attributed Net Sold Jobs",
     provider: "combined",
     object: "matched_sold_jobs",
     kind: "computed",
     rowGrain: "One attributed sold job matched to a lead.",
-    dateField: "job.soldDate",
-    description: "Computed subset of matched jobs that passes the sold-job rule.",
+    dateField: null,
+    description: "Distinct jobs from net document sales, attributed using CRM matches or job source.",
     inputDatasets: ["combined.matched_jobs"],
     fields: ["job.id", "job.soldDate", "job.revenue", "job.netSales", "lead.source", "lead.campaign", "lead.createdDate", "timeToCloseDays"],
     isSystem: true,
@@ -206,8 +220,8 @@ export const DEFAULT_CONTRACTOR_DATASETS: ContractorDatasetDefinition[] = [
     object: "sold_jobs",
     kind: "computed",
     rowGrain: "One sold JobTread job.",
-    dateField: "soldDate",
-    description: "Computed subset of JobTread jobs that passes the sold-job rule.",
+    dateField: null,
+    description: "Distinct jobs with qualifying net document sales in the selected period.",
     inputDatasets: ["jobtread.jobs"],
     fields: ["id", "soldDate", "status", "revenue", "netSales", "projectType", "designConsultant", "projectManager", "source", "campaign"],
     isSystem: true,
@@ -376,6 +390,8 @@ export const DEFAULT_CONTRACTOR_RULE_SET: ContractorRuleSetRecord = {
               "\\bwave\\b",
               "\\bradio i\\/?o guys\\b",
               "\\bdetroit radio\\b",
+              "\\bblue collar leads\\b",
+              "\\bdetroit fenc(?:e|ing)\\b",
             ],
           },
         },
@@ -400,6 +416,7 @@ export const DEFAULT_CONTRACTOR_RULE_SET: ContractorRuleSetRecord = {
     paidVendorAliases: [
       { vendor: "Salty's Media", aliases: ["wave", "salty", "saltys media", "salty's media"] },
       { vendor: "Detroit Radio LLC", aliases: ["detroit radio", "radio i/o guys", "radio io guys"] },
+      { vendor: "Blue Collar Leads / Detroit Fence", aliases: ["blue collar leads", "detroit fence", "detroit fencing"] },
       { vendor: "Angi Leads", aliases: ["angi", "angi leads"] },
       { vendor: "FaceBook", aliases: ["fb ad", "facebook ad", "facebook ads", "meta ad", "meta ads"] },
       { vendor: "Google", aliases: ["google ad", "google ads", "google lsa", "local service ads", "lsa"], negativeRule: "Do not match Google Organic" },
@@ -409,20 +426,11 @@ export const DEFAULT_CONTRACTOR_RULE_SET: ContractorRuleSetRecord = {
       object: "jobs",
       conditions: [
         { id: "sold_job_condition_not_cancelled", field: "cancelled", operator: "equals", value: false },
-        { id: "sold_job_condition_has_sold_date", field: "soldDate", operator: "exists" },
+        { id: "sold_job_condition_document", field: "inReportSold", operator: "equals", value: true },
       ],
       statuses: [],
-      soldDateFields: ["soldDate", "jobSoldDate", "Sold Date"],
-      revenueFields: [
-        "approved_orders",
-        "approved_order",
-        "approved_orders_total",
-        "approved_order_total",
-        "approved_orders_amount",
-        "approved_order_amount",
-        "approved_order_value",
-        "approved_orders_value",
-      ],
+      soldDateFields: [],
+      revenueFields: ["documents.priceWithTax"],
       cancelledPattern: "cancel",
     },
     closingOutcomeRules: [
@@ -486,9 +494,20 @@ export const DEFAULT_CONTRACTOR_RULE_SET: ContractorRuleSetRecord = {
 export function createDefaultContractorRuleSet(name = DEFAULT_CONTRACTOR_RULE_SET.name): ContractorRuleSetRecord {
   return {
     ...deepClone(DEFAULT_CONTRACTOR_RULE_SET),
+    metricDefinitions: DEFAULT_CONTRACTOR_RULE_SET.metricDefinitions.map(migrateSalesMetric),
     name,
     slug: slugify(name),
   };
+}
+
+export function migrateSalesMetric(definition: ContractorMetricDefinition): ContractorMetricDefinition {
+  if (["jobs", "matched_jobs"].includes(definition.object) && /revenue|netSales|approved.orders|contract.amount|sold.price/i.test(definition.field ?? "")) {
+    definition = { ...definition, object: definition.object === "jobs" ? "sold_jobs" : "matched_sold_jobs", field: definition.object === "jobs" ? "revenue" : "job.revenue" };
+  }
+  if (definition.id === "overall_sold_jobs") return { ...definition, object: "sold_jobs", dateField: null, conditions: [], description: "Distinct jobs with qualifying net sales documents in the selected period." };
+  if (!["sold_jobs", "matched_sold_jobs"].includes(definition.object)) return definition;
+  return { ...definition, dateField: null, description: "Uses document-recognized net sales for the exact selected period.",
+    conditions: (definition.conditions ?? []).filter(condition => !/soldDate|jobSoldDate|approvedOrderSoldDate/.test(condition.field ?? "")) };
 }
 
 export function toRuntimeMetricRules(ruleSet?: Partial<ContractorRuleSetRecord> | null) {
@@ -499,7 +518,8 @@ export function toRuntimeMetricRules(ruleSet?: Partial<ContractorRuleSetRecord> 
     .flatMap((filter) => filter.conditions.map((condition) => String(condition.value ?? "").toLowerCase()).filter(Boolean));
 
   return {
-    version: `workspace-${current.version ?? base.version}`,
+    version: `${SALES_RULE.version}:workspace-${current.version ?? base.version}`,
+    salesDocuments: SALES_RULE,
     timezone: current.settings?.timezone ?? base.settings.timezone,
     globalFilters: {
       excludedLeadTagPhrases: excludedLeadTagPhrases.length
@@ -508,9 +528,9 @@ export function toRuntimeMetricRules(ruleSet?: Partial<ContractorRuleSetRecord> 
     },
     classification: {
       soldJob: {
-        statuses: current.classifications?.soldJob?.statuses ?? base.classifications.soldJob.statuses,
-        soldDateFields: current.classifications?.soldJob?.soldDateFields ?? base.classifications.soldJob.soldDateFields,
-        revenueFields: current.classifications?.soldJob?.revenueFields ?? base.classifications.soldJob.revenueFields,
+        statuses: [],
+        soldDateFields: [],
+        revenueFields: ["documents.priceWithTax"],
         cancelledPattern: current.classifications?.soldJob?.cancelledPattern ?? base.classifications.soldJob.cancelledPattern,
       },
       paidVendorAliases: current.classifications?.paidVendorAliases ?? base.classifications.paidVendorAliases,
@@ -553,10 +573,10 @@ export function normalizeStoredRuleSet(row: any): ContractorRuleSetRecord {
       },
       soldJob: {
         ...base.classifications.soldJob,
-        ...(row?.classifications?.soldJob ?? {}),
+        cancelledPattern: row?.classifications?.soldJob?.cancelledPattern ?? base.classifications.soldJob.cancelledPattern,
       },
     },
-    metricDefinitions: storedMetrics,
+    metricDefinitions: storedMetrics.map(migrateSalesMetric),
     groupedMetricSets: storedGroupedSets,
     settings: {
       ...base.settings,
@@ -630,9 +650,9 @@ function mergeDatasetDefinitions(
     return {
       ...definition,
       label: stored.label ?? definition.label,
-      description: stored.description ?? definition.description,
+      description: ["sold_jobs", "matched_sold_jobs", "sales_documents", "net_sales_documents"].includes(definition.id) ? definition.description : stored.description ?? definition.description,
       rowGrain: stored.rowGrain ?? definition.rowGrain,
-      dateField: stored.dateField ?? definition.dateField,
+      dateField: ["sold_jobs", "matched_sold_jobs", "sales_documents", "net_sales_documents"].includes(definition.id) ? null : stored.dateField ?? definition.dateField,
       inputDatasets: stored.inputDatasets ?? definition.inputDatasets,
       fields: Array.isArray(stored.fields) && stored.fields.length ? stored.fields : definition.fields,
     };

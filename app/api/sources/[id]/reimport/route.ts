@@ -12,6 +12,7 @@ type RouteContext = {
 type ReimportRequest = {
   workspaceId?: string;
   fullRefresh?: boolean;
+  automatic?: boolean;
 };
 
 export async function POST(request: Request, { params }: RouteContext) {
@@ -33,12 +34,16 @@ export async function POST(request: Request, { params }: RouteContext) {
 
     const { data: source, error: sourceError } = await supabase
       .from("sources")
-      .select("id,workspace_id,metadata,connected_account_id,status")
+      .select("id,workspace_id,metadata,connected_account_id,status,last_synced_at")
       .eq("id", params.id)
       .eq("workspace_id", workspaceId)
       .single();
 
     if (sourceError || !source) return NextResponse.json({ error: sourceError?.message ?? "Source was not found." }, { status: 404 });
+
+    if (body.automatic && Date.now() - Date.parse(source.last_synced_at ?? "") < 15 * 60 * 1000) {
+      return NextResponse.json({ skipped: true, reason: "recently-refreshed" });
+    }
 
     const sourceUrl = String(source.metadata?.sourceUrl ?? source.metadata?.canonicalUrl ?? "").trim();
     if (!sourceUrl) return NextResponse.json({ error: "This source does not have a saved URL to reimport." }, { status: 400 });
@@ -58,12 +63,12 @@ export async function POST(request: Request, { params }: RouteContext) {
       if (source.metadata?.kind === "drive_private_folder") {
         const response = await importPrivateFolder(new Request(request.url, {
           method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ workspaceId, sourceId: source.id, connectedAccountId: source.connected_account_id, folderUrl: sourceUrl })
+          body: JSON.stringify({ workspaceId, sourceId: source.id, connectedAccountId: source.connected_account_id, folderUrl: sourceUrl, automatic: body.automatic === true })
         }));
         if (!response.ok) { const detail = await response.json(); throw new Error(detail.error ?? "Private folder refresh failed."); }
         return response;
       }
-      const result = await runSourceImport({ supabase, workspaceId, sourceUrl, userId: user.id, sourceId: source.id, fullRefresh: body.fullRefresh === true });
+      const result = await runSourceImport({ supabase, workspaceId, sourceUrl, userId: user.id, sourceId: source.id, fullRefresh: body.fullRefresh === true, automatic: body.automatic === true });
       return NextResponse.json(result);
     } catch (error) {
       await supabase.from("sources").update({ status: "error", error: error instanceof Error ? error.message : "Refresh failed." }).eq("id", source.id).eq("workspace_id", workspaceId);
