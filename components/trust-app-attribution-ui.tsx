@@ -69,22 +69,25 @@ export function MetricsView({
     <section className="metrics-board">
       <div className="metrics-intro">
         <div>
-          <span>Metrics</span>
-          <h2>What content moves buyers?</h2>
+          <span>Customer engagement</span>
+          <h2>Are customers taking the next step?</h2>
         </div>
         <p>See which content customers open, watch, and act on.</p>
       </div>
 
       <div className="metrics-scoreboard">
-        <MetricCard label="Internal/test events excluded" value={String(metrics.internalCount || 0)} detail="Recorded separately from customer journey counts. Applies to new activity; older visits cannot reliably be reclassified." />
-        <MetricCard label="Measured watch time" value={`${Math.round(observedWatchSeconds(metrics.views) / 60)} min`} detail="Observed YouTube, Vimeo and direct-video playback only. Drive, Loom and social embeds: unavailable, not zero. Internal/test traffic excluded." />
         <MetricCard label="Journey opens" value={String(opens.length)} detail="Public or contact-specific journey page opens." />
-        <MetricCard label="Video starts" value={String(starts.length)} detail="Videos started inside journeys." />
+        <MetricCard label="Video starts" value={String(starts.length)} detail="Measured starts from supported video players." />
+        <MetricCard label="Next-step clicks" value={String(ctas.length)} detail="Clicks on a journey's call-to-action button." />
+        <MetricCard label="Measured watch time" value={`${Math.round(observedWatchSeconds(metrics.views) / 60)} min`} detail="YouTube, Vimeo and direct video only. Other players do not report watch time." />
+      </div>
+
+      <details className="sage-panel"><summary>Tracked-link results</summary><div className="metrics-scoreboard">
         <MetricCard label="Tracked redirects" value={String(redirects.length)} detail="Clicks on your tracked links." />
         <MetricCard label="Tracked conversions" value={String(linkConversions.length)} detail={`${rate(linkConversions.length, Math.max(linkPageViews.length, 1))} of destination page views converted.`} />
         <MetricCard label="Attributed revenue" value={formatCurrencyValue(attributedRevenue)} detail="Purchase value captured against tracked links." />
         <MetricCard label="CTA rate" value={rate(ctas.length + linkCtas.length, opens.length + linkPageViews.length)} detail="Click-through across journeys and tracked destinations." />
-      </div>
+      </div></details>
 
       <div className="metrics-rank-grid">
         <MetricPanel title="Measured playback by asset" countLabel="Supported players" emptyLabel="No measured playback yet. Drive watch time is unavailable." rows={journeys.flatMap(journey => journey.assets.map(asset => ({ title: asset.title, meta: journey.title, seconds: observedWatchSeconds(metrics.views.filter(event => event.journey_id === journey.id && event.asset_id === asset.id)) }))).filter(row => row.seconds > 0).sort((a, b) => b.seconds - a.seconds).slice(0, 10).map(row => ({ title: row.title, meta: row.meta, detail: `${Math.round(row.seconds)} seconds observed playback` }))} />
@@ -112,6 +115,8 @@ export function MetricsView({
         />
       </div>
 
+      <details className="sage-panel"><summary>Audience and measurement details</summary>
+      <p>{metrics.internalCount || 0} internal/test events excluded from customer counts. Source refreshes are not customer activity.</p>
       <div className="metrics-secondary-grid">
         <section className="metrics-secondary-panel">
           <div className="mini-head">
@@ -138,7 +143,7 @@ export function MetricsView({
             <MetricCard label="YouTube sources" value={String(sources.filter((source) => source.platform === "youtube").length)} detail="Connected YouTube videos, playlists, and channels." />
           </div>
         </section>
-      </div>
+      </div></details>
     </section>
   );
 }

@@ -7,13 +7,13 @@ import { uniqueCollections } from "@/lib/source-refresh";
 import { parseSourceUrl } from "@/lib/source-import";
 
 type Progress = { total: number; completed: number; errors: string[]; running: boolean };
-type RefreshRun = { progress: Progress; listeners: Set<(value: Progress) => void>; done: Promise<void> };
+type RefreshRun = { progress: Progress; listeners: Set<(value: Progress) => void>; done: Promise<void>; startedAt: number };
 const activeRuns = new Map<string, RefreshRun>();
 
 function refreshCollections(key: string, workspaceId: string) {
   const current = activeRuns.get(key);
-  if (current) return current;
-  const run: RefreshRun = { progress: { total: 0, completed: 0, errors: [], running: true }, listeners: new Set(), done: Promise.resolve() };
+  if (current && (current.progress.running || Date.now() - current.startedAt < 15 * 60 * 1000)) return current;
+  const run: RefreshRun = { startedAt: Date.now(), progress: { total: 0, completed: 0, errors: [], running: true }, listeners: new Set(), done: Promise.resolve() };
   activeRuns.set(key, run);
   function update(change: Partial<Progress>) {
     run.progress = { ...run.progress, ...change };
@@ -21,6 +21,12 @@ function refreshCollections(key: string, workspaceId: string) {
   }
   run.done = (async () => {
     try {
+      const storageKey = `library-source-check:${key}`;
+      try {
+        const previous = Number(sessionStorage.getItem(storageKey));
+        if (previous && Date.now() - previous < 15 * 60 * 1000) return;
+        sessionStorage.setItem(storageKey, String(Date.now()));
+      } catch { /* In-memory deduplication remains available without storage. */ }
       const db = createBrowserSupabaseClient();
       if (!db) throw new Error("Library connection is unavailable.");
       const sources: Array<{ id: string; account_label: string | null; metadata: Record<string, unknown> | null }> = [];
@@ -53,7 +59,6 @@ function refreshCollections(key: string, workspaceId: string) {
       update({ errors: [error instanceof Error ? error.message : "Could not load connected sources."] });
     } finally {
       update({ running: false });
-      if (!run.listeners.size && activeRuns.get(key) === run) activeRuns.delete(key);
     }
   })();
   return run;
@@ -76,15 +81,11 @@ export function LibrarySourceRefresh({ workspaceId, userId, onComplete }: { work
     });
     return () => {
       active = false; run.listeners.delete(listener);
-      // React's immediate effect replay reuses this run; a later visit starts fresh.
-      setTimeout(() => {
-        if (!run.listeners.size && !run.progress.running && activeRuns.get(`${userId}:${workspaceId}`) === run) activeRuns.delete(`${userId}:${workspaceId}`);
-      }, 0);
     };
   }, [workspaceId, userId]);
 
   if (!progress.running || !progress.total) return null;
-  return <div className="library-refresh" style={{ position: "fixed", bottom: 80, right: 16, width: "auto", padding: "6px 10px", fontSize: 12, zIndex: 10 }}>
+  return <div className="library-refresh" style={{ width: "auto", padding: "2px 0", fontSize: 12 }}>
     <p role="status" aria-live="polite"><RefreshCw size={16} className={progress.running ? "spin" : ""} aria-hidden="true" />
       Refreshing sources {progress.completed} of {progress.total}
     </p>

@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { formatJourneyAssetLabel, type JourneyAsset } from "@/components/trust-app-shared";
 import { PlaybackClock } from "@/lib/playback-clock";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
-import { browserExcluded, setBrowserExcluded } from "@/lib/analytics-preferences";
+import { browserExcluded } from "@/lib/analytics-preferences";
 import { assetThumbnailUrl } from "./asset-thumbnail";
 import { VimeoPlayer } from "./vimeo-player";
 import { loadYouTubePlayer, type YouTubePlayer } from "@/lib/youtube-player";
@@ -43,8 +43,6 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
   const [nativeTime, setNativeTime] = useState(0);
   const [nativeDuration, setNativeDuration] = useState(0);
   const [muted, setMuted] = useState(false);
-  const [excludeBrowser, setExcludeBrowser] = useState(false);
-  useEffect(() => { setExcludeBrowser(browserExcluded()); }, []);
   const positions = useRef<Map<string, number>>(new Map());
   const stageRef = useRef<HTMLDivElement>(null);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
@@ -437,7 +435,6 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
       </aside>
       </div>
       <footer className="jx-footer">
-        <label><input type="checkbox" checked={excludeBrowser} onChange={event => { try { setBrowserExcluded(event.target.checked); setExcludeBrowser(event.target.checked); } catch { /* Browser storage unavailable. */ } }} /> Exclude this browser from analytics</label>
         <div>{finished ? <><strong>Ready for the next step?</strong><button onClick={restart}>Watch again</button></> : <span>{activeAsset.assetType !== "video" ? "Read at your own pace. Use the arrows to continue." : variant === "embed" ? "Explore at your own pace." : "Your proof, one story at a time."}</span>}</div>
       {journey.cta_url && (
         <a className="jx-cta" href={journey.cta_url} onClick={trackCtaClick} target="_blank" rel="noreferrer">
