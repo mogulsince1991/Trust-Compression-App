@@ -35,7 +35,7 @@ export default function AuthCallbackPage() {
 
       const params = new URLSearchParams(window.location.search);
       const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-      const next = sanitizeNext(params.get("next") || "/");
+      const next = sanitizeNext(params.get("next") || "/app/home");
       const errorDescription = params.get("error_description") || hashParams.get("error_description");
       const errorCode = params.get("error") || hashParams.get("error");
       const code = params.get("code");
@@ -171,5 +171,5 @@ export default function AuthCallbackPage() {
 }
 
 function sanitizeNext(next: string) {
-  return next.startsWith("/") && !next.startsWith("//") ? next : "/";
+  return next.startsWith("/") && !next.startsWith("//") && !/[\\\u0000-\u0020]/.test(next) ? next : "/app/home";
 }

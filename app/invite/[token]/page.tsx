@@ -21,7 +21,7 @@ export default function InvitePage({ params }: InvitePageProps) {
   const [accepted, setAccepted] = useState(false);
   const attempted = useRef("");
   const accepting = useRef(false);
-  const callbackUrl = () => `${window.location.origin}/auth/callback?next=${encodeURIComponent(`/invite/${params.token}`)}`;
+  const callbackUrl = () => `${window.location.origin}/auth/callback`;
 
   useEffect(() => {
     if (!supabase) return;
@@ -128,7 +128,7 @@ export default function InvitePage({ params }: InvitePageProps) {
       <section className="gate-intro">
         <span>Workspace invite</span>
         <h1>Join the company library.</h1>
-        <p>Use Google or email to sign in with the exact email address your workspace administrator authorized.</p>
+        <p>Sign in with the email your administrator invited. Your workspace access is added automatically, including when you sign in from the main app.</p>
       </section>
       {!session && (
         <form className="prospect-brief" onSubmit={signIn}>

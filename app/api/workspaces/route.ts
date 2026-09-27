@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { claimWorkspaceInvites } from "@/lib/server/claim-workspace-invites";
 import { internalBrowserToken } from "@/lib/server/analytics-exclusion";
 import { NextResponse } from "next/server";
 import { createServiceSupabaseClient, createUserSupabaseClient } from "@/lib/supabase";
@@ -9,7 +10,8 @@ type CreateWorkspaceRequest = {
 
 export async function GET(request: Request) {
   try {
-    const { user, serviceSupabase } = await requireSignedInUser(request);
+    const { user, serviceSupabase, userSupabase } = await requireSignedInUser(request);
+    await claimWorkspaceInvites(user, serviceSupabase, userSupabase);
     const { data: memberships, error } = await serviceSupabase
       .from("workspace_members")
       .select("role,created_at,workspaces(id,name,slug,settings,created_at,updated_at)")
@@ -91,7 +93,7 @@ async function requireSignedInUser(request: Request) {
   if (error || !user) throw Object.assign(new Error("Your session expired. Sign in again."), { status: 401 });
   const serviceSupabase = createServiceSupabaseClient();
   if (!serviceSupabase) throw Object.assign(new Error("Workspace service is not configured."), { status: 500 });
-  return { user, serviceSupabase };
+  return { user, serviceSupabase, userSupabase };
 }
 
 function cleanWorkspaceName(value?: string) {

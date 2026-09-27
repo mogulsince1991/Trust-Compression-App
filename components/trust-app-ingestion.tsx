@@ -354,7 +354,9 @@ export function TrustAppIngestion({
       }
     }
 
-    void openWorkspace();
+    void openWorkspace().catch(error => {
+      if (active) { setError(error instanceof Error ? error.message : "Could not open your workspace. Please sign in again."); setLoading(false); }
+    });
     return () => {
       active = false;
     };
@@ -409,7 +411,10 @@ export function TrustAppIngestion({
     const response = await fetch("/api/workspaces", {
       headers: { Authorization: `Bearer ${session.access_token}` }
     });
-    if (!response.ok) return [] as WorkspaceRow[];
+    if (!response.ok) {
+      const failure = await response.json().catch(() => ({}));
+      throw new Error(failure.error || "Could not load your workspaces. Please try again.");
+    }
     const result = (await response.json()) as { workspaces?: Array<Record<string, any>> };
     const nextWorkspaces = (result.workspaces ?? []).map(mapWorkspaceRow);
     setWorkspaces(nextWorkspaces);
