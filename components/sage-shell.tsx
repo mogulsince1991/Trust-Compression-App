@@ -38,6 +38,16 @@ export function AppearanceControl() {
 }
 
 const navigation = [{ view: "home", label: "Home", icon: Home }, { view: "library", label: "Library", icon: BookOpen }, { view: "journeys", label: "Journeys", icon: Route }, { view: "metrics", label: "Activity", icon: Activity }, { view: "reports", label: "Reports", icon: BarChart3 }] as const;
+function AppBrand({ onHome }: { onHome: () => void }) {
+  return <div className="sage-brand">
+    <a className="sage-wordmark" href="/app/home" onClick={event => { if (!event.metaKey && !event.ctrlKey) { event.preventDefault(); onHome(); } }}>TrustTale<span className="sage-brand-dot" /></a>
+    <a className="sage-maker" href="https://unmarked.media" target="_blank" rel="noopener noreferrer" aria-label="TrustTale is an app by Unmarked. Visit Unmarked (opens in a new tab)">
+      <span><span className="sage-maker-app">an app </span>by</span>
+      <img className="sage-maker-light" src="/unmarked-black.png" alt="Unmarked" width="500" height="136" />
+      <img className="sage-maker-dark" src="/unmarked-white.png" alt="Unmarked" width="500" height="136" />
+    </a>
+  </div>;
+}
 export function SageShell({ view, workspaces, workspaceId, onSwitch, onNavigate, onSignOut, isAdmin, children, busy, notice, error, onDismiss }: { view: SageView; workspaces: WorkspaceRow[]; workspaceId: string | null; onSwitch: (id: string) => void; onNavigate: (view: SageView) => void; onSignOut: () => void; isAdmin: boolean; children: ReactNode; busy?: boolean; notice: string; error: string; onDismiss: () => void }) {
   const [more, setMore] = useState(false);
   useEffect(() => { document.getElementById("sage-content")?.scrollTo(0, 0); }, [view]);
@@ -45,12 +55,12 @@ export function SageShell({ view, workspaces, workspaceId, onSwitch, onNavigate,
   function go(next: SageView) { setMore(false); onNavigate(next); }
   return <div className="sage-app">
     <a href="#sage-content" className="sage-skip">Skip to content</a>
-    <aside className="sage-sidebar"><a className="sage-wordmark" href="/app/home" onClick={e => { e.preventDefault(); go("home"); }}>TrustTale<span className="sage-brand-dot" /></a>
+    <aside className="sage-sidebar"><AppBrand onHome={() => go("home")} />
       <label className="sage-workspace"><Building2 /><span className="sr-only">Current workspace</span><select aria-label="Current workspace" disabled={busy} value={workspaceId || ""} onChange={e => onSwitch(e.target.value)}>{workspaces.map(w => <option value={w.id} key={w.id}>{w.name}</option>)}</select></label>
       <nav aria-label="Main navigation">{navigation.map(n => <a key={n.view} href={`/app/${sageRoutes[n.view]}`} aria-current={active === n.view ? "page" : undefined} onClick={e => { if (!e.metaKey && !e.ctrlKey) { e.preventDefault(); go(n.view); } }}><n.icon />{n.label}</a>)}</nav>
       <div className="sage-sidebar-bottom"><button className={active === "workspace" ? "is-active" : ""} onClick={() => go("workspace")}><Settings />Settings</button>{isAdmin && <a href="/admin/activity">Platform administration <ArrowRight /></a>}<button onClick={onSignOut}><LogOut />Sign out</button><small>The right proof.<br />Ready to share.</small></div>
     </aside>
-    <div className="sage-main"><header className="sage-topbar"><span>{workspaces.find(w => w.id === workspaceId)?.name || "Your workspace"}</span><AppearanceControl /></header>
+    <div className="sage-main"><header className="sage-topbar"><div className="sage-mobile-brand"><AppBrand onHome={() => go("home")} /></div><span className="sage-desktop-workspace">{workspaces.find(w => w.id === workspaceId)?.name || "Your workspace"}</span><label className="sage-mobile-workspace"><span className="sr-only">Current workspace</span><select aria-label="Current workspace" title={workspaces.find(w => w.id === workspaceId)?.name || "Your workspace"} disabled={busy} value={workspaceId || ""} onChange={event => onSwitch(event.target.value)}>{!workspaces.length && <option value="">Your workspace</option>}{workspaces.map(workspace => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label><AppearanceControl /></header>
       <main id="sage-content" tabIndex={-1} aria-busy={busy}>{(notice || error) && <div className={`sage-notice ${error ? "is-error" : ""}`} role={error ? "alert" : "status"}><span>{error || notice}</span><button onClick={onDismiss} aria-label="Dismiss message"><X /></button></div>}{busy ? <div className="sage-loading" role="status"><span className="sage-loading-line" />Opening this workspace...</div> : children}</main>
     </div>
     {more && <div className="sage-more"><button onClick={() => setMore(false)} aria-label="Close menu"><X /></button><label>Workspace<select aria-label="Switch workspace" value={workspaceId || ""} onChange={e => { onSwitch(e.target.value); setMore(false); }}>{workspaces.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label><button onClick={() => go("reports")}><BarChart3 />Reports</button><button onClick={() => go("workspace")}><Settings />Settings</button>{isAdmin && <a href="/admin/activity">Platform administration</a>}<button onClick={onSignOut}><LogOut />Sign out</button></div>}
