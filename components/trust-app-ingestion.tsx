@@ -180,6 +180,8 @@ export function TrustAppIngestion({
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const [roleId, setRoleId] = useState<RoleId | null>("libraryManager");
   const [view, updateView] = useState<ViewId>(pathname.startsWith("/app") ? viewFromPath(pathname) : initialView);
+  const [reportsVisited, setReportsVisited] = useState(false);
+  useEffect(() => { if (view === "reports") setReportsVisited(true); }, [view]);
   function setView(next: ViewId) { updateView(next); router.push(`/app/${sageRoutes[next]}`, { scroll: true }); }
   useEffect(() => {
     if (pathname.startsWith("/app")) updateView(viewFromPath(pathname));
@@ -353,7 +355,7 @@ export function TrustAppIngestion({
     return () => {
       active = false;
     };
-  }, [isInternal, session, supabase]);
+  }, [isInternal, session?.user.id, supabase]);
 
   useEffect(() => {
     if (!session || !workspaceId || isReviewUser(session.user)) return;
@@ -1419,7 +1421,7 @@ export function TrustAppIngestion({
     {view === "metrics" && <><header className="sage-page-heading"><div><h1>Activity</h1><p>See how buyers engage with your proof.</p></div><button onClick={() => setView("tracking")}>Tracked links</button></header><MetricsView metrics={metrics} videos={videos} sources={sources} journeys={journeys} contacts={contacts} tracking={tracking} /><SageRecipients contacts={contacts} metrics={metrics} journeys={journeys} /></>}
     {view === "tracking" && <><button className="sage-back" onClick={() => setView("metrics")}>Back to activity</button><LinkTrackingView draft={trackingDraft} journeys={journeys} tracking={tracking} working={trackingWorking} onDraftChange={setTrackingDraft} onCreate={createTrackingLink} /></>}
     {view === "archive" && workspaceId && <JourneyArchive key={workspaceId} activeWorkspaceId={workspaceId} onChanged={() => void refreshWorkspace(workspaceId)} />}
-    {view === "reports" && workspaceId && <ContractorMetricsWorkspace key={workspaceId} activeWorkspaceId={workspaceId} />}
+    {(view === "reports" || reportsVisited) && workspaceId && <div hidden={view !== "reports"}><ContractorMetricsWorkspace key={workspaceId} activeWorkspaceId={workspaceId} /></div>}
     {["workspace", "sources", "socialProfiles"].includes(view) && <nav className="sage-settings-nav" aria-label="Settings sections"><button aria-current={view === "workspace" ? "page" : undefined} onClick={() => setView("workspace")}>Workspace & team</button><button aria-current={view === "sources" ? "page" : undefined} onClick={() => setView("sources")}>Content sources</button><button aria-current={view === "socialProfiles" ? "page" : undefined} onClick={() => setView("socialProfiles")}>YouTube insights</button><button onClick={() => { setView("reports"); router.push("/app/reports?tab=connections"); }}>CRM connections & spend</button></nav>}
     {view === "sources" && <SourcesView sources={sources} importing={working} onImport={importSource} onReimport={reimportSource} onDelete={deleteSource} />}
     {view === "workspace" && <WorkspaceView workspace={currentWorkspace} workspaces={workspaces} members={workspaceMembers} invites={workspaceInvites} integrationKeys={integrationKeys} integrationSecret={integrationSecret} mcpUrl={mcpUrl} canManage={canManageWorkspace} working={working} createName={createWorkspaceName} renameName={renameWorkspaceName} inviteDraft={inviteDraft} onCreateNameChange={setCreateWorkspaceName} onRenameNameChange={setRenameWorkspaceName} onInviteDraftChange={setInviteDraft} onCreate={createWorkspace} onRename={renameWorkspace} onInvite={inviteWorkspaceMember} onSwitch={switchWorkspace} onMemberRoleChange={updateWorkspaceMemberRole} onRemoveMember={removeWorkspaceMember} onRevokeInvite={revokeWorkspaceInvite} onCreateIntegrationKey={createIntegrationKey} onAttachIntegrationKey={attachIntegrationKey} onRevokeIntegrationKey={revokeIntegrationKey} />}

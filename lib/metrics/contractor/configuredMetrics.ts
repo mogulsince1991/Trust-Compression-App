@@ -1,4 +1,5 @@
 import { matchRecords } from "./match.js";
+import { orderMetrics } from "./metric-validation";
 import { analyzeClosingOutcomes } from "./outcomes.js";
 import { canonicalPaidVendor, paidVendorFor, matchesVendor, sourceBucket } from "./attribution.js";
 import { isSoldJob, inDateRange } from "./domain.js";
@@ -47,11 +48,13 @@ export function buildConfiguredMetricResults({
     conditions?: ContractorCondition[];
   }> = [];
 
-  for (const definition of ruleSet.metricDefinitions) {
+  for (const definition of orderMetrics(ruleSet.metricDefinitions)) {
     const value = evaluateMetricDefinition(definition, context);
 
     if (typeof value === "number" && Number.isFinite(value)) {
       context.baseValues[definition.id] = value;
+    } else {
+      delete context.baseValues[definition.id];
     }
 
     results.push({
@@ -71,7 +74,7 @@ export function buildConfiguredMetricResults({
     });
   }
 
-  return results;
+  return ruleSet.metricDefinitions.map(definition => results.find(result => result.id === definition.id)!);
 }
 
 export function buildMetricEvaluationContext({
@@ -274,11 +277,13 @@ function evaluateMetricIds(
 ) {
   const values: Record<string, number | string | null> = {};
 
-  for (const definition of Array.from(metricsById.values())) {
+  for (const definition of orderMetrics(Array.from(metricsById.values()))) {
     const value = evaluateMetricDefinition(definition, context);
     values[definition.id] = value ?? null;
     if (typeof value === "number" && Number.isFinite(value)) {
       context.baseValues[definition.id] = value;
+    } else {
+      delete context.baseValues[definition.id];
     }
   }
 
@@ -554,7 +559,9 @@ function readMetricField(record: any, field?: string | null) {
 function evaluateFormula(formula: string, values: Record<string, number>) {
   const expression = String(formula ?? "").trim();
   if (!expression || !/^[a-z0-9_+\-*/().\s]+$/i.test(expression)) return null;
-  const compiled = expression.replace(/[a-z_][a-z0-9_]*/gi, (token) => String(values[token] ?? 0));
+  const references = expression.match(/[a-z_][a-z0-9_]*/gi) ?? [];
+  if (references.some(token => !Number.isFinite(values[token]))) return null;
+  const compiled = expression.replace(/[a-z_][a-z0-9_]*/gi, (token) => String(values[token]));
   try {
     const result = Function(`"use strict"; return (${compiled});`)();
     return Number.isFinite(result) ? result : null;

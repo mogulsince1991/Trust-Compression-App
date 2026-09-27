@@ -6,6 +6,7 @@ const ts = require('typescript');
 const cache = new Map();
 function load(file) {
   file = path.resolve(file);
+  if (!fs.existsSync(file) && fs.existsSync(file + '.ts')) file += '.ts';
   if (cache.has(file)) return cache.get(file);
   const exports = {}; cache.set(file, exports);
   vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText,
@@ -66,6 +67,10 @@ assert.equal(dashboard.leadsBySource.reduce((n,row)=>n+row.revenue,0),176);
 assert.equal(dashboard.designConsultantPerformance.reduce((n,row)=>n+row.revenue,0),176);
 assert.equal(dashboard.paidChannelPerformance.reduce((n,row)=>n+row.revenue,0),100);
 console.log('Document authority, cancellations, mixed components, Eastern boundaries, and configured totals passed.');
+const reversed = createDefaultContractorRuleSet();
+reversed.metricDefinitions.reverse();
+const reverseValues = buildConfiguredMetricResults({ ruleSet: reversed, report: reconciled, startDate: r.startDate, endDate: r.endDate, spendRows: [{ spend_date: '2026-05-02', vendor: 'Google', spend: 50 }] });
+assert.equal(reverseValues.find(metric => metric.id === 'paid_roas').value, 2, 'Formula dependencies work regardless of catalog order');
 
 if (process.env.LOCAL_SALES_CACHE) {
   const expected = [ ['2026-05-01','2026-05-31',10,328292.95,9,166949.20], ['2026-06-01','2026-06-30',18,411825.24,16,374122.12], ['2026-07-01','2026-07-31',16,333820.05,13,272061.06], ['2026-05-01','2026-05-08',3,72877.20] ];

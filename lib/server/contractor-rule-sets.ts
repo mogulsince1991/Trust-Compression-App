@@ -6,6 +6,7 @@ import {
   slugify,
   type ContractorRuleSetRecord,
 } from "@/lib/metrics/contractor/config";
+import { orderMetrics } from "@/lib/metrics/contractor/metric-validation";
 
 export async function ensureDefaultContractorRuleSet(serviceSupabase: any, workspaceId: string, userId?: string) {
   const { data: existing, error } = await serviceSupabase
@@ -121,10 +122,16 @@ export async function saveContractorRuleSet(
 ) {
   const normalized = normalizeStoredRuleSet({
     ...ruleSet,
+    metric_definitions: ruleSet.metricDefinitions,
+    grouped_metric_sets: ruleSet.groupedMetricSets,
+    global_filters: ruleSet.globalFilters,
+    is_default: ruleSet.isDefault,
     id: ruleSetId ?? ruleSet.id,
     workspace_id: workspaceId,
     slug: slugify(ruleSet.slug || ruleSet.name || "contractor-rule-set"),
   });
+
+  orderMetrics(normalized.metricDefinitions);
 
   if (normalized.isDefault) {
     await serviceSupabase

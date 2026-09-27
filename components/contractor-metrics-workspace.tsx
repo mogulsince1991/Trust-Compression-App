@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { ArrowDown, ArrowUp, BarChart3, Database, Info, Link2, Loader2, Plus, RefreshCw, Save, Settings2, Sparkles, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
@@ -10,6 +11,8 @@ import { createBrowserSupabaseClient } from "@/lib/supabase";
 import styles from "./contractor-metrics-console.module.css";
 import { ContractorTotalSales } from "./contractor-total-sales";
 import { SALES_RULE } from "@/lib/metrics/contractor/salesDocuments.js";
+import { ContractorSpend } from "./contractor-spend";
+import { orderMetrics } from "@/lib/metrics/contractor/metric-validation";
 
 type AnyRecord = Record<string, any>;
 type TabId = "metrics" | "config" | "connections";
@@ -79,6 +82,7 @@ const TABLE_OPTIONS = [
 ];
 
 export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorkspaceId?: string | null } = {}) {
+  const searchParams = useSearchParams();
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const [session, setSession] = useState<Session | null>(null);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
@@ -149,7 +153,7 @@ export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorksp
     return () => {
       active = false;
     };
-  }, [session, supabase, activeWorkspaceId]);
+  }, [session?.user.id, supabase, activeWorkspaceId]);
 
   useEffect(() => {
     if (!selectedRuleSetId) return;
@@ -158,9 +162,9 @@ export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorksp
   }, [selectedRuleSetId, ruleSets]);
 
   useEffect(() => {
-    const requested = new URLSearchParams(window.location.search).get("tab");
+    const requested = searchParams.get("tab");
     if (requested === "connections" || requested === "config") setTab(requested);
-  }, []);
+  }, [searchParams]);
 
   useEffect(() => {
     if (!metrics.length) {
@@ -302,6 +306,7 @@ export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorksp
 
   async function saveRuleSet() {
     if (!workspaceId || !session || !ruleSetDraft?.id) return;
+    try { orderMetrics(ruleSetDraft.metricDefinitions); } catch (error) { setError(error instanceof Error ? error.message : "Check your metrics."); return; }
     setWorking("save-rule-set");
     setNotice("");
     setError("");
@@ -314,7 +319,7 @@ export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorksp
       const result = await parseJsonResponse(response, "Could not save contractor report config.");
       if (!response.ok || !result.ruleSet) throw new Error(result.error ?? "Could not save contractor report config.");
       setRuleSetDraft(clone(result.ruleSet));
-      setNotice("Workspace report config saved.");
+      setNotice("Config saved. Run a new report to calculate your changes; saved reports keep their original results.");
       await refresh(workspaceId, session.access_token);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Could not save contractor report config.");
@@ -675,11 +680,12 @@ export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorksp
 
       {tab === "config" ? (
         <div className={styles.stack}>
+          {workspaceId && session && <ContractorSpend key={workspaceId} workspaceId={workspaceId} token={session.access_token} />}
           <section className={styles.builderHeader}>
             <div>
               <span>Report Config</span>
-              <h2>Restore clarity to the live dashboard.</h2>
-              <p className={styles.copy}>Shape what the owner sees first: metric formulas, card placement, and how dense each metric band should feel.</p>
+              <h2>Choose what your report measures.</h2>
+              <p className={styles.copy}>Name a metric, choose what to count or calculate, then choose where it appears. Save config and run a new report to see changes.</p>
             </div>
             <div className={styles.heroActions}>
               <button className={styles.secondary} type="button" onClick={() => addSection("metric_band")}><Plus />Add metric band</button>
@@ -711,7 +717,7 @@ export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorksp
                 <div className={styles.formGrid}>
                   <Field label="Metric name" value={selectedMetric.name ?? ""} onChange={(value) => updateMetric(selectedMetric.id, (metric) => ({ ...metric, name: value }))} />
                   <SelectField label="Display type" value={selectedMetric.displayType ?? "number"} onChange={(value) => updateMetric(selectedMetric.id, (metric) => ({ ...metric, displayType: value }))} options={DISPLAY_TYPES.map((value) => ({ value, label: prettyLabel(value) }))} />
-                  <SelectField label="Operation" value={selectedMetric.operation ?? "count"} onChange={(value) => updateMetric(selectedMetric.id, (metric) => ({ ...metric, operation: value }))} options={METRIC_OPERATIONS.map((value) => ({ value, label: prettyLabel(value) }))} />
+                  <SelectField label="What should this calculate?" value={selectedMetric.operation ?? "count"} onChange={(value) => updateMetric(selectedMetric.id, (metric) => ({ ...metric, operation: value }))} options={[{ value: "count", label: "Count records" }, { value: "sum", label: "Add amounts together" }, { value: "average", label: "Average a number" }, { value: "formula", label: "Calculate from other metrics" }]} />
                   <TextAreaField label="Description" value={selectedMetric.description ?? ""} onChange={(value) => updateMetric(selectedMetric.id, (metric) => ({ ...metric, description: value }))} />
                   {selectedMetric.operation === "formula" ? (
                     <div className={styles.fullField}>
@@ -728,11 +734,11 @@ export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorksp
                           provider: dataset.provider,
                           object: dataset.object,
                           field: dataset.fields[0] ?? "",
-                          dateField: metric.dateField || dataset.dateField || "",
+                          dateField: dataset.dateField || "",
                         }));
                       }} options={datasets.map((dataset: DatasetDefinition) => ({ value: dataset.id, label: `${dataset.label} (${dataset.kind})` }))} />
-                      <SelectField label="Field" value={selectedMetric.field ?? ""} onChange={(value) => updateMetric(selectedMetric.id, (metric) => ({ ...metric, field: value }))} options={selectedMetricFields.map((value) => ({ value, label: value }))} />
-                      <Field label="Date field" value={selectedMetric.dateField ?? ""} onChange={(value) => updateMetric(selectedMetric.id, (metric) => ({ ...metric, dateField: value }))} />
+                      {selectedMetric.operation !== "count" && <SelectField label="Number to calculate" value={selectedMetric.field ?? ""} onChange={(value) => updateMetric(selectedMetric.id, (metric) => ({ ...metric, field: value }))} options={selectedMetricFields.map((value) => ({ value, label: prettyLabel(value) }))} />}
+                      {["sold_jobs", "matched_sold_jobs", "sales_documents", "net_sales_documents"].includes(selectedMetric.object) ? <p>Sales use document approval dates automatically. Sold-job counts count distinct jobs; document rows can include multiple sales for one job.</p> : <SelectField label="Date used for the reporting period" value={selectedMetric.dateField ?? ""} onChange={(value) => updateMetric(selectedMetric.id, (metric) => ({ ...metric, dateField: value }))} options={[{ value: "", label: "Use this dataset's existing period" }, ...selectedMetricFields.filter(value => /date|createdAt|timestamp/i.test(value)).map(value => ({ value, label: prettyLabel(value) }))]} />}
                       {selectedMetricDataset ? (
                         <div className={styles.fullField}>
                           <div className={styles.ruleCard}>
@@ -748,6 +754,8 @@ export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorksp
                           </div>
                         </div>
                       ) : null}
+                      <SelectField label="Which records?" value={selectedMetric.conditions?.find((condition: any) => condition.classification === "sourceBucket") ? (selectedMetric.conditions.find((condition: any) => condition.classification === "sourceBucket").operator === "not_equals" ? "not_paid" : selectedMetric.conditions.find((condition: any) => condition.classification === "sourceBucket").value) : "all"} onChange={(value) => updateMetric(selectedMetric.id, metric => ({ ...metric, conditions: [...(metric.conditions ?? []).filter((condition: any) => condition.classification !== "sourceBucket"), ...(value === "all" ? [] : [{ id: `${metric.id}_source_bucket`, classification: "sourceBucket", operator: value === "not_paid" ? "not_equals" : "equals", value: value === "not_paid" ? "paid" : value }])] }))} options={[{ value: "all", label: "All sources" }, { value: "paid", label: "Paid sources only" }, { value: "organic", label: "Organic sources only" }, { value: "not_paid", label: "Not paid (includes unattributed)" }, { value: "unattributed", label: "Unattributed only" }]} />
+                      <p className={styles.copy}>{selectedMetric.operation === "count" ? "Counts one record per row in the selected dataset." : `Calculates ${prettyLabel(selectedMetric.field ?? "the selected field")} from the selected dataset.`} Additional saved filters: {(selectedMetric.conditions ?? []).filter((condition: any) => condition.classification !== "sourceBucket").map((condition: any) => `${condition.field ?? condition.ruleRef ?? "Group"} ${condition.operator} ${Array.isArray(condition.value) ? condition.value.join(" to ") : condition.value ?? ""}`).join("; ") || "none"}.</p>
                     </>
                   )}
                 </div>
@@ -1079,13 +1087,13 @@ function FormulaBuilder({ metric, metrics, onChange }: { metric: any; metrics: a
         </div>
       </div>
       <div className={styles.formulaRow}>
-        <select value={left} onChange={(event) => update({ left: event.target.value })}>
+        <select aria-label="First metric" value={left} onChange={(event) => update({ left: event.target.value })}>
           {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
-        <select value={operator} onChange={(event) => update({ operator: event.target.value })}>
-          {FORMULA_OPERATORS.map((value) => <option key={value} value={value}>{value}</option>)}
+        <select aria-label="Calculation" value={operator} onChange={(event) => update({ operator: event.target.value })}>
+          {FORMULA_OPERATORS.map((value) => <option key={value} value={value}>{({ "+": "Plus", "-": "Minus", "*": "Multiplied by", "/": "Divided by" })[value]}</option>)}
         </select>
-        <select value={right} onChange={(event) => update({ right: event.target.value })}>
+        <select aria-label="Second metric" value={right} onChange={(event) => update({ right: event.target.value })}>
           {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
       </div>
@@ -1094,6 +1102,8 @@ function FormulaBuilder({ metric, metrics, onChange }: { metric: any; metrics: a
         <strong>{humanizeFormula(metric.formula || `${left} ${operator} ${right}`, metrics)}</strong>
         <small>{metric.formula || `${left} ${operator} ${right}`}</small>
       </div>
+      <button type="button" onClick={() => update({})}>Use this calculation</button>
+      <details><summary>Advanced formula</summary><input aria-label="Formula expression" value={metric.formula ?? ""} onChange={event => onChange(event.target.value)} /><small>Use metric IDs. Division by zero displays N/A, not zero.</small></details>
     </div>
   );
 }

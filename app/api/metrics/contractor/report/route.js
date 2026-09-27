@@ -164,12 +164,7 @@ export async function POST(request) {
 
 async function generateReportPayload({ userSupabase, serviceSupabase, workspaceId, clientName, startDate, endDate, ruleSet, runtimeRules }) {
   const [{ data: spendRows, error: spendError }, { data: connectedAccounts, error: accountsError }] = await Promise.all([
-    userSupabase
-      .from("contractor_spend_rows")
-      .select("*")
-      .eq("workspace_id", workspaceId)
-      .gte("spend_date", startDate)
-      .lte("spend_date", endDate),
+    readSpendRows(userSupabase, workspaceId, startDate, endDate),
     serviceSupabase
       .from("connected_accounts")
       .select("*")
@@ -660,4 +655,16 @@ function toIsoDate(value) {
 
 function isIsoDate(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+async function readSpendRows(supabase, workspaceId, startDate, endDate) {
+  const rows = [];
+  for (let offset = 0; ; offset += 500) {
+    const { data, error } = await supabase.from("contractor_spend_rows").select("*")
+      .eq("workspace_id", workspaceId).gte("spend_date", startDate).lte("spend_date", endDate)
+      .order("spend_date").order("id").range(offset, offset + 499);
+    if (error) return { data: null, error };
+    rows.push(...(data ?? []));
+    if (!data || data.length < 500) return { data: rows, error: null };
+  }
 }
