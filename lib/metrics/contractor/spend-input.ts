@@ -1,5 +1,5 @@
 export function spendMonths(rows: { date?: unknown }[]) {
-  return [...new Set(rows.map(row => String(row.date ?? "").trim()).filter(date => /^\d{4}-(0[1-9]|1[0-2])-\d{2}$/.test(date)).map(date => date.slice(0, 7)))].sort();
+  return Array.from(new Set(rows.map(row => String(row.date ?? "").trim()).filter(date => /^\d{4}-(0[1-9]|1[0-2])-\d{2}$/.test(date)).map(date => date.slice(0, 7)))).sort();
 }
 
 export function monthBounds(month: string) {
