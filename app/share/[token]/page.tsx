@@ -1,4 +1,7 @@
 import { notFound } from "next/navigation";
+import { cache } from "react";
+import type { Metadata } from "next";
+import { richLinkImage } from "@/lib/rich-links";
 import { HistoricalJourneyComparison } from "@/components/historical/journey-comparison";
 import { JourneyViewer, type PublicJourney } from "@/components/journey-viewer";
 import type { JourneyAssetType } from "@/lib/journey-embeds";
@@ -40,18 +43,18 @@ type JourneySendRow = {
   share_token: string;
 };
 
-export default async function SharePage({ params, searchParams }: SharePageProps) {
+const loadJourney = cache(async (token: string) => {
   const supabase = createPublicSupabaseClient();
   if (!supabase) notFound();
 
   let send: JourneySendRow | null = null;
-  const { data: sendRow } = await supabase.from("journey_sends").select("id,journey_id,contact_id,share_token").eq("share_token", params.token).maybeSingle();
+  const { data: sendRow } = await supabase.from("journey_sends").select("id,journey_id,contact_id,share_token").eq("share_token", token).maybeSingle();
   send = (sendRow as JourneySendRow | null) ?? null;
 
-  const journeyQuery = supabase.from("journeys").select("id,title,heading,description,cta_label,cta_url").eq("is_public", true);
+  const journeyQuery = supabase.from("journeys").select("id,title,heading,description,cta_label,cta_url").eq("is_public", true).is("deleted_at", null);
   const { data: journey, error: journeyError } = send
     ? await journeyQuery.eq("id", send.journey_id).maybeSingle()
-    : await journeyQuery.eq("share_token", params.token).maybeSingle();
+    : await journeyQuery.eq("share_token", token).maybeSingle();
 
   if (journeyError || !journey) notFound();
 
@@ -80,6 +83,27 @@ export default async function SharePage({ params, searchParams }: SharePageProps
     metadata: item.metadata
   }));
 
+  return { row, send, orderedAssets };
+});
+
+export async function generateMetadata({ params }: SharePageProps): Promise<Metadata> {
+  const { row, orderedAssets } = await loadJourney(params.token);
+  const title = row.heading?.trim() || row.title;
+  const description = row.description?.trim() || "Explore our work, answers, and helpful resources.";
+  const origin = "https://trusttale.co";
+  const image = orderedAssets.map(asset => richLinkImage(asset, origin)).find(Boolean)
+    || `${origin}/api/share-preview?title=${encodeURIComponent(title.slice(0, 140))}`;
+  return {
+    title, description, robots: { index: false, follow: false },
+    openGraph: { type: "website", siteName: "TrustTale", title, description,
+      url: `${origin}/share/${encodeURIComponent(params.token)}`,
+      images: [{ url: image, alt: title }] },
+    twitter: { card: "summary_large_image", title, description, images: [image] }
+  };
+}
+
+export default async function SharePage({ params, searchParams }: SharePageProps) {
+  const { row, send, orderedAssets } = await loadJourney(params.token);
   if (searchParams?.player === "june-13") {
     const videos = orderedAssets.filter(asset => asset.assetType === "video");
     const selected = videos.findIndex(asset => asset.id === searchParams.asset);

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isLinkPreviewAgent } from "@/lib/rich-links";
 import { createServiceSupabaseClient } from "@/lib/supabase";
 
 import { analyticsExclusion } from "@/lib/server/analytics-exclusion";
@@ -16,6 +17,7 @@ type JourneyEventRequest = {
 const allowedEvents = new Set(["opened", "video_started", "video_completed", "video_progress", "asset_started", "asset_completed", "asset_progress", "cta_clicked"]);
 
 export async function POST(request: Request) {
+  if (isLinkPreviewAgent(request.headers.get("user-agent") || "")) return NextResponse.json({ ok: true, excluded: true });
   try {
     const supabase = createServiceSupabaseClient();
     if (!supabase) return NextResponse.json({ error: "Supabase is not configured." }, { status: 500 });

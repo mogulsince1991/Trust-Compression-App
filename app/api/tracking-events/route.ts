@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isLinkPreviewAgent } from "@/lib/rich-links";
 import { analyticsExclusion } from "@/lib/server/analytics-exclusion";
 import { createServiceSupabaseClient } from "@/lib/supabase";
 import { isTrackingEventType, sanitizeCurrency, sanitizeMetadata, sanitizeNumber, sanitizeText, sanitizeTimestamp, sanitizeUrl } from "@/lib/tracking";
@@ -20,6 +21,7 @@ type TrackingEventRequest = {
 };
 
 export async function POST(request: Request) {
+  if (isLinkPreviewAgent(request.headers.get("user-agent") || "")) return NextResponse.json({ ok: true, excluded: true });
   try {
     const supabase = createServiceSupabaseClient();
     if (!supabase) return NextResponse.json({ error: "Supabase service role is not configured." }, { status: 500 });
