@@ -41,6 +41,7 @@ export async function runSourceImport({ supabase, workspaceId, sourceUrl, userId
 
   const source = sourceId ? await updateExistingSource(supabase, sourceId, workspaceId, parsed, sourceUrl, importMode) : await createSource(supabase, workspaceId, parsed, sourceUrl, importMode);
   const run = await createSyncRun(supabase, workspaceId, source.id);
+  const libraryBatchAddedAt = new Date().toISOString();
 
   let imported = 0;
   let updated = 0;
@@ -61,7 +62,7 @@ export async function runSourceImport({ supabase, workspaceId, sourceUrl, userId
   try {
     for (let offset = 0; offset < pending.length; offset += 5) {
       const results = await Promise.allSettled(pending.slice(offset, offset + 5).map(video =>
-        persistImportedVideo({ supabase, workspaceId, sourceId: source.id, sourceUrl, parsed, video, userId, automatic })));
+        persistImportedVideo({ supabase, workspaceId, sourceId: source.id, sourceUrl, parsed, video: { ...video, metadata: { ...video.metadata, libraryBatchAddedAt } }, userId, automatic })));
       for (const result of results) {
         if (result.status === "rejected") throw result.reason;
         imported += result.value.imported;
@@ -202,6 +203,7 @@ async function persistImportedVideo({ supabase, workspaceId, sourceId, sourceUrl
     metadata: {
       ...existingMetadata,
       ...video.metadata,
+      libraryBatchAddedAt: existingId ? existingMetadata.libraryBatchAddedAt ?? null : video.metadata.libraryBatchAddedAt,
       channelTitle: video.channelTitle,
       sourceUrl,
       canonicalSourceUrl: parsed.canonicalUrl,

@@ -1,0 +1,14 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript');
+const exported={};
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/library-order.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports:exported,Map,Date});
+const old={id:'old',added:'2026-09-20T10:02:00Z',published:'2020-01-01',metadata:{sourceUrl:'channel'}};
+const recent={id:'recent',added:'2026-09-20T10:00:00Z',published:'2026-09-19',metadata:{sourceUrl:'channel'}};
+const manual={id:'manual',added:'2026-09-21T10:00:00Z'};
+const refreshed={id:'refreshed',added:'2026-09-22T10:00:00Z',published:'2026-09-22',metadata:{sourceUrl:'channel',libraryBatchAddedAt:'2026-09-22T09:59:00Z'}};
+const ids=items=>Array.from(exported.orderLibraryItems(items),i=>i.id);
+assert.deepEqual(ids([old,recent,manual]),['manual','recent','old']);
+assert.deepEqual(ids([old,recent,manual,refreshed]),['refreshed','manual','recent','old']);
+const other={id:'other',added:'2026-09-23T00:00:00Z',published:'2019-01-01',metadata:{sourceUrl:'another-channel',libraryBatchAddedAt:'2026-09-23T00:00:00Z'}};
+assert.equal(ids([recent,other])[0],'other');
+assert.equal(ids([{id:'unknown',added:null},manual])[0],'manual');
+console.log('Library ordering: legacy channel chronology, manual additions, refresh batches and new sources passed.');

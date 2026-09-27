@@ -6,6 +6,7 @@ import { buildJourneyAssetFromVideo, formatDuration, type DbVideo, type LibraryA
 import { AssetThumbnail } from "./asset-thumbnail";
 import { ContextEditor } from "./trust-app-library-ui";
 import { AddContentPanel } from "./add-content-panel";
+import { orderLibraryItems } from "@/lib/library-order";
 
 export function libraryItem(asset: LibraryAssetRow): JourneyAsset { return { ...asset, libraryAssetId: asset.id, videoId: null, durationSeconds: null, position: 1, note: null }; }
 export function AssetPreview({ asset }: { asset: JourneyAsset }) {
@@ -36,8 +37,7 @@ export function SageLibrary({ selectionKey, videos, libraryAssets, assetDraft, o
   const deferredQuery = useDeferredValue(query.toLowerCase());
   useEffect(() => { if (previewId && window.matchMedia("(max-width: 760px)").matches) document.getElementById("sage-content")?.scrollTo(0, 0); }, [previewId]);
   const videoById = new Map(videos.map(v => [v.id, v]));
-  const items = [...videos.map(v => ({ asset: buildJourneyAssetFromVideo(v), added: v.created_at })), ...libraryAssets.map(a => ({ asset: libraryItem(a), added: a.createdAt }))]
-    .sort((a, b) => (Date.parse(b.added || "") || 0) - (Date.parse(a.added || "") || 0) || a.asset.id.localeCompare(b.asset.id))
+  const items = orderLibraryItems([...videos.map(v => ({ id: `v:${v.id}`, asset: buildJourneyAssetFromVideo(v), added: v.created_at, published: v.published_at, metadata: v.metadata })), ...libraryAssets.map(a => ({ id: `a:${a.id}`, asset: libraryItem(a), added: a.createdAt }))])
     .map(item => item.asset);
   const key = (a: JourneyAsset) => `${a.videoId ? "v" : "a"}:${a.videoId || a.libraryAssetId}`;
   const visible = items.filter(a => (filter === "all" || (filter === "video" ? a.assetType === "video" : a.assetType !== "video")) && `${a.title} ${a.summary || ""} ${a.sourcePlatform} ${JSON.stringify(a.metadata?.customContext || {})} ${videoById.get(a.videoId)?.tags?.join(" ") || ""}`.toLowerCase().includes(deferredQuery));
