@@ -26,7 +26,7 @@ export function JourneyPresentationPreview({ draft, assets }: { draft: JourneyDr
   </section>;
 }
 
-export function JourneyEmbedCode({ shareUrl }: { shareUrl: string }) {
+export function JourneyEmbedCode({ shareUrl, expanded = false }: { shareUrl: string; expanded?: boolean }) {
   const [copied, setCopied] = useState(false);
   const [height, setHeight] = useState("760");
   const [sizing, setSizing] = useState("auto");
@@ -43,7 +43,7 @@ export function JourneyEmbedCode({ shareUrl }: { shareUrl: string }) {
   const escaped = url.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
   const scriptOrigin = new URL(url).origin;
   const code = `<iframe${sizing === "auto" ? " data-trusttale-embed" : ""} src="${escaped}" title="Explore our work" width="100%" height="${height}" style="display:block;border:0;border-radius:16px;" loading="lazy" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>${sizing === "auto" ? `\n<script async src="${scriptOrigin}/trusttale-embed.js"></script>` : ""}`;
-  return <details className="sage-panel"><summary>Embed on a website or landing page</summary>
+  return <details className="sage-panel" open={expanded || undefined}><summary>Embed on a website or landing page</summary>
     <p>Paste into a custom HTML block. Automatic sizing fits the journey to its content without cropping videos. Test on your published page, since some editors block scripts.</p>
     <label>Sizing<select value={sizing} onChange={e => { setSizing(e.target.value); setCopied(false); }}><option value="auto">Automatic height (recommended)</option><option value="fixed">Fixed height (no script)</option></select></label>
     <label>{sizing === "auto" ? "Initial / fallback height" : "Embed height"}<select value={height} onChange={e => { setHeight(e.target.value); setCopied(false); }}><option value="600">Compact - 600px</option><option value="760">Standard - 760px</option><option value="960">Tall videos / documents - 960px</option></select></label>

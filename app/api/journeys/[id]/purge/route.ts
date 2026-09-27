@@ -31,11 +31,8 @@ export async function DELETE(request: Request, { params }: RouteContext) {
 
     if (lookupError || !archivedJourney) return NextResponse.json({ error: "Archive the journey before permanently deleting it." }, { status: 409 });
 
-    await supabase.from("journey_assets").delete().eq("journey_id", params.id);
-    await supabase.from("journey_videos").delete().eq("journey_id", params.id);
-    await supabase.from("journey_sends").delete().eq("journey_id", params.id);
-
-    const { error } = await supabase.from("journeys").delete().eq("id", params.id).eq("workspace_id", workspaceId);
+    // Foreign keys remove dependent rows atomically; a failed delete must not strip content.
+    const { data: deleted, error } = await supabase.from("journeys").delete().eq("id", params.id).eq("workspace_id", workspaceId).not("deleted_at", "is", null).select("id");
     if (error) {
       return NextResponse.json(
         { error: "This journey still has related analytics or records. Keep it archived if you want to preserve reporting history.", detail: error.message },
@@ -43,6 +40,7 @@ export async function DELETE(request: Request, { params }: RouteContext) {
       );
     }
 
+    if (!deleted?.length) return NextResponse.json({ error: "Journey was not deleted. Check your access and try again." }, { status: 403 });
     return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Journey delete failed." }, { status: 400 });

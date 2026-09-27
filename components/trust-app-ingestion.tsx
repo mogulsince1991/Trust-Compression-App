@@ -1036,6 +1036,36 @@ export function TrustAppIngestion({
     });
   }
 
+  async function removeJourney(journey: JourneySummary, permanent: boolean) {
+    if (!session || !workspaceId || reviewing || journeyWorking) return;
+    if (!window.confirm(permanent
+      ? `Permanently delete "${journey.title}"? Its shared links and embeds will stop working and its journey activity will be removed. Library content is kept. This cannot be undone.`
+      : `Archive "${journey.title}"? Shared links and embeds will stop working. You can restore it from Manage archive.`)) return;
+    setJourneyWorking(true); setError(""); setNotice("");
+    let archived = false;
+    try {
+      for (const action of permanent ? ["archive", "purge"] : ["archive"]) {
+        const response = await fetch(`/api/journeys/${journey.id}/${action}`, {
+          method: action === "purge" ? "DELETE" : "POST",
+          headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ workspaceId })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Could not remove journey.");
+        if (action === "archive") archived = true;
+      }
+      setNotice(permanent ? "Journey deleted. Your library content is unchanged." : "Journey archived. Restore it from Manage archive.");
+    } catch (error) {
+      setError(`${error instanceof Error ? error.message : "Could not remove journey."}${archived ? " The journey is archived; you can restore it or retry deletion in Manage archive." : ""}`);
+    } finally {
+      if (archived) {
+        setJourneys(current => current.filter(item => item.id !== journey.id));
+        if (selectedJourneyId === journey.id) { setSelectedJourneyId(null); setDraft(emptyDraft); setDraftAssets([]); setShareUrl(""); setPersonalShareUrl(""); setSavedDraft(""); }
+      }
+      setJourneyWorking(false);
+    }
+  }
+
   function editJourney(journey: JourneySummary) {
     if (!draftSaved && (draftAssets.length || draft.title) && !window.confirm("Replace the current unsaved draft with this journey?")) return;
     setSelectedJourneyId(journey.id);
@@ -1425,7 +1455,7 @@ export function TrustAppIngestion({
     {view === "home" && <SageHome contentCount={videos.length + libraryAssets.length} journeys={journeys} metrics={metrics} onNavigate={setView} onNew={newJourney} onEdit={editJourney} draftCount={draftAssets.length} />}
     {view === "library" && !reviewing && workspaceBooted && session && workspaceId && <LibrarySourceRefresh key={workspaceId} workspaceId={workspaceId} userId={session.user.id} onComplete={async isActive => { await Promise.all([loadVideos(workspaceId, isActive), loadSources(workspaceId, isActive)]); }} />}
     {view === "library" && <SageLibrary key={workspaceId} videos={videos} libraryAssets={libraryAssets} assetDraft={libraryAssetDraft} onAssetDraftChange={setLibraryAssetDraft} onSaveAsset={saveLibraryAsset} saving={working} onArchive={archiveVideo} onDeleteAsset={deleteLibraryAsset} onSaveContext={saveVideoContext} onImport={() => setView("sources")} onAddItems={addLibraryItems} draftCount={draftAssets.length} onOpenDraft={() => setView("editor")} />}
-    {view === "journeys" && <SageJourneys onArchive={() => setView("archive")} journeys={journeys} onEdit={editJourney} onNew={newJourney} onResume={() => setView("editor")} hasDraft={draftAssets.length > 0 || Boolean(draft.title)} />}
+    {view === "journeys" && <SageJourneys onRemove={removeJourney} working={journeyWorking} readOnly={reviewing} onArchive={() => setView("archive")} journeys={journeys} onEdit={editJourney} onNew={newJourney} onResume={() => setView("editor")} hasDraft={draftAssets.length > 0 || Boolean(draft.title)} />}
     {view === "editor" && <SageJourneyEditor key={workspaceId} draft={draft} assets={draftAssets} onChange={setDraft} onMove={moveDraftAsset} onRemove={removeFromJourney} onLibrary={() => setView("library")} onBack={() => setView("journeys")} onSave={publishJourney} onGenerate={generateJourney} working={journeyWorking} shareUrl={shareUrl} personalUrl={personalShareUrl} published={publishedJourney} contacts={contacts} onContactShare={createContactShare} saved={draftSaved} />}
     {view === "metrics" && <><header className="sage-page-heading"><div><h1>Activity</h1><p>See how buyers engage with your proof.</p></div><button onClick={() => setView("tracking")}>Tracked links</button></header><MetricsView metrics={metrics} videos={videos} sources={sources} journeys={journeys} contacts={contacts} tracking={tracking} /><SageRecipients contacts={contacts} metrics={metrics} journeys={journeys} /></>}
     {view === "tracking" && <><button className="sage-back" onClick={() => setView("metrics")}>Back to activity</button><LinkTrackingView draft={trackingDraft} journeys={journeys} tracking={tracking} working={trackingWorking} onDraftChange={setTrackingDraft} onCreate={createTrackingLink} /></>}
