@@ -34,3 +34,22 @@ assert.equal(preview.length, 2);
 assert.equal(validateSpendRows(preview.slice(0,1), '2026-05').length, 1);
 assert.throws(() => validateSpendRows(preview, '2026-05'), /Row 2/);
 console.log('XLSX, XLS, sheet selection, Excel/Mac dates, cached formulas and preview row exclusion passed.');
+const report = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(report, XLSX.utils.aoa_to_sheet([
+  ['Monthly report'], ['Company'], ['August 2026'], [],
+  ['', 'Transaction date', 'Transaction type', 'Name', 'Amount', 'Balance'],
+  ['Vendor'], ['', '08/03/2026', 'Expense', 'Vendor', 25, 25],
+  ['Total for Vendor', '', '', '', 25], ['TOTAL', '', '', '', 25], ['Accrual Basis']
+]), 'Report');
+const reportRows = parseSpendSheet(report, 'Report', '2026-08');
+assert.equal(reportRows.length, 1);
+assert.equal(reportRows[0].date, '2026-08-03');
+assert.equal(reportRows[0].spend, 25);
+if (process.argv[2]) {
+  const actual = readSpendWorkbook(fs.readFileSync(process.argv[2]));
+  const rows = parseSpendSheet(actual.workbook, actual.sheets[0], '2026-08');
+  const total = rows.reduce((sum, row) => sum + Math.round(row.spend * 100), 0) / 100;
+  assert.equal(total, 24603.23);
+  console.log(`Provided workbook: ${rows.length} transactions, $${total}; totals excluded.`);
+}
+console.log('Grouped accounting report headers, US dates and subtotal exclusion passed.');
