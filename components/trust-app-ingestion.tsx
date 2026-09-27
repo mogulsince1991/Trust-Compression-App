@@ -1142,7 +1142,7 @@ export function TrustAppIngestion({
   }
 
   async function publishJourney(publish = true) {
-    if (!workspaceId || !session || !draftAssets.length || (!publish && publishedJourney)) return;
+    if (journeyWorking || !workspaceId || !session || !draftAssets.length || (!publish && publishedJourney)) return;
     setJourneyWorking(true);
     setNotice("");
     setError("");
@@ -1166,20 +1166,26 @@ export function TrustAppIngestion({
         })),
         publish
       };
-      const response = await fetch(selectedJourneyId ? `/api/journeys/${selectedJourneyId}` : "/api/journeys", { method: selectedJourneyId ? "PATCH" : "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` }, body: JSON.stringify(body) });
-      const result = (await response.json()) as { id?: string; shareUrl?: string; error?: string };
+      const fresh = await supabase?.auth.getSession();
+      const accessToken = fresh?.data.session?.access_token;
+      if (!accessToken) throw new Error("Your session expired. Sign in again; your draft is kept in this browser.");
+      const response = await fetch(selectedJourneyId ? `/api/journeys/${selectedJourneyId}` : "/api/journeys", { method: selectedJourneyId ? "PATCH" : "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` }, body: JSON.stringify(body) });
+      const result = (await response.json().catch(() => ({ error: "The server did not confirm the save. Your draft is kept. Check Journeys before trying again." }))) as { id?: string; shareUrl?: string; error?: string };
       if (!response.ok || !result.shareUrl) throw new Error(result.error ?? "Could not publish the journey.");
       const absoluteUrl = new URL(result.shareUrl, window.location.origin).toString();
       const nextJourneyId = result.id ?? selectedJourneyId;
       setShareUrl(absoluteUrl);
       setSelectedJourneyId(nextJourneyId);
       setNotice(publish ? "Journey published. The share link is ready." : "Private draft saved.");
+      try {
       const nextJourneys = await loadJourneys(workspaceId);
-      await Promise.all([loadVideos(workspaceId), loadSources(workspaceId), loadContacts(workspaceId), loadSocialProfiles(workspaceId), loadTracking(workspaceId)]);
-      await loadMetrics(workspaceId, nextJourneys ?? []);
+      if (!nextJourneys) throw new Error("Journey list unavailable");
       if (nextJourneyId) {
         const refreshed = (nextJourneys ?? []).find((journey) => journey.id === nextJourneyId);
         if (refreshed) hydrateJourneyDraft(refreshed);
+      }
+      } catch {
+        setNotice("Journey saved. The list could not refresh; reopen Journeys to see it. You do not need to save again.");
       }
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Could not publish the journey.");
@@ -1454,7 +1460,7 @@ export function TrustAppIngestion({
     {reviewing && <ReviewSessionBanner expiresAt={String(session?.user.app_metadata.review_expires_at || "")} />}
     {view === "home" && <SageHome contentCount={videos.length + libraryAssets.length} journeys={journeys} metrics={metrics} onNavigate={setView} onNew={newJourney} onEdit={editJourney} draftCount={draftAssets.length} />}
     {view === "library" && !reviewing && workspaceBooted && session && workspaceId && <LibrarySourceRefresh key={workspaceId} workspaceId={workspaceId} userId={session.user.id} onComplete={async isActive => { await Promise.all([loadVideos(workspaceId, isActive), loadSources(workspaceId, isActive)]); }} />}
-    {view === "library" && <SageLibrary key={`${session?.user.id}:${workspaceId}`} selectionKey={`library-selection:${session?.user.id}:${workspaceId}`} videos={videos} libraryAssets={libraryAssets} assetDraft={libraryAssetDraft} onAssetDraftChange={setLibraryAssetDraft} onSaveAsset={saveLibraryAsset} saving={working} onArchive={archiveVideo} onDeleteAsset={deleteLibraryAsset} onSaveContext={saveVideoContext} onImport={() => setView("sources")} onAddItems={addLibraryItems} draftCount={draftAssets.length} onOpenDraft={() => setView("editor")} />}
+    {view === "library" && <SageLibrary key={`${session?.user.id}:${workspaceId}`} selectionKey={`library-selection:${session?.user.id}:${workspaceId}`} videos={videos} libraryAssets={libraryAssets} assetDraft={libraryAssetDraft} onAssetDraftChange={setLibraryAssetDraft} onSaveAsset={saveLibraryAsset} saving={working} onArchive={archiveVideo} onDeleteAsset={deleteLibraryAsset} onSaveContext={saveVideoContext} onImport={importSource} onAddItems={addLibraryItems} draftCount={draftAssets.length} onOpenDraft={() => setView("editor")} />}
     {view === "journeys" && <SageJourneys onRemove={removeJourney} working={journeyWorking} readOnly={reviewing} onArchive={() => setView("archive")} journeys={journeys} onEdit={editJourney} onNew={newJourney} onResume={() => setView("editor")} hasDraft={draftAssets.length > 0 || Boolean(draft.title)} />}
     {view === "editor" && <SageJourneyEditor key={workspaceId} draft={draft} assets={draftAssets} onChange={setDraft} onMove={moveDraftAsset} onRemove={removeFromJourney} onLibrary={() => setView("library")} onBack={() => setView("journeys")} onSave={publishJourney} onGenerate={generateJourney} working={journeyWorking} shareUrl={shareUrl} personalUrl={personalShareUrl} published={publishedJourney} contacts={contacts} onContactShare={createContactShare} saved={draftSaved} />}
     {view === "metrics" && <><header className="sage-page-heading"><div><h1>Activity</h1><p>See how buyers engage with your proof.</p></div><button onClick={() => setView("tracking")}>Tracked links</button></header><MetricsView metrics={metrics} videos={videos} sources={sources} journeys={journeys} contacts={contacts} tracking={tracking} /><SageRecipients contacts={contacts} metrics={metrics} journeys={journeys} /></>}
@@ -1465,6 +1471,7 @@ export function TrustAppIngestion({
     {view === "sources" && <SourcesView sources={sources} importing={working} onImport={importSource} onReimport={reimportSource} onDelete={deleteSource} />}
     {view === "workspace" && <WorkspaceView workspace={currentWorkspace} workspaces={workspaces} members={workspaceMembers} invites={workspaceInvites} integrationKeys={integrationKeys} integrationSecret={integrationSecret} mcpUrl={mcpUrl} canManage={canManageWorkspace} working={working} createName={createWorkspaceName} renameName={renameWorkspaceName} inviteDraft={inviteDraft} onCreateNameChange={setCreateWorkspaceName} onRenameNameChange={setRenameWorkspaceName} onInviteDraftChange={setInviteDraft} onCreate={createWorkspace} onRename={renameWorkspace} onInvite={inviteWorkspaceMember} onSwitch={switchWorkspace} onMemberRoleChange={updateWorkspaceMemberRole} onRemoveMember={removeWorkspaceMember} onRevokeInvite={revokeWorkspaceInvite} onCreateIntegrationKey={createIntegrationKey} onAttachIntegrationKey={attachIntegrationKey} onRevokeIntegrationKey={revokeIntegrationKey} />}
     {view === "workspace" && isPlatformAdmin && !reviewing && <ReviewAccessSettings />}
+    {view === "workspace" && <section className="sage-panel"><h2>How-to videos</h2><p>Walkthroughs provided by Unmarked will appear here and alongside the relevant tools. No videos are published yet.</p>{["Adding content", "Creating and sharing journeys", "Understanding customer activity"].map(title => <label key={title}>{title}<input disabled placeholder="Video link coming soon" /></label>)}</section>}
     {view === "socialProfiles" && socialProfileReportId && <SocialProfileReportPage profile={selectedReportProfile} working={working} onBack={closeSocialProfileReport} onRefresh={() => selectedReportProfile ? analyzeSocialProfile(selectedReportProfile) : undefined} onImportChannel={() => selectedReportProfile ? importSocialProfile(selectedReportProfile, "channel") : undefined} onImportVideo={videoId => selectedReportProfile ? importSocialProfile(selectedReportProfile, "video", videoId) : undefined} />}
     {view === "socialProfiles" && !socialProfileReportId && <SocialProfilesView draft={socialProfileDraft} profiles={socialProfiles} selectedProfileId={selectedSocialProfileId} working={working} onDraftChange={setSocialProfileDraft} onSave={saveSocialProfile} onAnalyze={analyzeSocialProfile} onRemove={removeSocialProfile} onViewReport={openSocialProfileReport} />}
     {inviteToShare && <InviteShareDialog invite={inviteToShare} onClose={() => setInviteToShare(null)} />}

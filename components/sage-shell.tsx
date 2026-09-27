@@ -38,16 +38,7 @@ export function AppearanceControl() {
 }
 
 const navigation = [{ view: "home", label: "Home", icon: Home }, { view: "library", label: "Library", icon: BookOpen }, { view: "journeys", label: "Journeys", icon: Route }, { view: "metrics", label: "Activity", icon: Activity }, { view: "reports", label: "Reports", icon: BarChart3 }] as const;
-function AppBrand({ onHome }: { onHome: () => void }) {
-  return <div className="sage-brand">
-    <a className="sage-wordmark" href="/app/home" onClick={event => { if (!event.metaKey && !event.ctrlKey) { event.preventDefault(); onHome(); } }}>TrustTale<span className="sage-brand-dot" /></a>
-    <a className="sage-maker" href="https://unmarked.media" target="_blank" rel="noopener noreferrer" aria-label="TrustTale is an app by Unmarked. Visit Unmarked (opens in a new tab)">
-      <span><span className="sage-maker-app">an app </span>by</span>
-      <img className="sage-maker-light" src="/unmarked-black.png" alt="Unmarked" width="500" height="136" />
-      <img className="sage-maker-dark" src="/unmarked-white.png" alt="Unmarked" width="500" height="136" />
-    </a>
-  </div>;
-}
+import { AppBrand } from "./app-brand";
 export function SageShell({ view, workspaces, workspaceId, onSwitch, onNavigate, onSignOut, isAdmin, children, busy, notice, error, onDismiss }: { view: SageView; workspaces: WorkspaceRow[]; workspaceId: string | null; onSwitch: (id: string) => void; onNavigate: (view: SageView) => void; onSignOut: () => void; isAdmin: boolean; children: ReactNode; busy?: boolean; notice: string; error: string; onDismiss: () => void }) {
   const [more, setMore] = useState(false);
   useEffect(() => { document.getElementById("sage-content")?.scrollTo(0, 0); }, [view]);

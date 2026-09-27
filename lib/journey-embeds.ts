@@ -143,6 +143,9 @@ export function normalizeJourneyEmbed(input: { url: string; title?: string | nul
   }
 
   const extension = readExtension(pathname);
+  if (["jpg", "jpeg", "png", "webp", "gif", "avif"].includes(extension)) {
+    return { assetType: "embed", sourcePlatform: "image", title, sourceUrl, embedUrl: sourceUrl, thumbnailUrl: sourceUrl, metadata: { provider: "image", extension } };
+  }
   if (["mp4", "webm", "mov"].includes(extension)) {
     return { assetType: "video", sourcePlatform: "direct_video", title, sourceUrl, embedUrl: sourceUrl, thumbnailUrl: null, metadata: { provider: "direct_video", measurement: "observed_playback" } };
   }

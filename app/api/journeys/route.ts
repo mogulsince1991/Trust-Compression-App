@@ -166,10 +166,17 @@ export async function POST(request: Request) {
         position: index + 1
       }))
     );
-    if (assetsError) throw assetsError;
+    if (assetsError) {
+      const { error: cleanupError } = await supabase.from("journeys").delete().eq("id", journey.id).eq("workspace_id", workspaceId);
+      if (cleanupError) console.error("Could not remove incomplete journey", cleanupError.message);
+      throw new Error(assetsError.message);
+    }
 
     const serviceSupabase = createServiceSupabaseClient();
-    if (serviceSupabase) await recordActivity(serviceSupabase, { workspaceId, actorUserId: user.id, eventType: "journey_created", entityType: "journey", entityId: journey.id, surface: "journeys", metadata: { assetCount: resolvedAssets.length } });
+    if (serviceSupabase) {
+      try { await recordActivity(serviceSupabase, { workspaceId, actorUserId: user.id, eventType: "journey_created", entityType: "journey", entityId: journey.id, surface: "journeys", metadata: { assetCount: resolvedAssets.length } }); }
+      catch (error) { console.error("Journey saved but activity logging failed", error); }
+    }
 
     return NextResponse.json({ id: journey.id, shareToken: journey.share_token, shareUrl: `/share/${journey.share_token}` });
   } catch (error) {

@@ -5,6 +5,7 @@ import type { FormEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
+import { AppBrand } from "@/components/app-brand";
 
 type InvitePageProps = {
   params: { token: string };
@@ -126,7 +127,7 @@ export default function InvitePage({ params }: InvitePageProps) {
   return (
     <main className="role-gate">
       <section className="gate-intro">
-        <span>Workspace invite</span>
+        <AppBrand /><span>Workspace invite</span>
         <h1>Join the company library.</h1>
         <p>Sign in with the email your administrator invited. Your workspace access is added automatically, including when you sign in from the main app.</p>
       </section>

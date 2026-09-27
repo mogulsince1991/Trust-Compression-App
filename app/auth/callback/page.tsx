@@ -3,6 +3,7 @@
 import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
+import { AppBrand } from "@/components/app-brand";
 
 type Diagnostic = {
   status: "loading" | "success" | "error";
@@ -152,7 +153,7 @@ export default function AuthCallbackPage() {
   return (
     <main className="role-gate auth-first-screen">
       <section className="gate-intro auth-callback-diagnostic">
-        <span>Trust Compression</span>
+        <AppBrand />
         <h1>{diagnostic.title}</h1>
         <p>{diagnostic.detail}</p>
         {diagnostic.evidence && <pre>{diagnostic.evidence}</pre>}

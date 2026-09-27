@@ -7,6 +7,7 @@ import { formatJourneyAssetLabel, type JourneyAsset } from "@/components/trust-a
 import { PlaybackClock } from "@/lib/playback-clock";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 import { browserExcluded } from "@/lib/analytics-preferences";
+import { AppBrand } from "./app-brand";
 import { assetThumbnailUrl } from "./asset-thumbnail";
 import { VimeoPlayer } from "./vimeo-player";
 import { loadYouTubePlayer, type YouTubePlayer } from "@/lib/youtube-player";
@@ -442,6 +443,7 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
         </a>
       )}
       </footer>
+      <AppBrand />
     </main>
   );
 }

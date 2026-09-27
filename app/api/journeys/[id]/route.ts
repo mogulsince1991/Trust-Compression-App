@@ -78,35 +78,12 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     if (body.assets || body.videoIds) {
       const videoIds = Array.from(new Set(body.videoIds ?? [])).filter(Boolean);
       const resolvedAssets = await resolveJourneyAssets(supabase, workspaceId, Array.isArray(body.assets) ? body.assets : [], videoIds);
-      await supabase.from("journey_assets").delete().eq("journey_id", params.id);
-      if (resolvedAssets.length) {
-        const { error: assetsError } = await supabase.from("journey_assets").insert(
-          resolvedAssets.map((asset, index) => ({
-            journey_id: params.id,
-            library_asset_id: asset.library_asset_id ?? null,
-            video_id: asset.video_id,
-            asset_type: asset.asset_type,
-            source_platform: asset.source_platform,
-            title: asset.title,
-            source_url: asset.source_url,
-            embed_url: asset.embed_url,
-            thumbnail_url: asset.thumbnail_url,
-            summary: asset.summary,
-            note: asset.note,
-            metadata: asset.metadata,
-            position: index + 1
-          }))
-        );
-        if (assetsError) throw assetsError;
-      }
-
-      if (resolvedAssets[0]) {
-        await supabase
-          .from("journeys")
-          .update({ cover_url: resolvedAssets[0].thumbnail_url ?? null, updated_at: new Date().toISOString() })
-          .eq("id", params.id)
-          .eq("workspace_id", workspaceId);
-      }
+      const { error: assetsError } = await supabase.rpc("replace_journey_assets", {
+        p_journey_id: params.id,
+        p_workspace_id: workspaceId,
+        p_assets: resolvedAssets.map((asset, index) => ({ ...asset, position: index + 1 }))
+      });
+      if (assetsError) throw new Error(assetsError.message);
     }
 
     return NextResponse.json({

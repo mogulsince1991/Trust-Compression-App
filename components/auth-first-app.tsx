@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 import { AppearanceControl } from "./sage-shell";
+import { AppBrand } from "./app-brand";
 import { TrustAppIngestion } from "@/components/trust-app-ingestion";
 
 const noMagicLinkEmails = new Set(["admin@unmarked.media"]);
@@ -124,7 +125,7 @@ export function AuthFirstApp({
 
   return (
     <div className="sage-app sage-auth">
-      <header className="sage-auth-header"><a className="sage-wordmark" href="/">TrustTale<span className="sage-brand-dot" /></a><AppearanceControl /></header>
+      <header className="sage-auth-header"><AppBrand /><AppearanceControl /></header>
       <main className="sage-auth-layout">
         <section className="sage-auth-intro"><span className="sage-eyebrow">Proof. Ready to share.</span><h1>Turn your best work into your next conversation.</h1><p>Bring together videos, project stories, and documents. Share the right proof with each buyer, and see what connects.</p><div className="sage-auth-example"><span className="sage-badge is-live">A more confident buyer</span><h2>Show them.<br />Don't just tell them.</h2><p>One focused journey. Everything they need to take the next step.</p></div></section>
         <form className="sage-panel sage-auth-card" onSubmit={signIn}>
