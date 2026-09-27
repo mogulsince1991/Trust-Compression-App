@@ -9,12 +9,13 @@ export async function GET(request: Request) {
   try {
     const params = new URL(request.url).searchParams;
     const workspaceId = params.get("workspaceId") ?? "";
-    const { start, end } = monthBounds(params.get("month") ?? "");
+    const period = params.get("month") === "all" ? null : monthBounds(params.get("month") ?? "");
     const context = await requireWorkspaceAccess(request, workspaceId);
     const rows: any[] = [];
     for (let offset = 0; ; offset += 500) {
-      const { data, error } = await context.userSupabase.from("contractor_spend_rows").select("id,spend_date,vendor,channel,campaign,spend,source_file,raw")
-        .eq("workspace_id", workspaceId).gte("spend_date", start).lte("spend_date", end).order("spend_date").order("id").range(offset, offset + 499);
+      let query = context.userSupabase.from("contractor_spend_rows").select("id,spend_date,vendor,channel,campaign,spend,source_file,raw").eq("workspace_id", workspaceId);
+      if (period) query = query.gte("spend_date", period.start).lte("spend_date", period.end);
+      const { data, error } = await query.order("spend_date").order("id").range(offset, offset + 499);
       if (error) throw error;
       rows.push(...(data ?? [])); if (!data || data.length < 500) break;
     }
@@ -45,8 +46,23 @@ export async function DELETE(request: Request) {
   try {
     const body = await request.json();
     const context = requireWorkspaceManager(await requireWorkspaceAccess(request, String(body.workspaceId ?? "")));
-    const { error } = await context.userSupabase.from("contractor_spend_rows").delete().eq("workspace_id", body.workspaceId).eq("id", String(body.id ?? ""));
+    const { data, error } = await context.userSupabase.from("contractor_spend_rows").delete().eq("workspace_id", body.workspaceId).eq("id", String(body.id ?? "")).select("id");
     if (error) throw error;
+    if (!data?.length) return NextResponse.json({ error: "This entry no longer exists or is not accessible." }, { status: 404 });
+    return NextResponse.json({ ok: true });
+  } catch (error) { return failure(error); }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const body = await request.json();
+    const context = requireWorkspaceManager(await requireWorkspaceAccess(request, String(body.workspaceId ?? "")));
+    const [row] = validateSpendRows([body.row], String(body.row?.date ?? "").slice(0, 7));
+    const { data, error } = await context.userSupabase.from("contractor_spend_rows").update({
+      spend_date: row.date, vendor: row.vendor, channel: row.channel || null, campaign: row.campaign || null, spend: row.spend, source_file: row.sourceFile || null,
+    }).eq("workspace_id", body.workspaceId).eq("id", String(body.id ?? "")).select("id");
+    if (error) throw error;
+    if (!data?.length) return NextResponse.json({ error: "This entry no longer exists or is not accessible." }, { status: 404 });
     return NextResponse.json({ ok: true });
   } catch (error) { return failure(error); }
 }

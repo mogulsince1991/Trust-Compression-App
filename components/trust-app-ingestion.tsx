@@ -21,6 +21,7 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { useRouter, usePathname } from "next/navigation";
 import { SageShell, sageRoutes, viewFromPath } from "./sage-shell";
+import { InviteShareDialog } from "./invite-share-dialog";
 import { SageLibrary } from "./sage-library";
 import { LibrarySourceRefresh } from "./library-source-refresh";
 import { ReviewAccessSettings } from "./review-access-settings";
@@ -222,6 +223,8 @@ export function TrustAppIngestion({
   const [trackingDraft, setTrackingDraft] = useState<TrackingDraft>(emptyTrackingDraft);
   const [socialProfileDraft, setSocialProfileDraft] = useState<SocialProfileDraft>(emptySocialProfileDraft);
   const [inviteDraft, setInviteDraft] = useState({ email: "", role: "member" });
+  const [inviteToShare, setInviteToShare] = useState<{ email: string; inviteUrl: string; expires_at?: string } | null>(null);
+  useEffect(() => { setInviteToShare(null); }, [workspaceId]);
   const [createWorkspaceName, setCreateWorkspaceName] = useState("");
   const [renameWorkspaceName, setRenameWorkspaceName] = useState("");
   const [journeyWorking, setJourneyWorking] = useState(false);
@@ -867,7 +870,8 @@ export function TrustAppIngestion({
       const result = (await response.json()) as { invite?: Record<string, any>; error?: string };
       if (!response.ok || !result.invite) throw new Error(result.error ?? "Could not invite teammate.");
       setInviteDraft({ email: "", role: inviteDraft.role });
-      setNotice(`Invite ready for ${result.invite.email}.`);
+      setNotice(`Access authorized for ${result.invite.email}. Copy and send the invite link; no email was sent.`);
+      setInviteToShare({ email: result.invite.email, inviteUrl: result.invite.inviteUrl, expires_at: result.invite.expires_at });
       await loadWorkspaceInvites(workspaceId);
       await loadWorkspaceMembers(workspaceId);
     } catch (nextError) {
@@ -1428,6 +1432,7 @@ export function TrustAppIngestion({
     {view === "workspace" && isPlatformAdmin && !reviewing && <ReviewAccessSettings />}
     {view === "socialProfiles" && socialProfileReportId && <SocialProfileReportPage profile={selectedReportProfile} working={working} onBack={closeSocialProfileReport} onRefresh={() => selectedReportProfile ? analyzeSocialProfile(selectedReportProfile) : undefined} onImportChannel={() => selectedReportProfile ? importSocialProfile(selectedReportProfile, "channel") : undefined} onImportVideo={videoId => selectedReportProfile ? importSocialProfile(selectedReportProfile, "video", videoId) : undefined} />}
     {view === "socialProfiles" && !socialProfileReportId && <SocialProfilesView draft={socialProfileDraft} profiles={socialProfiles} selectedProfileId={selectedSocialProfileId} working={working} onDraftChange={setSocialProfileDraft} onSave={saveSocialProfile} onAnalyze={analyzeSocialProfile} onRemove={removeSocialProfile} onViewReport={openSocialProfileReport} />}
+    {inviteToShare && <InviteShareDialog invite={inviteToShare} onClose={() => setInviteToShare(null)} />}
   </SageShell>;
 }
 

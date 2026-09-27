@@ -19,7 +19,7 @@ export function validateSpendRows(rows: any[], month: string) {
   });
 }
 
-export function parseSpendCsv(text: string, month: string) {
+export function parseSpendCsv(text: string, month: string, validate = true) {
   const records: string[][] = [];
   let record: string[] = [], cell = "", quoted = false;
   text = text.replace(/^\uFEFF/, "");
@@ -36,5 +36,8 @@ export function parseSpendCsv(text: string, month: string) {
   record.push(cell); if (record.some(value => value.trim())) records.push(record);
   const headers = (records.shift() ?? []).map(value => value.trim().toLowerCase().replace(/[ _-]/g, ""));
   for (const required of ["date", "vendor", "spend"]) if (!headers.includes(required)) throw new Error(`CSV needs a ${required} column. Use the template.`);
-  return validateSpendRows(records.map(values => Object.fromEntries(headers.map((key, index) => [key === "documenturl" || key === "sourcefile" ? "sourceFile" : key, values[index] ?? ""]))), month);
+  const rows = records.map(values => Object.fromEntries(headers.map((key, index) => [key === "documenturl" || key === "sourcefile" ? "sourceFile" : key, values[index] ?? ""])));
+  if (!rows.length) throw new Error("This file has headers but no spend rows.");
+  if (rows.length > 1000) throw new Error("Import at most 1,000 rows at a time.");
+  return validate ? validateSpendRows(rows, month) : rows;
 }

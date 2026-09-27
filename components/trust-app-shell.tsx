@@ -377,7 +377,8 @@ export function WorkspaceView({
       {canManage && (
         <section className="workspace-grid">
           <article className="workspace-panel">
-            <div className="mini-head"><span>Invite a teammate</span><UserPlus /></div>
+            <div className="mini-head"><span>Authorize an email</span><UserPlus /></div>
+            <p>Add a client or teammate to this workspace's invitation allowlist. No invitation email is sent automatically. Copy and send their invitation link after adding them.</p>
             <form className="workspace-inline-form" onSubmit={onInvite}>
               <label><span>Email</span><input type="email" value={inviteDraft.email} onChange={(event) => onInviteDraftChange({ ...inviteDraft, email: event.target.value })} placeholder="teammate@company.com" required /></label>
               <label><span>Role</span><select value={inviteDraft.role} onChange={(event) => onInviteDraftChange({ ...inviteDraft, role: event.target.value })}>
@@ -387,12 +388,12 @@ export function WorkspaceView({
                 <option value="viewer">Viewer</option>
                 <option value="admin">Admin</option>
               </select></label>
-              <button className="wide-action" disabled={working}><UserPlus />Create invitation</button>
+              <button className="wide-action" disabled={working}><UserPlus />Authorize and get invite link</button>
             </form>
           </article>
 
           <article className="workspace-panel">
-            <div className="mini-head"><span>Pending invitations</span><strong>{activeInvites.length}</strong></div>
+            <div className="mini-head"><span>Invitation allowlist</span><strong>{activeInvites.length}</strong></div>
             <div className="workspace-invite-list">
               {activeInvites.length ? activeInvites.map((invite) => (
                 <article className="workspace-invite" key={invite.id}>
@@ -400,7 +401,7 @@ export function WorkspaceView({
                   <button className="icon-mini" onClick={() => void navigator.clipboard.writeText(invite.inviteUrl)} aria-label="Copy invitation link"><Copy /></button>
                   <button className="icon-mini danger" onClick={() => onRevokeInvite(invite)} aria-label="Revoke invitation"><X /></button>
                 </article>
-              )) : <div className="workspace-empty"><Users /><p>No pending invitations.</p></div>}
+              )) : <div className="workspace-empty"><Users /><p>No emails awaiting acceptance.</p></div>}
             </div>
           </article>
         </section>
