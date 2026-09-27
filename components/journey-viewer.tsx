@@ -55,7 +55,7 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
   const sessionId = useRef<string>("");
   const trackedOpen = useRef(false);
   const rootRef = useRef<HTMLElement>(null);
-  const isYouTube = activeAsset?.embedUrl?.includes("youtube.com/embed");
+  const isYouTube = /(?:youtube\.com|youtube-nocookie\.com)\/embed\//.test(activeAsset?.embedUrl ?? "");
   const driveFileId = activeAsset?.assetType === "video" ? extractDriveFileId(activeAsset.sourceUrl ?? activeAsset.embedUrl) : null;
   const directVideoUrl = !driveFileId && activeAsset?.assetType === "video" && /\.(mp4|webm|mov)(\?|$)/i.test(activeAsset.embedUrl ?? "") ? activeAsset!.embedUrl : null;
   const activated = activatedId === activeAsset?.id;
@@ -124,6 +124,8 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
       url.searchParams.set("enablejsapi", "1");
       url.searchParams.set("playsinline", "1");
       url.searchParams.set("autoplay", "1");
+      url.searchParams.set("loop", "0");
+      for (const parameter of ["playlist", "list", "listType", "index", "start", "end", "t"]) url.searchParams.delete(parameter);
       const position = positions.current.get(activeAsset.id);
       if (position) url.searchParams.set("start", String(Math.floor(position)));
       if (typeof window !== "undefined") url.searchParams.set("origin", window.location.origin);
@@ -197,6 +199,8 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
     clock.resetSample();
     let lastReported = clock.secondsWatched;
     let disposed = false;
+    let endedThisPlayback = false;
+    let playedThisPlayback = false;
     let youtube: YouTubePlayer | null = null;
     const source = video ? "html5_player" : "youtube_player";
     function emit(eventType: "asset_started" | "asset_progress" | "asset_completed") {
@@ -207,13 +211,15 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
     }
     function flush() {
       if (clock.secondsWatched > lastReported) { emit("asset_progress"); lastReported = clock.secondsWatched; }
-      if (!preview && !clock.completed) try { localStorage.setItem(storageKey, JSON.stringify({ assetId: asset.id, position: positions.current.get(asset.id) ?? 0 })); } catch {}
+      if (!preview && !endedThisPlayback) try { localStorage.setItem(storageKey, JSON.stringify({ assetId: asset.id, position: positions.current.get(asset.id) ?? 0 })); } catch {}
     }
     function sample() {
-      if (disposed) return;
+      if (disposed || endedThisPlayback) return;
       try {
         if (!video && !youtube?.getCurrentTime) return;
         const playing = video ? !video.paused && !video.ended && !video.seeking && video.readyState >= 3 : youtube!.getPlayerState() === 1;
+        if (playing) playedThisPlayback = true;
+        if (!video && youtube!.getPlayerState() === 0 && playedThisPlayback) { ended(); return; }
         const hadStarted = clock.started;
         positions.current.set(asset.id, video ? video.currentTime : youtube!.getCurrentTime());
         clock.sample({ position: video ? video.currentTime : youtube!.getCurrentTime(),
@@ -225,13 +231,16 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
       } catch { clock.resetSample(); }
     }
     function pause() { sample(); clock.resetSample(); flush(); setStarted(false); }
-    function play() { clock.resetSample(); sample(); setStarted(true); }
+    function play() { if (endedThisPlayback || disposed) return; playedThisPlayback = true; clock.resetSample(); sample(); setStarted(true); }
     function seek() { clock.resetSample(); flush(); }
     function ended() {
-      sample(); flush(); setStarted(false);
+      if (disposed || endedThisPlayback || !playedThisPlayback) return;
+      endedThisPlayback = true;
+      flush(); setStarted(false);
       if (clock.started && !clock.completed) { clock.completed = true; emit("asset_completed"); }
       positions.current.set(asset.id, 0);
-      setActivatedId(null); setLoadedId(null);
+      setActivatedId(journey.assets[active + 1]?.id ?? null); setLoadedId(null);
+      if (!preview) try { localStorage.removeItem(storageKey); } catch {}
       if (active === journey.assets.length - 1) {
         setFinished(true);
         try { localStorage.removeItem(storageKey); } catch {}
@@ -320,8 +329,7 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
 
   function previous() {
     if (active === 0) return;
-    setActivatedId(null); setLoadedId(null);
-    setActive((current) => Math.max(current - 1, 0));
+    selectAsset(active - 1);
   }
 
   function trackCtaClick() {
@@ -337,7 +345,12 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
     });
   }
 
-  function selectAsset(index: number) { setActive(index); setActivatedId(null); setLoadedId(null); setShowContents(false); }
+  function selectAsset(index: number, resumePosition = 0) {
+    const asset = journey.assets[index];
+    if (!asset) return;
+    positions.current.set(asset.id, resumePosition);
+    setActive(index); setActivatedId(null); setLoadedId(null); setShowContents(false); setFinished(false);
+  }
   function retry() { setActivatedId(null); setLoadedId(null); setFailed(false); setSlow(false); }
   function restart() { positions.current.clear(); selectAsset(0); setResume(null); setFinished(false); try { localStorage.removeItem(storageKey); } catch {} }
   const fullUrl = journey.share_token ? `/share/${encodeURIComponent(journey.share_token)}?asset=${encodeURIComponent(activeAsset?.id ?? "")}` : null;
@@ -357,7 +370,7 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
         <h1>{journey.heading || journey.title}</h1>
         {journey.description && <p className="jx-subheadline">{journey.description}</p>}
       </header>
-      {resume && <div className="jx-resume"><span>Pick up where you left off on this browser?</span><button onClick={() => { positions.current.set(resume.assetId, resume.position); selectAsset(journey.assets.findIndex(a => a.id === resume.assetId)); setResume(null); }}>Continue</button><button onClick={restart}>Start over</button></div>}
+      {resume && <div className="jx-resume"><span>Pick up where you left off on this browser?</span><button onClick={() => { selectAsset(journey.assets.findIndex(a => a.id === resume.assetId), resume.position); setResume(null); }}>Continue</button><button onClick={restart}>Start over</button></div>}
       <div className="jx-layout">
       <section className="jx-stage" ref={stageRef} tabIndex={0} aria-label="Journey player" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
         <div className={`jx-media${driveFileId ? " jx-drive-original" : ""}`} style={driveFileId ? { "--drive-ratio": driveRatio } as React.CSSProperties : undefined} key={activeAsset.id}>
