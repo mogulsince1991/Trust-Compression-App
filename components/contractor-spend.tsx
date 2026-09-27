@@ -23,7 +23,7 @@ export function ContractorSpend({ workspaceId, token }: { workspaceId: string; t
   useEffect(() => {
     setPending([]); setWorkbook(null); setSheets([]); setSheetName(""); importRequest.current++; setReading(false);
     return () => { importRequest.current++; };
-  }, [workspaceId, month]);
+  }, [workspaceId]);
   useEffect(() => {
     const controller = new AbortController();
     setRows([]); setCanEdit(false); setLoadingRows(true);
@@ -65,12 +65,13 @@ export function ContractorSpend({ workspaceId, token }: { workspaceId: string; t
   async function save(importRows: any[], documentName: string) {
     setBusy(true); setMessage("");
     try {
-      const response = await fetch("/api/metrics/contractor/spend", { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ workspaceId, month, rows: importRows, documentName }) });
-      const result = await response.json(); if (!response.ok) throw new Error(result.error);
+      const validated = validateSpendRows(importRows, month);
+      const response = await fetch("/api/metrics/contractor/spend", { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ workspaceId, month, rows: validated, documentName }), signal: AbortSignal.timeout(30000) });
+      const result = await response.json(); if (!response.ok) throw new Error(result.error || `Save failed (${response.status}). Please try again.`);
       setPending([]); setRevision(value => value + 1);
       setEntry({ date: "", vendor: "", spend: "", sourceFile: "" });
       setMessage(`${result.added} rows added; ${result.skipped} identical rows skipped. Run a new report to use the updated spend.`);
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Could not save spend."); }
+    } catch (error) { setMessage(error instanceof Error && error.name === "TimeoutError" ? "The save took too long to respond. Check saved entries before retrying; an identical retry will not add duplicates." : error instanceof Error ? error.message : "Could not save spend."); }
     finally { setBusy(false); }
   }
   async function remove(row: any) {
@@ -109,7 +110,9 @@ export function ContractorSpend({ workspaceId, token }: { workspaceId: string; t
         <p>Uncheck totals, notes and rows you do not want counted. Only selected rows will be saved and validated. Date, vendor and amount are required; choose which optional fields to retain.</p>
         <div className={styles.actionRow}>{[["channel", "Channel"], ["campaign", "Campaign"], ["sourceFile", "Document URL"]].map(([key, label]) => <label key={key}><input type="checkbox" disabled={busy} checked={optionalFields.includes(key)} onChange={() => setOptionalFields(current => current.includes(key) ? current.filter(value => value !== key) : [...current, key])} />{label}</label>)}</div>
         <div style={{ overflowX: "auto", maxHeight: 300 }}><table><thead><tr><th>Include</th><th>Date</th><th>Vendor</th><th>Amount</th><th>Channel</th><th>Campaign</th></tr></thead><tbody>{pending.map((row, index) => <tr key={index}><td><input type="checkbox" aria-label={`Include row ${index + 1}: ${row.vendor}`} disabled={busy} checked={!excluded.includes(index)} onChange={() => setExcluded(current => current.includes(index) ? current.filter(value => value !== index) : [...current, index])} /></td><td>{row.date}</td><td>{row.vendor}</td><td>{row.spend}</td><td>{row.channel}</td><td>{row.campaign}</td></tr>)}</tbody></table></div>
-        <button disabled={busy || excluded.length === pending.length} onClick={() => void save(pending.filter((_, index) => !excluded.includes(index)).map(row => ({ ...row, channel: optionalFields.includes("channel") ? row.channel : "", campaign: optionalFields.includes("campaign") ? row.campaign : "", sourceFile: optionalFields.includes("sourceFile") ? row.sourceFile : "" })), sheetName ? `${name} / ${sheetName}` : name)}>Confirm selected rows</button><button disabled={busy} onClick={() => setPending([])}>Cancel</button></div>}
+        <p>Saving to month: <strong>{month}</strong>. Change Import month above if needed; your selected rows will stay here.</p>
+        <button type="button" disabled={busy || excluded.length === pending.length} onClick={() => void save(pending.filter((_, index) => !excluded.includes(index)).map(row => ({ ...row, channel: optionalFields.includes("channel") ? row.channel : "", campaign: optionalFields.includes("campaign") ? row.campaign : "", sourceFile: optionalFields.includes("sourceFile") ? row.sourceFile : "" })), sheetName ? `${name} / ${sheetName}` : name)}>{busy ? "Saving selected rows..." : "Confirm selected rows"}</button><button type="button" disabled={busy} onClick={() => setPending([])}>Cancel</button>
+        {message && <p role="alert">{message}</p>}</div>}
       <form className={styles.formGrid} onSubmit={event => { event.preventDefault(); try { void save(validateSpendRows([entry], month), "Manual entry"); } catch (error) { setMessage(String(error)); } }}>
         <label>Date<input type="date" required value={entry.date} onChange={e => setEntry({ ...entry, date: e.target.value })} /></label>
         <label>Vendor / channel<input required placeholder="Google Ads, Meta, agency fee..." value={entry.vendor} onChange={e => setEntry({ ...entry, vendor: e.target.value })} /></label>
