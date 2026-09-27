@@ -104,6 +104,7 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
       if (event.source !== window.parent || event.data?.type !== "trusttale:init" || event.data?.version !== 1) return;
       if (!/^https?:\/\//.test(event.origin)) return;
       parentOrigin = event.origin;
+      document.documentElement.dataset.embedAutoSize = "true";
       lastHeight = 0;
       measure();
     }
@@ -112,7 +113,7 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
     observer.observe(root);
     // Only the non-sensitive handshake is broadcast; dimensions go to the verified parent.
     window.parent.postMessage({ type: "trusttale:ready", version: 1 }, "*");
-    return () => { observer.disconnect(); cancelAnimationFrame(pending); window.removeEventListener("message", initialize); };
+    return () => { observer.disconnect(); cancelAnimationFrame(pending); window.removeEventListener("message", initialize); delete document.documentElement.dataset.embedAutoSize; };
   }, [variant, preview]);
 
   const embedUrl = useMemo(() => {

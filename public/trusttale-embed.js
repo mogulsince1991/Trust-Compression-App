@@ -26,7 +26,7 @@
     if (event.data.type === "trusttale:ready") {
       event.source.postMessage({ type: "trusttale:init", version: 1 }, origin);
     } else if (event.data.type === "trusttale:resize" && typeof event.data.height === "number" && Number.isFinite(event.data.height)) {
-      var height = Math.max(320, Math.min(4000, Math.ceil(event.data.height)));
+      var height = Math.max(1, Math.min(100000, Math.ceil(event.data.height) + 2));
       frame.style.height = height + "px";
       frame.style.display = "block";
       frame.height = String(height);

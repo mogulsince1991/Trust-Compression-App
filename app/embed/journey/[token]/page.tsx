@@ -1,10 +1,12 @@
 import { notFound } from "next/navigation";
+import type { CSSProperties } from "react";
 import { JourneyViewer, type PublicJourney } from "@/components/journey-viewer";
 import type { JourneyAssetType } from "@/lib/journey-embeds";
 import { createPublicSupabaseClient } from "@/lib/supabase";
 
 type EmbedPageProps = {
   params: { token: string };
+  searchParams?: { background?: string; text?: string; transparent?: string };
 };
 
 type JourneyRow = {
@@ -38,7 +40,10 @@ type JourneySendRow = {
   share_token: string;
 };
 
-export default async function EmbedJourneyPage({ params }: EmbedPageProps) {
+export default async function EmbedJourneyPage({ params, searchParams = {} }: EmbedPageProps) {
+  const color = (value: string | undefined, fallback: string) => typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
+  const background = searchParams.transparent === "1" ? "transparent" : color(searchParams.background, "#171b18");
+  const text = color(searchParams.text, "#f4f2eb");
   const supabase = createPublicSupabaseClient();
   if (!supabase) notFound();
 
@@ -82,6 +87,7 @@ export default async function EmbedJourneyPage({ params }: EmbedPageProps) {
   }));
 
   return (
+    <div className="journey-embed-host" style={{ "--embed-bg": background, "--embed-text": text } as CSSProperties}>
     <JourneyViewer
       variant="embed"
       journey={{
@@ -97,5 +103,6 @@ export default async function EmbedJourneyPage({ params }: EmbedPageProps) {
         assets: orderedAssets
       }}
     />
+    </div>
   );
 }

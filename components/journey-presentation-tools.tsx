@@ -31,11 +31,17 @@ export function JourneyEmbedCode({ shareUrl, expanded = false }: { shareUrl: str
   const [height, setHeight] = useState("760");
   const [sizing, setSizing] = useState("auto");
   const [copyError, setCopyError] = useState(false);
+  const [transparent, setTransparent] = useState(false);
+  const [background, setBackground] = useState("#171b18");
+  const [textColor, setTextColor] = useState("#f4f2eb");
   let url = "";
   try {
     const source = new URL(shareUrl);
     if (["https:", "http:"].includes(source.protocol) && source.pathname.startsWith("/share/")) {
       source.pathname = source.pathname.replace("/share/", "/embed/journey/");
+      source.searchParams.set("background", background);
+      source.searchParams.set("text", textColor);
+      source.searchParams.set("transparent", transparent ? "1" : "0");
       url = source.href;
     }
   } catch {}
@@ -44,7 +50,14 @@ export function JourneyEmbedCode({ shareUrl, expanded = false }: { shareUrl: str
   const scriptOrigin = new URL(url).origin;
   const code = `<iframe${sizing === "auto" ? " data-trusttale-embed" : ""} src="${escaped}" title="Explore our work" width="100%" height="${height}" style="display:block;border:0;border-radius:16px;" loading="lazy" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>${sizing === "auto" ? `\n<script async src="${scriptOrigin}/trusttale-embed.js"></script>` : ""}`;
   return <details className="sage-panel" open={expanded || undefined}><summary>Embed on a website or landing page</summary>
-    <p>Paste into a custom HTML block. Automatic sizing fits the journey to its content without cropping videos. Test on your published page, since some editors block scripts.</p>
+    <p>Paste the full code into a custom HTML block. Automatic height expands the embed to show the whole journey without internal scrollbars. Your page can still scroll normally.</p>
+    <div className="sage-form-columns">
+      <label><span>Transparent background</span><input type="checkbox" checked={transparent} onChange={event => { setTransparent(event.target.checked); setCopied(false); }} /></label>
+      <label>Background color<input type="color" value={background} disabled={transparent} onChange={event => { setBackground(event.target.value); setCopied(false); }} /></label>
+      <label>Text color<input type="color" value={textColor} onChange={event => { setTextColor(event.target.value); setCopied(false); }} /></label>
+    </div>
+    <div style={{ padding: 16, border: "1px solid currentColor", borderRadius: 12, background: transparent ? "repeating-conic-gradient(#ddd 0% 25%, #fff 0% 50%) 0 / 16px 16px" : background }}><span style={{ color: textColor }}>Your journey headline and text</span></div>
+    <p>Colors apply to the journey, not the video or document provider's own player. For transparency, choose text that contrasts with your website.</p>
     <label>Sizing<select value={sizing} onChange={e => { setSizing(e.target.value); setCopied(false); }}><option value="auto">Automatic height (recommended)</option><option value="fixed">Fixed height (no script)</option></select></label>
     <label>{sizing === "auto" ? "Initial / fallback height" : "Embed height"}<select value={height} onChange={e => { setHeight(e.target.value); setCopied(false); }}><option value="600">Compact - 600px</option><option value="760">Standard - 760px</option><option value="960">Tall videos / documents - 960px</option></select></label>
     <p>Visitors can open the full journey in a new tab. If your builder strips scripts, choose fixed height; the journey remains scrollable. Existing embeds need this new snippet for automatic sizing.</p>
