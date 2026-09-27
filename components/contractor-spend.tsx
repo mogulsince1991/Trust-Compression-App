@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import type { WorkBook } from "xlsx";
-import { parseSpendCsv, validateSpendRows } from "@/lib/metrics/contractor/spend-input";
+import { parseSpendCsv, validateSpendRows, spendMonths } from "@/lib/metrics/contractor/spend-input";
 import styles from "./contractor-metrics-console.module.css";
 import { ContractorSpendLedger } from "./contractor-spend-ledger";
 
@@ -19,6 +19,9 @@ export function ContractorSpend({ workspaceId, token }: { workspaceId: string; t
   const [allMonths, setAllMonths] = useState(false), [loadingRows, setLoadingRows] = useState(true);
   const [excluded, setExcluded] = useState<number[]>([]);
   const [optionalFields, setOptionalFields] = useState(["channel", "campaign", "sourceFile"]);
+  const detectedMonths = spendMonths(pending.filter((_, index) => !excluded.includes(index)));
+  const detectedMonth = detectedMonths.length === 1 ? detectedMonths[0] : "";
+  useEffect(() => { if (detectedMonth) { setMonth(detectedMonth); setMessage(""); } }, [detectedMonth]);
   useEffect(() => { setExcluded([]); }, [pending]);
   useEffect(() => {
     setPending([]); setWorkbook(null); setSheets([]); setSheetName(""); importRequest.current++; setReading(false);
@@ -65,8 +68,11 @@ export function ContractorSpend({ workspaceId, token }: { workspaceId: string; t
   async function save(importRows: any[], documentName: string) {
     setBusy(true); setMessage("");
     try {
-      const validated = validateSpendRows(importRows, month);
-      const response = await fetch("/api/metrics/contractor/spend", { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ workspaceId, month, rows: validated, documentName }), signal: AbortSignal.timeout(30000) });
+      const importMonths = spendMonths(importRows);
+      if (documentName !== "Manual entry" && importMonths.length > 1) throw new Error(`This selection spans ${importMonths.join(", ")}. Select rows for one month at a time. No rows were saved.`);
+      const saveMonth = documentName !== "Manual entry" && importMonths.length === 1 ? importMonths[0] : month;
+      const validated = validateSpendRows(importRows, saveMonth);
+      const response = await fetch("/api/metrics/contractor/spend", { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ workspaceId, month: saveMonth, rows: validated, documentName }), signal: AbortSignal.timeout(30000) });
       const result = await response.json(); if (!response.ok) throw new Error(result.error || `Save failed (${response.status}). Please try again.`);
       setPending([]); setRevision(value => value + 1);
       setEntry({ date: "", vendor: "", spend: "", sourceFile: "" });
@@ -110,9 +116,9 @@ export function ContractorSpend({ workspaceId, token }: { workspaceId: string; t
         <p>Uncheck totals, notes and rows you do not want counted. Only selected rows will be saved and validated. Date, vendor and amount are required; choose which optional fields to retain.</p>
         <div className={styles.actionRow}>{[["channel", "Channel"], ["campaign", "Campaign"], ["sourceFile", "Document URL"]].map(([key, label]) => <label key={key}><input type="checkbox" disabled={busy} checked={optionalFields.includes(key)} onChange={() => setOptionalFields(current => current.includes(key) ? current.filter(value => value !== key) : [...current, key])} />{label}</label>)}</div>
         <div style={{ overflowX: "auto", maxHeight: 300 }}><table><thead><tr><th>Include</th><th>Date</th><th>Vendor</th><th>Amount</th><th>Channel</th><th>Campaign</th></tr></thead><tbody>{pending.map((row, index) => <tr key={index}><td><input type="checkbox" aria-label={`Include row ${index + 1}: ${row.vendor}`} disabled={busy} checked={!excluded.includes(index)} onChange={() => setExcluded(current => current.includes(index) ? current.filter(value => value !== index) : [...current, index])} /></td><td>{row.date}</td><td>{row.vendor}</td><td>{row.spend}</td><td>{row.channel}</td><td>{row.campaign}</td></tr>)}</tbody></table></div>
-        <p>Saving to month: <strong>{month}</strong>. Change Import month above if needed; your selected rows will stay here.</p>
+        <p role="status">{detectedMonth ? <>Detected expense month: <strong>{detectedMonth}</strong>. Selected automatically from your transaction dates. Original expense dates are preserved.</> : detectedMonths.length > 1 ? `This file spans ${detectedMonths.join(", ")}. Select rows for one month at a time; nothing has been saved.` : "No readable expense dates found. Check the Date column before confirming."}</p>
         <button type="button" disabled={busy || excluded.length === pending.length} onClick={() => void save(pending.filter((_, index) => !excluded.includes(index)).map(row => ({ ...row, channel: optionalFields.includes("channel") ? row.channel : "", campaign: optionalFields.includes("campaign") ? row.campaign : "", sourceFile: optionalFields.includes("sourceFile") ? row.sourceFile : "" })), sheetName ? `${name} / ${sheetName}` : name)}>{busy ? "Saving selected rows..." : "Confirm selected rows"}</button><button type="button" disabled={busy} onClick={() => setPending([])}>Cancel</button>
-        {message && <p role="alert">{message}</p>}</div>}
+        {message && <div role="alert" style={{ border: "2px solid currentColor", borderRadius: 8, padding: 12, marginTop: 12 }}><strong>Import feedback</strong><p>{message}</p></div>}</div>}
       <form className={styles.formGrid} onSubmit={event => { event.preventDefault(); try { void save(validateSpendRows([entry], month), "Manual entry"); } catch (error) { setMessage(String(error)); } }}>
         <label>Date<input type="date" required value={entry.date} onChange={e => setEntry({ ...entry, date: e.target.value })} /></label>
         <label>Vendor / channel<input required placeholder="Google Ads, Meta, agency fee..." value={entry.vendor} onChange={e => setEntry({ ...entry, vendor: e.target.value })} /></label>

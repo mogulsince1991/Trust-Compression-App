@@ -7,7 +7,10 @@ function load(file) {
   return exports;
 }
 const { readSpendWorkbook, parseSpendSheet } = load('lib/metrics/contractor/spend-excel.ts');
-const { validateSpendRows, parseSpendCsv } = load('lib/metrics/contractor/spend-input.ts');
+const { validateSpendRows, parseSpendCsv, spendMonths } = load('lib/metrics/contractor/spend-input.ts');
+assert.equal(spendMonths([{date:'2026-08-03'}, {date:'2026-08-20'}]).join(','), '2026-08');
+assert.equal(spendMonths([{date:'2026-08-03'}, {date:'2026-09-01'}]).join(','), '2026-08,2026-09');
+assert.equal(spendMonths([{date:''}]).length, 0);
 for (const bookType of ['xlsx', 'biff8']) {
   const book = XLSX.utils.book_new();
   const sheet = XLSX.utils.aoa_to_sheet([['Date', 'Vendor', 'Spend'], [46143, 'Google Ads', 1234.50], ['2026-05-02', 'Meta', 100]]);
@@ -48,6 +51,7 @@ assert.equal(reportRows[0].spend, 25);
 if (process.argv[2]) {
   const actual = readSpendWorkbook(fs.readFileSync(process.argv[2]));
   const rows = parseSpendSheet(actual.workbook, actual.sheets[0], '2026-08');
+  assert.equal(spendMonths(rows).join(','), '2026-08');
   const total = rows.reduce((sum, row) => sum + Math.round(row.spend * 100), 0) / 100;
   assert.equal(total, 24603.23);
   console.log(`Provided workbook: ${rows.length} transactions, $${total}; totals excluded.`);

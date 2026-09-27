@@ -1,3 +1,7 @@
+export function spendMonths(rows: { date?: unknown }[]) {
+  return [...new Set(rows.map(row => String(row.date ?? "").trim()).filter(date => /^\d{4}-(0[1-9]|1[0-2])-\d{2}$/.test(date)).map(date => date.slice(0, 7)))].sort();
+}
+
 export function monthBounds(month: string) {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error("Choose a valid month.");
   const [year, number] = month.split("-").map(Number);
@@ -10,7 +14,8 @@ export function validateSpendRows(rows: any[], month: string) {
   return rows.map((row, index) => {
     const date = String(row.date ?? "").trim(), vendor = String(row.vendor ?? "").trim();
     const amount = String(row.spend ?? "").trim().replace(/[$,]/g, "");
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date < start || date > end) throw new Error(`Row ${index + 1}: use a date within ${month} in YYYY-MM-DD format.`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error(`Row ${index + 1}: the date "${date}" could not be read. Use an Excel date or YYYY-MM-DD.`);
+    if (date < start || date > end) throw new Error(`Row ${index + 1}: ${date} is not within the selected month ${month}. Choose ${date.slice(0, 7)} as the import month or exclude this row. Do not change the expense date.`);
     if (!vendor || vendor.length > 200) throw new Error(`Row ${index + 1}: enter a vendor or marketing channel.`);
     if (!/^-?\d+(\.\d{1,2})?$/.test(amount) || !Number.isFinite(Number(amount)) || Math.abs(Number(amount)) >= 1e12) throw new Error(`Row ${index + 1}: enter a valid dollar amount with at most two decimal places.`);
     const source = String(row.sourceFile ?? "").trim();
