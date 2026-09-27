@@ -65,6 +65,8 @@ const providers = load("lib/source-import.ts", { fetch: async (url, options) => 
     fetch: async (url, options) => { requests++; assert.equal(JSON.parse(options.body).fullRefresh, true); return Response.json(url.includes("folder") ? { error: "Reconnect Drive" } : {}, { status: url.includes("folder") ? 401 : 200 }); }
   }, "\nexport { refreshCollections as testRefresh };");
   const a = client.testRefresh("owner:workspace", "workspace");
+  const subscriber = () => {};
+  a.listeners.add(subscriber);
   const b = client.testRefresh("owner:workspace", "workspace");
   assert.equal(a, b, "StrictMode/re-entry joins an active refresh");
   await a.done;
@@ -73,7 +75,12 @@ const providers = load("lib/source-import.ts", { fetch: async (url, options) => 
   assert.equal(a.progress.completed, 2);
   assert.match(a.progress.errors[0], /Folder: Reconnect Drive/);
   await client.testRefresh("owner:workspace", "workspace").done;
-  assert.equal(requests, 2, "Navigation must not repeat a completed collection check");
+  assert.equal(requests, 2, "Renders during the same library visit must not repeat a completed check");
+  const other = client.testRefresh("owner:other-workspace", "other-workspace");
+  await other.done;
+  assert.equal(requests, 4, "A different workspace gets its own refresh");
+  await client.testRefresh("owner:other-workspace", "other-workspace").done;
+  assert.equal(requests, 6, "A completed run with no remaining visitor is released for the next visit");
   let source = { id: "source", workspace_id: "workspace", metadata: { kind: "youtube_playlist", sourceUrl: "https://youtube.com/playlist?list=PLtest" }, status: "connected" };
   let claimed = true, imported = 0, privateCalls = 0;
   const serverDb = {

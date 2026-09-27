@@ -173,7 +173,7 @@ export function SocialProfilesView({
                 <strong>{snapshot?.displayName || selected.displayName || "Not provided"}</strong>
               </div>
               <div>
-                <span>Cached refresh</span>
+                <span>Last updated</span>
                 <strong>{formatDateTime(snapshot?.refreshedAt ?? null) ?? "Waiting for first analysis"}</strong>
               </div>
             </div>
@@ -189,7 +189,7 @@ export function SocialProfilesView({
             <div className="tracking-empty-state social-profile-empty-state">
               <span>Profile snapshot</span>
               <h3>Select a saved profile.</h3>
-            <p>Choose a saved profile to inspect its saved state and refresh the cached snapshot.</p>
+            <p>Choose a profile to view its latest analysis.</p>
           </div>
         )}
       </section>

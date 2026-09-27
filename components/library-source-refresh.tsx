@@ -53,7 +53,7 @@ function refreshCollections(key: string, workspaceId: string) {
       update({ errors: [error instanceof Error ? error.message : "Could not load connected sources."] });
     } finally {
       update({ running: false });
-      // Retain the settled run: navigation and React remounts must not reimport.
+      if (!run.listeners.size && activeRuns.get(key) === run) activeRuns.delete(key);
     }
   })();
   return run;
@@ -74,13 +74,19 @@ export function LibrarySourceRefresh({ workspaceId, userId, onComplete }: { work
       try { await callback.current(() => active); }
       catch { if (active) setProgress(value => ({ ...value, errors: [...value.errors, "Content refreshed, but the library could not reload. Try again."] })); }
     });
-    return () => { active = false; run.listeners.delete(listener); };
+    return () => {
+      active = false; run.listeners.delete(listener);
+      // React's immediate effect replay reuses this run; a later visit starts fresh.
+      setTimeout(() => {
+        if (!run.listeners.size && !run.progress.running && activeRuns.get(`${userId}:${workspaceId}`) === run) activeRuns.delete(`${userId}:${workspaceId}`);
+      }, 0);
+    };
   }, [workspaceId, userId]);
 
   if (!progress.running || !progress.total) return null;
   return <div className="library-refresh" style={{ position: "fixed", bottom: 80, right: 16, width: "auto", padding: "6px 10px", fontSize: 12, zIndex: 10 }}>
     <p role="status" aria-live="polite"><RefreshCw size={16} className={progress.running ? "spin" : ""} aria-hidden="true" />
-      Checking connected collections...
+      Refreshing sources {progress.completed} of {progress.total}
     </p>
   </div>;
 }

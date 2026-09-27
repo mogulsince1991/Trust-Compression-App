@@ -680,22 +680,25 @@ export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorksp
 
       {tab === "config" ? (
         <div className={styles.stack}>
-          {workspaceId && session && <ContractorSpend key={workspaceId} workspaceId={workspaceId} token={session.access_token} />}
           <section className={styles.builderHeader}>
             <div>
               <span>Report Config</span>
-              <h2>Choose what your report measures.</h2>
-              <p className={styles.copy}>Name a metric, choose what to count or calculate, then choose where it appears. Save config and run a new report to see changes.</p>
+              <h2>Report settings</h2>
+              <p className={styles.copy}>Manage expenses, metrics, and report layout. Save settings, then run a new report to apply changes. Spend entries save separately.</p>
             </div>
             <div className={styles.heroActions}>
-              <button className={styles.secondary} type="button" onClick={() => addSection("metric_band")}><Plus />Add metric band</button>
-              <button className={styles.secondary} type="button" onClick={() => addSection("table")}><Plus />Add table</button>
               <button className={styles.primary} type="button" disabled={working === "save-rule-set"} onClick={saveRuleSet}><Save />{working === "save-rule-set" ? "Saving..." : "Save config"}</button>
             </div>
           </section>
 
+          <details className={styles.configGroup} open>
+            <summary><strong>Marketing spend</strong><span>Import expenses and manage saved entries</span></summary>
+            {workspaceId && session && <ContractorSpend key={workspaceId} workspaceId={workspaceId} token={session.access_token} />}
+          </details>
+          <details className={styles.configGroup}>
+            <summary><strong>Metrics</strong><span>Choose what to measure and how to calculate it</span></summary>
           <section className={styles.controlGrid}>
-            <Panel title="Metric catalog" icon={<Sparkles />}>
+            <Panel title="Your metrics" icon={<Sparkles />}>
               <div className={styles.actionRow}>
                 <button className={styles.secondary} type="button" onClick={addMetric}><Plus />Add metric</button>
                 {selectedMetric ? <button className={styles.ghost} type="button" onClick={() => removeMetric(selectedMetric.id)}><Trash2 />Remove metric</button> : null}
@@ -763,6 +766,13 @@ export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorksp
             </Panel>
           </section>
 
+          </details>
+          <details className={styles.configGroup}>
+            <summary><strong>Report layout</strong><span>Arrange cards, tables, and sections</span></summary>
+            <div className={styles.actionRow}>
+              <button className={styles.secondary} type="button" onClick={() => addSection("metric_band")}><Plus />Add metric group</button>
+              <button className={styles.secondary} type="button" onClick={() => addSection("table")}><Plus />Add table</button>
+            </div>
           <Panel title="Dashboard sections" icon={<BarChart3 />}>
             <div className={styles.stack}>
               {sections.map((section: any) => (
@@ -798,6 +808,9 @@ export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorksp
             </div>
           </Panel>
 
+          </details>
+          <details className={styles.configGroup}>
+            <summary><strong>Advanced settings</strong><span>Sales rules, metric placement, and data definitions</span></summary>
           <section className={styles.controlGrid}>
             <Panel title="Document sales rules" icon={<Database />}>
               <div className={styles.formGrid}>
@@ -921,6 +934,7 @@ export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorksp
               ) : <p className={styles.copy}>Select a dataset to inspect or edit it.</p>}
             </Panel>
           </section>
+          </details>
         </div>
       ) : null}
 

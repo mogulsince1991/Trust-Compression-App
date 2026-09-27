@@ -67,7 +67,7 @@ export function RoleGate({
       <section className="gate-intro">
         <span>Trust Library</span>
         <h1>Choose your workspace.</h1>
-        <p>Start with sources, then turn imported videos into proof journeys.</p>
+        <p>Add your content, organize a collection, and share it with a customer.</p>
       </section>
       <section className="role-grid">
         {(Object.keys(roles) as RoleId[]).map((id) => (
@@ -196,7 +196,7 @@ export function SourcesView({
           </button>
           <div className="source-next-steps">
             <span>What happens next</span>
-            <p>Import creates the library. From there, select proof, build a journey, and share a measurable link with a buyer.</p>
+            <p>Imported content appears in your Library. Choose items, create a journey, and send the link to a customer.</p>
           </div>
         </form>
       </section>
@@ -313,7 +313,7 @@ export function WorkspaceView({
         <div>
           <span>Company workspace</span>
           <h1>{workspace?.name ?? "Workspace"}</h1>
-          <p>One shared home for the company library, journeys, attribution, CRM connections, and reporting.</p>
+          <p>Manage your company, teammates, and connected tools.</p>
         </div>
         <div className="workspace-identity">
           <Building2 />
@@ -342,7 +342,7 @@ export function WorkspaceView({
 
         <article className="workspace-panel">
           <div className="mini-head"><span>Workspace settings</span><ShieldCheck /></div>
-          <p>Owners and admins control the company name and team access. Workspace IDs stay permanent even when the name changes.</p>
+          <p>Owners and admins can update the company name and manage team access.</p>
           <form className="workspace-inline-form" onSubmit={onRename}>
             <label><span>Workspace name</span><input value={renameName} onChange={(event) => onRenameNameChange(event.target.value)} minLength={2} maxLength={80} disabled={!canManage} required /></label>
             <button className="wide-action" disabled={working || !canManage}><Check />Save name</button>

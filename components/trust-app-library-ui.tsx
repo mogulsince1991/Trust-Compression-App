@@ -99,7 +99,7 @@ export function LibraryConfigurator({
     <section className="library-configurator">
       <div className="config-topline">
         <span>{videos.length} videos</span>
-        <p>Browse the newest proof first, select a video, then shape the searchable context or add it to a journey.</p>
+        <p>Find a video, update its details, or add it to a journey.</p>
       </div>
       <section className="library-shelf">
         <section className="library-strip" aria-label="Video library selector">

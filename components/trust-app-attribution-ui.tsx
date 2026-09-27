@@ -72,7 +72,7 @@ export function MetricsView({
           <span>Metrics</span>
           <h2>What content moves buyers?</h2>
         </div>
-        <p>A tighter scoreboard up top, then ranked proof assets beneath it. This view should help you see what earns attention, what gets clicked, and which links start producing downstream conversion signals.</p>
+        <p>See which content customers open, watch, and act on.</p>
       </div>
 
       <div className="metrics-scoreboard">
@@ -80,7 +80,7 @@ export function MetricsView({
         <MetricCard label="Measured watch time" value={`${Math.round(observedWatchSeconds(metrics.views) / 60)} min`} detail="Observed YouTube, Vimeo and direct-video playback only. Drive, Loom and social embeds: unavailable, not zero. Internal/test traffic excluded." />
         <MetricCard label="Journey opens" value={String(opens.length)} detail="Public or contact-specific journey page opens." />
         <MetricCard label="Video starts" value={String(starts.length)} detail="Videos started inside journeys." />
-        <MetricCard label="Tracked redirects" value={String(redirects.length)} detail="First-click hits through /t/{slug}." />
+        <MetricCard label="Tracked redirects" value={String(redirects.length)} detail="Clicks on your tracked links." />
         <MetricCard label="Tracked conversions" value={String(linkConversions.length)} detail={`${rate(linkConversions.length, Math.max(linkPageViews.length, 1))} of destination page views converted.`} />
         <MetricCard label="Attributed revenue" value={formatCurrencyValue(attributedRevenue)} detail="Purchase value captured against tracked links." />
         <MetricCard label="CTA rate" value={rate(ctas.length + linkCtas.length, opens.length + linkPageViews.length)} detail="Click-through across journeys and tracked destinations." />
@@ -119,8 +119,8 @@ export function MetricsView({
             <strong>{contacts.length}</strong>
           </div>
           <div className="metric-grid metrics-secondary-cards">
-            <MetricCard label="Known viewers" value={String(viewers.size)} detail="Anonymous viewer IDs plus future contacts." />
-            <MetricCard label="Stitched visitors" value={String(stitchedVisitors.length)} detail="Visitors matched to a contact, email, or CRM identity." />
+            <MetricCard label="Unique viewers" value={String(viewers.size)} detail="Distinct viewers, including visitors who have not been identified." />
+            <MetricCard label="Identified visitors" value={String(stitchedVisitors.length)} detail="Visitors matched to a contact, email, or CRM identity." />
             <MetricCard label="Tracked contacts" value={String(trackedContacts)} detail="Known contacts now tied to tracked-link activity." />
             <MetricCard label="Contact events" value={String(contactEvents.length)} detail="Events attached to contact-specific journey links." />
           </div>
@@ -135,7 +135,7 @@ export function MetricsView({
             <MetricCard label="Sources" value={String(sources.length)} detail="Connected public/imported sources." />
             <MetricCard label="Videos" value={String(videos.length)} detail="Imported workspace videos." />
             <MetricCard label="Drive sources" value={String(sources.filter((source) => source.platform === "google_drive").length)} detail="Public Drive folders." />
-            <MetricCard label="YouTube sources" value={String(sources.filter((source) => source.platform === "youtube").length)} detail="Videos, playlists, channels, RSS/API imports." />
+            <MetricCard label="YouTube sources" value={String(sources.filter((source) => source.platform === "youtube").length)} detail="Connected YouTube videos, playlists, and channels." />
           </div>
         </section>
       </div>
@@ -181,7 +181,7 @@ export function LinkTrackingView({
           </div>
           <div className="tracking-panel-copy">
             <h2>Create tracked redirects without leaving the workflow.</h2>
-            <p>Every link becomes a measurable handoff. Tie it to a journey when needed, then keep first-click attribution and destination-site events attached to the original trust path.</p>
+            <p>Create a trackable link to see when customers visit your website. Connect a journey to keep related activity together.</p>
           </div>
           <form className="brief-grid tracking-form" onSubmit={onCreate}>
             <label>
@@ -251,14 +251,14 @@ export function LinkTrackingView({
         </div>
         <div className="tracking-board-intro">
           <h2>Scan active redirects and see which ones are actually moving buyers.</h2>
-          <p>Keep the operational actions close to the performance signal: copy the redirect, install the script, and check which links are earning visits, landing views, CTA clicks, downstream conversions, and known-contact matches.</p>
+          <p>Manage your shared links and see visits, button clicks, and conversions.</p>
         </div>
         <div className="tracking-overview tracking-overview-compact">
           <MetricCard label="Tracked links" value={String(tracking.links.length)} detail="Active redirects in this workspace." />
           <MetricCard label="Unique visits" value={String(totalUniqueVisits)} detail="Distinct first-click visits across all tracked links." />
-          <MetricCard label="Identified visitors" value={String(identifiedVisitors.length)} detail="Visitors stitched to a contact, email, or CRM identity." />
+          <MetricCard label="Identified visitors" value={String(identifiedVisitors.length)} detail="Visitors matched to a customer record." />
           <MetricCard label="Known contacts" value={String(knownContacts)} detail="Distinct people now tied to tracked-link activity." />
-          <MetricCard label="Attributed revenue" value={formatCurrencyValue(totalRevenue)} detail="Purchase value captured through tc.js." />
+          <MetricCard label="Attributed revenue" value={formatCurrencyValue(totalRevenue)} detail="Purchase amounts recorded by your website tracking." />
           <MetricCard label="CTA rate" value={totalCtaRate} detail="Destination CTA clicks divided by destination page views." />
         </div>
         {summaries.length ? (
@@ -303,7 +303,7 @@ export function LinkTrackingView({
                   <div className="tracking-signal-grid">
                     <div><span>Top destination pages</span><strong>{summary.topPages.length ? summary.topPages.join(" / ") : "Waiting for page views"}</strong></div>
                     <div><span>Known contacts</span><strong>{summary.topContacts.length ? summary.topContacts.join(" / ") : "No identified contacts yet"}</strong></div>
-                    <div><span>Strongest events</span><strong>{summary.topEvents.length ? summary.topEvents.join(" / ") : "No downstream signals yet"}</strong></div>
+                    <div><span>Strongest events</span><strong>{summary.topEvents.length ? summary.topEvents.join(" / ") : "No conversions recorded yet"}</strong></div>
                   </div>
                   <div className="tracking-link-actions">
                     <a className="text-link" href={summary.link.trackingUrl} target="_blank" rel="noreferrer">
