@@ -36,7 +36,9 @@ export function SageLibrary({ selectionKey, videos, libraryAssets, assetDraft, o
   const deferredQuery = useDeferredValue(query.toLowerCase());
   useEffect(() => { if (previewId && window.matchMedia("(max-width: 760px)").matches) document.getElementById("sage-content")?.scrollTo(0, 0); }, [previewId]);
   const videoById = new Map(videos.map(v => [v.id, v]));
-  const items = [...videos.map(v => buildJourneyAssetFromVideo(v)), ...libraryAssets.map(libraryItem)];
+  const items = [...videos.map(v => ({ asset: buildJourneyAssetFromVideo(v), added: v.created_at })), ...libraryAssets.map(a => ({ asset: libraryItem(a), added: a.createdAt }))]
+    .sort((a, b) => (Date.parse(b.added || "") || 0) - (Date.parse(a.added || "") || 0) || a.asset.id.localeCompare(b.asset.id))
+    .map(item => item.asset);
   const key = (a: JourneyAsset) => `${a.videoId ? "v" : "a"}:${a.videoId || a.libraryAssetId}`;
   const visible = items.filter(a => (filter === "all" || (filter === "video" ? a.assetType === "video" : a.assetType !== "video")) && `${a.title} ${a.summary || ""} ${a.sourcePlatform} ${JSON.stringify(a.metadata?.customContext || {})} ${videoById.get(a.videoId)?.tags?.join(" ") || ""}`.toLowerCase().includes(deferredQuery));
   const selected = items.filter(a => selectedIds.includes(key(a)));

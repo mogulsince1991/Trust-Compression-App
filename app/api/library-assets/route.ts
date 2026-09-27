@@ -22,7 +22,8 @@ export async function GET(request: Request) {
       .select("id,workspace_id,asset_type,source_platform,title,source_url,embed_url,thumbnail_url,summary,metadata,created_at,updated_at,archived_at")
       .eq("workspace_id", workspaceId)
       .is("archived_at", null)
-      .order("updated_at", { ascending: false })
+      .order("created_at", { ascending: false })
+      .order("id")
       .limit(200);
 
     if (error) throw httpError(500, error.message);

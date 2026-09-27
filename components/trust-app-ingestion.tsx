@@ -388,7 +388,6 @@ export function TrustAppIngestion({
         .select("id,title,source_platform,source_url,embed_url,thumbnail_url,duration_seconds,summary,suggested_use,proof_type,buying_stage,sales_category,funnel_stage,published_at,created_at,metadata,tags")
         .eq("workspace_id", nextWorkspaceId)
         .is("deleted_at", null)
-        .order("published_at", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false })
         .order("id")
         .range(offset, offset + 499);

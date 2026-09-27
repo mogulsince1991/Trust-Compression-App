@@ -17,14 +17,15 @@ export async function enrichEmbed<T extends NormalizedJourneyEmbed>(asset: T, ti
         metadata: { ...asset.metadata, ...(data.videoMediaMetadata || {}), measurement: "unavailable" } };
     } catch { return asset; }
   }
-  const endpoint = asset.sourcePlatform === "vimeo" ? "https://vimeo.com/api/oembed.json" : asset.sourcePlatform === "loom" ? "https://www.loom.com/v1/oembed" : null;
+  const endpoint = asset.sourcePlatform === "youtube" ? "https://www.youtube.com/oembed" : asset.sourcePlatform === "vimeo" ? "https://vimeo.com/api/oembed.json" : asset.sourcePlatform === "loom" ? "https://www.loom.com/v1/oembed" : null;
   if (!endpoint) return asset;
   try {
-    const response = await fetch(`${endpoint}?url=${encodeURIComponent(asset.sourceUrl)}`, { redirect: "error", next: { revalidate: 300 }, signal: AbortSignal.timeout(5000) });
+    const source = asset.sourcePlatform === "youtube" ? `https://www.youtube.com/watch?v=${encodeURIComponent(String(asset.metadata.videoId))}` : asset.sourceUrl;
+    const response = await fetch(`${endpoint}?url=${encodeURIComponent(source)}&format=json`, { redirect: "error", next: { revalidate: 300 }, signal: AbortSignal.timeout(5000) });
     if (!response.ok) return asset;
     const value = await response.json();
     return { ...asset, title: !titleProvided && typeof value.title === "string" ? value.title.slice(0, 300) : asset.title,
-      thumbnailUrl: value.thumbnail_url ? `/api/media/thumbnail?url=${encodeURIComponent(asset.sourceUrl)}` : null,
+      thumbnailUrl: asset.sourcePlatform === "youtube" ? asset.thumbnailUrl : value.thumbnail_url ? `/api/media/thumbnail?url=${encodeURIComponent(asset.sourceUrl)}` : asset.thumbnailUrl,
       metadata: { ...asset.metadata, ...(Number(value.width) > 0 && Number(value.height) > 0 ? { width: Number(value.width), height: Number(value.height) } : {}) } };
   } catch { return asset; }
 }
