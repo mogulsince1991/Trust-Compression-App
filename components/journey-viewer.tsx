@@ -39,7 +39,7 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
     "--jx-muted": `var(--embed-text, ${colors.text})`,
     "--jx-accent": appearance.accent,
     "--jx-button-text": appearance.buttonText,
-    "--jx-font": appearance.font === "modern" ? "var(--font-geist-sans), sans-serif" : appearance.font === "classic" ? "Georgia, serif" : "'Palatino Linotype', Palatino, serif"
+    "--jx-font": appearance.font === "modern" ? '"Avenir Next", "Segoe UI", sans-serif' : appearance.font === "classic" ? "Georgia, serif" : "'Palatino Linotype', Palatino, serif"
   } as React.CSSProperties;
   const [active, setActive] = useState(0);
   const [started, setStarted] = useState(false);

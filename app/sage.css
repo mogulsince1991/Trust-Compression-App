@@ -333,3 +333,9 @@
 .library-refresh details { width: 100%; font-size: 13px; }
 .library-refresh li { overflow-wrap: anywhere; margin-block: 6px; }
 .library-refresh button { margin-left: auto; min-height: 44px; }
+.sage-app .sage-editor-footer { position: sticky; bottom: 16px; z-index: 25; }
+.sage-editor-footer p { font-size: 12px; margin-top: 4px; max-width: 48ch; }
+.sage-editor-footer [role="alert"] { color: #b42318; }
+@media(max-width:760px) {
+  .sage-app .sage-editor-footer { bottom: calc(80px + env(safe-area-inset-bottom)); flex-wrap: wrap; }
+}

@@ -19,3 +19,14 @@ for (const file of ["app/share/[token]/page.tsx", "app/embed/journey/[token]/pag
 assert.match(fs.readFileSync("components/journey-viewer.tsx", "utf8"), /appearance.branding === "trusttale"/);
 assert.match(fs.readFileSync("app/api/workspaces/[id]/appearance/route.ts", "utf8"), /requireWorkspaceManager\(await requireWorkspaceAccess/);
 console.log("Journey appearance checks passed.");
+const editor = fs.readFileSync("components/sage-journeys.tsx", "utf8");
+assert.match(editor, /onSave\(published\)/);
+assert.match(editor, /published \? "Save changes"/);
+assert.doesNotMatch(editor, /onSave\(true\); setStep/);
+assert.match(editor, /saveError \? <p role="alert"/);
+assert.doesNotMatch(fs.readFileSync("components/journey-viewer.tsx", "utf8"), /var\(--font-geist-sans\)/);
+const appearanceEditor = fs.readFileSync("components/journey-appearance-editor.tsx", "utf8");
+assert.match(appearanceEditor, /theme: "custom", background: colors.background/);
+assert.doesNotMatch(appearanceEditor, /disabled=/);
+assert.match(fs.readFileSync("components/trust-app-ingestion.tsx", "utf8"), /assets: contentChanged \?/);
+console.log("Published editing, color controls, font fallback and metadata-only save checks passed.");

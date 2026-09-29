@@ -118,3 +118,7 @@ html[data-embed-auto-size="true"], html[data-embed-auto-size="true"] body { over
 .journey-experience .jx-contents[hidden] { display: none; }
 .jx-company-brand, .jx-company-brand a { display: flex; align-items: center; justify-content: center; gap: 12px; color: inherit; }
 .jx-company-brand img { max-width: 180px; max-height: 48px; object-fit: contain; }
+.journey-experience .jx-contents button.is-active { background: color-mix(in srgb, var(--jx-accent) 20%, var(--jx-bg)); border-color: var(--jx-accent); }
+.journey-experience .jx-poster-content { color: #f4f2eb; }
+.journey-experience.spacing-compact .jx-layout { gap: 12px; }
+.journey-experience.spacing-compact .jx-details { gap: 8px; }

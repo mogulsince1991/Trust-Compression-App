@@ -1150,10 +1150,13 @@ export function TrustAppIngestion({
     setNotice("");
     setError("");
     try {
+      let savedAssets: JourneyAsset[] | undefined;
+      try { savedAssets = JSON.parse(savedDraft).assets; } catch { /* No saved snapshot for new drafts. */ }
+      const contentChanged = !selectedJourneyId || JSON.stringify(savedAssets) !== JSON.stringify(draftAssets);
       const body = {
         workspaceId,
         ...draft,
-        assets: draftAssets.map((asset) => ({
+        assets: contentChanged ? draftAssets.map((asset) => ({
           libraryAssetId: asset.libraryAssetId ?? null,
           videoId: asset.videoId,
           assetType: asset.assetType,
@@ -1166,7 +1169,7 @@ export function TrustAppIngestion({
           summary: asset.summary,
           note: asset.note,
           metadata: asset.metadata
-        })),
+        })) : undefined,
         publish
       };
       const fresh = await supabase?.auth.getSession();
@@ -1179,7 +1182,8 @@ export function TrustAppIngestion({
       const nextJourneyId = result.id ?? selectedJourneyId;
       setShareUrl(absoluteUrl);
       setSelectedJourneyId(nextJourneyId);
-      setNotice(publish ? "Journey published. The share link is ready." : "Private draft saved.");
+      setSavedDraft(JSON.stringify({ draft, assets: draftAssets }));
+      setNotice(publish ? "Changes saved. Your existing share link is up to date." : "Private draft saved.");
       try {
       const nextJourneys = await loadJourneys(workspaceId);
       if (!nextJourneys) throw new Error("Journey list unavailable");
@@ -1466,7 +1470,7 @@ export function TrustAppIngestion({
     {view === "library" && !reviewing && workspaceBooted && session && workspaceId && <LibrarySourceRefresh key={workspaceId} workspaceId={workspaceId} userId={session.user.id} onComplete={async isActive => { await Promise.all([loadVideos(workspaceId, isActive), loadSources(workspaceId, isActive)]); }} />}
     {view === "library" && <SageLibrary key={`${session?.user.id}:${workspaceId}`} selectionKey={`library-selection:${session?.user.id}:${workspaceId}`} videos={videos} libraryAssets={libraryAssets} assetDraft={libraryAssetDraft} onAssetDraftChange={setLibraryAssetDraft} onSaveAsset={saveLibraryAsset} saving={working} onArchive={archiveVideo} onDeleteAsset={deleteLibraryAsset} onSaveContext={saveVideoContext} onImport={importSource} onAddItems={addLibraryItems} draftCount={draftAssets.length} onOpenDraft={() => setView("editor")} />}
     {view === "journeys" && <SageJourneys onRemove={removeJourney} working={journeyWorking} readOnly={reviewing} onArchive={() => setView("archive")} journeys={journeys} onEdit={editJourney} onNew={newJourney} onResume={() => setView("editor")} hasDraft={draftAssets.length > 0 || Boolean(draft.title)} />}
-    {view === "editor" && <SageJourneyEditor key={workspaceId} draft={draft} assets={draftAssets} onChange={setDraft} onMove={moveDraftAsset} onRemove={removeFromJourney} onLibrary={() => setView("library")} onBack={() => setView("journeys")} onSave={publishJourney} onGenerate={generateJourney} working={journeyWorking} shareUrl={shareUrl} personalUrl={personalShareUrl} published={publishedJourney} contacts={contacts} onContactShare={createContactShare} saved={draftSaved} />}
+    {view === "editor" && <SageJourneyEditor key={workspaceId} draft={draft} assets={draftAssets} onChange={setDraft} onMove={moveDraftAsset} onRemove={removeFromJourney} onLibrary={() => setView("library")} onBack={() => setView("journeys")} onSave={publishJourney} onGenerate={generateJourney} working={journeyWorking} shareUrl={shareUrl} personalUrl={personalShareUrl} published={publishedJourney} contacts={contacts} onContactShare={createContactShare} saved={draftSaved} saveError={error} saveNotice={notice} />}
     {view === "metrics" && <><header className="sage-page-heading"><div><h1>Activity</h1><p>See how buyers engage with your proof.</p></div><button onClick={() => setView("tracking")}>Tracked links</button></header><MetricsView metrics={metrics} videos={videos} sources={sources} journeys={journeys} contacts={contacts} tracking={tracking} /><SageRecipients contacts={contacts} metrics={metrics} journeys={journeys} /></>}
     {view === "tracking" && <><button className="sage-back" onClick={() => setView("metrics")}>Back to activity</button><LinkTrackingView draft={trackingDraft} journeys={journeys} tracking={tracking} working={trackingWorking} onDraftChange={setTrackingDraft} onCreate={createTrackingLink} /></>}
     {view === "archive" && workspaceId && <JourneyArchive key={workspaceId} activeWorkspaceId={workspaceId} onChanged={() => void refreshWorkspace(workspaceId)} />}
