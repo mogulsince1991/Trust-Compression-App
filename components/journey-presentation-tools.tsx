@@ -1,6 +1,8 @@
 "use client";
 import { useMemo, useState } from "react";
 import { JourneyViewer } from "./journey-viewer";
+import { journeyEmbedUrl } from "@/lib/journey-embed-url";
+import { normalizeAppearance, appearanceColors, type JourneyAppearance } from "@/lib/journey-appearance";
 import type { JourneyAsset, JourneyDraft } from "./trust-app-shared";
 
 function validUrl(value: string | null) {
@@ -26,25 +28,19 @@ export function JourneyPresentationPreview({ draft, assets }: { draft: JourneyDr
   </section>;
 }
 
-export function JourneyEmbedCode({ shareUrl, expanded = false }: { shareUrl: string; expanded?: boolean }) {
+export function JourneyEmbedCode({ shareUrl, expanded = false, appearance }: { shareUrl: string; expanded?: boolean; appearance?: JourneyAppearance }) {
   const [copied, setCopied] = useState(false);
   const [height, setHeight] = useState("760");
   const [sizing, setSizing] = useState("auto");
   const [copyError, setCopyError] = useState(false);
   const [transparent, setTransparent] = useState(false);
+  const [customColors, setCustomColors] = useState(false);
   const [background, setBackground] = useState("#171b18");
   const [textColor, setTextColor] = useState("#f4f2eb");
-  let url = "";
-  try {
-    const source = new URL(shareUrl);
-    if (["https:", "http:"].includes(source.protocol) && source.pathname.startsWith("/share/")) {
-      source.pathname = source.pathname.replace("/share/", "/embed/journey/");
-      source.searchParams.set("background", background);
-      source.searchParams.set("text", textColor);
-      source.searchParams.set("transparent", transparent ? "1" : "0");
-      url = source.href;
-    }
-  } catch {}
+  const colors = appearanceColors(normalizeAppearance(appearance));
+  const previewBackground = customColors ? background : colors.background;
+  const previewText = customColors ? textColor : colors.text;
+  const url = journeyEmbedUrl(shareUrl, { customColors, background, text: textColor, transparent });
   if (!url) return null;
   const escaped = url.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
   const scriptOrigin = new URL(url).origin;
@@ -52,11 +48,13 @@ export function JourneyEmbedCode({ shareUrl, expanded = false }: { shareUrl: str
   return <details className="sage-panel" open={expanded || undefined}><summary>Embed on a website or landing page</summary>
     <p>Paste the full code into a custom HTML block. Automatic height expands the embed to show the whole journey without internal scrollbars. Your page can still scroll normally.</p>
     <div className="sage-form-columns">
+      <label>Embed colors<select value={customColors ? "custom" : "journey"} onChange={event => { setCustomColors(event.target.value === "custom"); setBackground(colors.background); setTextColor(colors.text); setCopied(false); }}><option value="journey">Follow saved journey theme</option><option value="custom">Use fixed colors for this embed</option></select></label>
       <label><span>Transparent background</span><input type="checkbox" checked={transparent} onChange={event => { setTransparent(event.target.checked); setCopied(false); }} /></label>
-      <label>Background color<input type="color" value={background} disabled={transparent} onChange={event => { setBackground(event.target.value); setCopied(false); }} /></label>
-      <label>Text color<input type="color" value={textColor} onChange={event => { setTextColor(event.target.value); setCopied(false); }} /></label>
+      {customColors && <><label>Background color<input type="color" value={background} disabled={transparent} onChange={event => { setBackground(event.target.value); setCopied(false); }} /></label>
+      <label>Text color<input type="color" value={textColor} onChange={event => { setTextColor(event.target.value); setCopied(false); }} /></label></>}
     </div>
-    <div style={{ padding: 16, border: "1px solid currentColor", borderRadius: 12, background: transparent ? "repeating-conic-gradient(#ddd 0% 25%, #fff 0% 50%) 0 / 16px 16px" : background }}><span style={{ color: textColor }}>Your journey headline and text</span></div>
+    <div style={{ padding: 16, border: "1px solid currentColor", borderRadius: 12, background: transparent ? "repeating-conic-gradient(#ddd 0% 25%, #fff 0% 50%) 0 / 16px 16px" : previewBackground }}><span style={{ color: previewText }}>Your journey headline and text</span></div>
+    <p>{customColors ? "Fixed colors override future journey theme changes." : "Saved theme changes appear when visitors load this embed. Replace older embed code once to enable this."}</p>
     <p>Colors apply to the journey, not the video or document provider's own player. For transparency, choose text that contrasts with your website.</p>
     <label>Sizing<select value={sizing} onChange={e => { setSizing(e.target.value); setCopied(false); }}><option value="auto">Automatic height (recommended)</option><option value="fixed">Fixed height (no script)</option></select></label>
     <label>{sizing === "auto" ? "Initial / fallback height" : "Embed height"}<select value={height} onChange={e => { setHeight(e.target.value); setCopied(false); }}><option value="600">Compact - 600px</option><option value="760">Standard - 760px</option><option value="960">Tall videos / documents - 960px</option></select></label>

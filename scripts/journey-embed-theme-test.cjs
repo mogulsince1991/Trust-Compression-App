@@ -1,0 +1,18 @@
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const ts = require("typescript");
+const vm = require("node:vm");
+const context = { exports: {}, URL };
+vm.runInNewContext(ts.transpileModule(fs.readFileSync("lib/journey-embed-url.ts", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, context);
+const build = context.exports.journeyEmbedUrl;
+const options = { customColors: false, background: "#171b18", text: "#f4f2eb", transparent: false };
+assert.equal(build("https://trusttale.co/share/test", options), "https://trusttale.co/embed/journey/test");
+assert.equal(build("https://trusttale.co/share/test?background=old&text=old&transparent=0", options), "https://trusttale.co/embed/journey/test");
+let url = new URL(build("https://trusttale.co/share/test", { ...options, customColors: true }));
+assert.equal(url.searchParams.get("background"), "#171b18");
+assert.equal(url.searchParams.get("text"), "#f4f2eb");
+url = new URL(build("https://trusttale.co/share/test", { ...options, transparent: true }));
+assert.equal(url.searchParams.get("transparent"), "1");
+assert.equal(url.searchParams.has("text"), false);
+assert.equal(build("javascript:alert(1)", options), "");
+console.log("Embed theme inheritance, explicit overrides, transparency and URL validation passed.");
