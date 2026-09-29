@@ -1,0 +1,14 @@
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const css = fs.readFileSync("app/journey-experience.css", "utf8");
+const shade = css.match(/\.jx-poster::after\s*\{([^}]+)\}/)[1];
+assert.match(shade, /position:absolute/);
+assert.match(shade, /inset:0/);
+assert.match(shade, /pointer-events:none/);
+assert.match(shade, /background:linear-gradient/);
+const content = css.match(/\.jx-poster-content\s*\{([^}]+)\}/)[1];
+assert.match(content, /z-index:1/);
+assert.match(content, /background:transparent/);
+assert.doesNotMatch(content, /border-radius/);
+assert.match(css, /\.jx-poster img[^}]+object-fit:contain/);
+console.log("Poster shading spans the full frame; content remains above it and thumbnails are not cropped.");
