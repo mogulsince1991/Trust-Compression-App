@@ -46,7 +46,6 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
   const [muted, setMuted] = useState(false);
   const positions = useRef<Map<string, number>>(new Map());
   const stageRef = useRef<HTMLDivElement>(null);
-  const touchStart = useRef<{ x: number; y: number } | null>(null);
   const activeAsset = journey.assets[active];
   const listRef = useRef<HTMLDivElement>(null);
   const clocks = useRef<Map<string, PlaybackClock>>(new Map());
@@ -302,25 +301,6 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
     return () => { document.body.style.overflow = previousOverflow; previousFocus?.focus(); };
   }, [expanded]);
 
-  function onTouchStart(event: React.TouchEvent<HTMLElement>) {
-    if (variant === "embed" || activeAsset?.assetType !== "video" || (event.target as HTMLElement).closest("video,iframe,button,a")) return;
-    const touch = event.touches[0];
-    touchStart.current = { x: touch.clientX, y: touch.clientY };
-  }
-
-  function onTouchEnd(event: React.TouchEvent<HTMLElement>) {
-    if (!touchStart.current) return;
-    const touch = event.changedTouches[0];
-    const deltaX = touch.clientX - touchStart.current.x;
-    const deltaY = touch.clientY - touchStart.current.y;
-    const delta = deltaY;
-    if (Math.abs(delta) > 65 && Math.abs(deltaY) > Math.abs(deltaX) * 1.5) {
-      if (delta < 0) next();
-      else previous();
-    }
-    touchStart.current = null;
-  }
-
   function next() {
     if (active >= journey.assets.length - 1) return;
     setActivatedId(null); setLoadedId(null);
@@ -372,7 +352,7 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
       </header>
       {resume && <div className="jx-resume"><span>Pick up where you left off on this browser?</span><button onClick={() => { selectAsset(journey.assets.findIndex(a => a.id === resume.assetId), resume.position); setResume(null); }}>Continue</button><button onClick={restart}>Start over</button></div>}
       <div className="jx-layout">
-      <section className="jx-stage" ref={stageRef} tabIndex={0} aria-label="Journey player" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      <section className="jx-stage" ref={stageRef} tabIndex={0} aria-label="Journey player">
         <div className={`jx-media${driveFileId ? " jx-drive-original" : ""}`} style={driveFileId ? { "--drive-ratio": driveRatio } as React.CSSProperties : undefined} key={activeAsset.id}>
           {activated && directVideoUrl ? (
             <video

@@ -1,5 +1,6 @@
 const assert = require('node:assert/strict'), fs = require('node:fs'), vm = require('node:vm');
 const source = fs.readFileSync('components/journey-viewer.tsx','utf8');
+assert.doesNotMatch(source, /onTouchStart|onTouchEnd|touchStart/, 'Scrolling must never navigate between journey videos');
 const handler = source.slice(source.indexOf('    function ended() {'), source.indexOf('    function visibility()'));
 let advances = 0, activated, completed = 0;
 const positions = { current: new Map([['first', 120]]) };
