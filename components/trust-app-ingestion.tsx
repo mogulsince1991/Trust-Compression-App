@@ -1,4 +1,6 @@
 "use client";
+import { WorkspaceAppearance } from "./workspace-appearance";
+import { normalizeAppearance } from "@/lib/journey-appearance";
 
 import {
   ArrowUpRight,
@@ -1069,6 +1071,7 @@ export function TrustAppIngestion({
     if (!draftSaved && (draftAssets.length || draft.title) && !window.confirm("Replace the current unsaved draft with this journey?")) return;
     setSelectedJourneyId(journey.id);
     setDraft({
+      appearance: journey.appearance,
       title: journey.title ?? "",
       heading: journey.heading ?? "",
       description: journey.description ?? "",
@@ -1079,7 +1082,7 @@ export function TrustAppIngestion({
     setDraftAssets(journey.assets);
     setShareUrl(journey.shareUrl ?? "");
     setPersonalShareUrl("");
-    setSavedDraft(JSON.stringify({ draft: { title: journey.title ?? "", heading: journey.heading ?? "", description: journey.description ?? "", ctaLabel: journey.ctaLabel ?? "Continue the conversation", ctaUrl: journey.ctaUrl ?? "", folderName: folders.find(f => f.id === journey.folderId)?.name ?? "" }, assets: journey.assets }));
+    setSavedDraft(JSON.stringify({ draft: { appearance: journey.appearance, title: journey.title ?? "", heading: journey.heading ?? "", description: journey.description ?? "", ctaLabel: journey.ctaLabel ?? "Continue the conversation", ctaUrl: journey.ctaUrl ?? "", folderName: folders.find(f => f.id === journey.folderId)?.name ?? "" }, assets: journey.assets }));
     setView("editor");
     setNotice("Editing saved journey.");
   }
@@ -1087,6 +1090,7 @@ export function TrustAppIngestion({
   function hydrateJourneyDraft(journey: JourneySummary) {
     setSelectedJourneyId(journey.id);
     setDraft({
+      appearance: journey.appearance,
       title: journey.title ?? "",
       heading: journey.heading ?? "",
       description: journey.description ?? "",
@@ -1096,13 +1100,13 @@ export function TrustAppIngestion({
     });
     setDraftAssets(journey.assets);
     setShareUrl(journey.shareUrl ?? "");
-    setSavedDraft(JSON.stringify({ draft: { title: journey.title ?? "", heading: journey.heading ?? "", description: journey.description ?? "", ctaLabel: journey.ctaLabel ?? "Continue the conversation", ctaUrl: journey.ctaUrl ?? "", folderName: folders.find(f => f.id === journey.folderId)?.name ?? "" }, assets: journey.assets }));
+    setSavedDraft(JSON.stringify({ draft: { appearance: journey.appearance, title: journey.title ?? "", heading: journey.heading ?? "", description: journey.description ?? "", ctaLabel: journey.ctaLabel ?? "Continue the conversation", ctaUrl: journey.ctaUrl ?? "", folderName: folders.find(f => f.id === journey.folderId)?.name ?? "" }, assets: journey.assets }));
   }
 
   function newJourney() {
     if (!draftSaved && (draftAssets.length || draft.title) && !window.confirm("Start a new journey and replace the current unsaved draft?")) return;
     setSelectedJourneyId(null);
-    setDraft(emptyDraft);
+    setDraft({ ...emptyDraft, appearance: normalizeAppearance(currentWorkspace?.settings?.journeyAppearance) });
     setDraftAssets([]);
     setJourneyEmbedDraft(emptyJourneyEmbedDraft);
     setShareUrl("");
@@ -1429,7 +1433,8 @@ export function TrustAppIngestion({
       const duplicate = next.some(a => item.videoId ? a.videoId === item.videoId : item.libraryAssetId ? a.libraryAssetId === item.libraryAssetId : a.id === item.id);
       if (!duplicate) next.push({ ...item, id: item.videoId ? `video:${item.videoId}` : item.libraryAssetId ? `asset:${item.libraryAssetId}` : item.id, position: next.length + 1 });
     }
-    const nextDraft = draft.title.trim() ? draft : { ...draft, title: "Proof journey" };
+    const baseDraft = !selectedJourneyId && !draft.appearance ? { ...draft, appearance: normalizeAppearance(currentWorkspace?.settings?.journeyAppearance) } : draft;
+    const nextDraft = baseDraft.title.trim() ? baseDraft : { ...baseDraft, title: "Proof journey" };
     // Persist before navigation, which can remount the app on legacy library routes.
     try {
       sessionStorage.setItem(draftKey, JSON.stringify({ draft: nextDraft, assets: next, journeyId: selectedJourneyId, shareUrl, savedDraft }));
@@ -1468,6 +1473,7 @@ export function TrustAppIngestion({
     {(view === "reports" || reportsVisited) && workspaceId && <div hidden={view !== "reports"}><ContractorMetricsWorkspace key={workspaceId} activeWorkspaceId={workspaceId} /></div>}
     {["workspace", "sources", "socialProfiles"].includes(view) && <nav className="sage-settings-nav" aria-label="Settings sections"><button aria-current={view === "workspace" ? "page" : undefined} onClick={() => setView("workspace")}>Workspace & team</button><button aria-current={view === "sources" ? "page" : undefined} onClick={() => setView("sources")}>Content sources</button><button aria-current={view === "socialProfiles" ? "page" : undefined} onClick={() => setView("socialProfiles")}>YouTube insights</button><button onClick={() => { setView("reports"); router.push("/app/reports?tab=connections"); }}>CRM connections & spend</button></nav>}
     {view === "sources" && <SourcesView sources={sources} importing={working} onImport={importSource} onReimport={reimportSource} onDelete={deleteSource} />}
+    {view === "workspace" && currentWorkspace && canManageWorkspace && !reviewing && <WorkspaceAppearance key={currentWorkspace.id} workspaceId={currentWorkspace.id} value={currentWorkspace.settings?.journeyAppearance} onSaved={() => { void loadWorkspaces(); }} />}
     {view === "workspace" && <WorkspaceView workspace={currentWorkspace} workspaces={workspaces} members={workspaceMembers} invites={workspaceInvites} integrationKeys={integrationKeys} integrationSecret={integrationSecret} mcpUrl={mcpUrl} canManage={canManageWorkspace} working={working} createName={createWorkspaceName} renameName={renameWorkspaceName} inviteDraft={inviteDraft} onCreateNameChange={setCreateWorkspaceName} onRenameNameChange={setRenameWorkspaceName} onInviteDraftChange={setInviteDraft} onCreate={createWorkspace} onRename={renameWorkspace} onInvite={inviteWorkspaceMember} onSwitch={switchWorkspace} onMemberRoleChange={updateWorkspaceMemberRole} onRemoveMember={removeWorkspaceMember} onRevokeInvite={revokeWorkspaceInvite} onCreateIntegrationKey={createIntegrationKey} onAttachIntegrationKey={attachIntegrationKey} onRevokeIntegrationKey={revokeIntegrationKey} />}
     {view === "workspace" && isPlatformAdmin && !reviewing && <ReviewAccessSettings />}
     {view === "workspace" && <section className="sage-panel"><h2>How-to videos</h2><p>Walkthroughs provided by Unmarked will appear here and alongside the relevant tools. No videos are published yet.</p>{["Adding content", "Creating and sharing journeys", "Understanding customer activity"].map(title => <label key={title}>{title}<input disabled placeholder="Video link coming soon" /></label>)}</section>}

@@ -1,3 +1,4 @@
+import { normalizeAppearance } from "@/lib/journey-appearance";
 import { NextResponse } from "next/server";
 import { createUserSupabaseClient } from "@/lib/supabase";
 import { normalizeJourneyEmbed, type JourneyAssetType } from "@/lib/journey-embeds";
@@ -7,6 +8,7 @@ type RouteContext = {
 };
 
 type JourneyPatchRequest = {
+  appearance?: unknown;
   workspaceId?: string;
   title?: string;
   heading?: string;
@@ -54,6 +56,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       updated_at: new Date().toISOString()
     };
 
+    if (body.appearance !== undefined) patch.appearance = normalizeAppearance(body.appearance);
     if (body.title !== undefined) patch.title = body.title.trim() || "Untitled journey";
     if (body.heading !== undefined) patch.heading = body.heading.trim() || body.title?.trim() || "A focused proof journey";
     if (body.description !== undefined) patch.description = body.description.trim() || null;

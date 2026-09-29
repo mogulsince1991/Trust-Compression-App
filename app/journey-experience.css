@@ -111,3 +111,10 @@ html[data-embed-auto-size="true"], html[data-embed-auto-size="true"] body { over
   /* Match the successful edge-to-edge comparison, not the padded text column. */
   .journey-experience.is-share:not(.is-portrait) .jx-media.jx-drive-original { width:calc(100% + 24px); max-width:none; }
 }
+.journey-experience { font-family: var(--jx-font, inherit); }
+.journey-experience h1, .journey-experience h2 { font-family: var(--jx-font, inherit); }
+.journey-experience .jx-cta { background: var(--jx-accent, #5c946e); color: var(--jx-button-text, #fff); }
+.journey-experience.spacing-compact { padding: 12px; gap: 10px; }
+.journey-experience .jx-contents[hidden] { display: none; }
+.jx-company-brand, .jx-company-brand a { display: flex; align-items: center; justify-content: center; gap: 12px; color: inherit; }
+.jx-company-brand img { max-width: 180px; max-height: 48px; object-fit: contain; }

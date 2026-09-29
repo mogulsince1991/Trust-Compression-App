@@ -1,3 +1,4 @@
+import { normalizeAppearance, appearanceColors } from "@/lib/journey-appearance";
 import { notFound } from "next/navigation";
 import type { CSSProperties } from "react";
 import { JourneyViewer, type PublicJourney } from "@/components/journey-viewer";
@@ -10,6 +11,7 @@ type EmbedPageProps = {
 };
 
 type JourneyRow = {
+  appearance?: import("@/lib/journey-appearance").JourneyAppearance;
   id: string;
   title: string;
   heading: string | null;
@@ -42,8 +44,7 @@ type JourneySendRow = {
 
 export default async function EmbedJourneyPage({ params, searchParams = {} }: EmbedPageProps) {
   const color = (value: string | undefined, fallback: string) => typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
-  const background = searchParams.transparent === "1" ? "transparent" : color(searchParams.background, "#171b18");
-  const text = color(searchParams.text, "#f4f2eb");
+
   const supabase = createPublicSupabaseClient();
   if (!supabase) notFound();
 
@@ -54,7 +55,7 @@ export default async function EmbedJourneyPage({ params, searchParams = {} }: Em
     .maybeSingle();
   const send = (sendRow as JourneySendRow | null) ?? null;
 
-  const journeyQuery = supabase.from("journeys").select("id,title,heading,description,cta_label,cta_url").eq("is_public", true);
+  const journeyQuery = supabase.from("journeys").select("id,title,heading,description,cta_label,cta_url,appearance").eq("is_public", true);
   const { data: journey, error: journeyError } = send
     ? await journeyQuery.eq("id", send.journey_id).maybeSingle()
     : await journeyQuery.eq("share_token", params.token).maybeSingle();
@@ -62,6 +63,9 @@ export default async function EmbedJourneyPage({ params, searchParams = {} }: Em
   if (journeyError || !journey) notFound();
 
   const row = journey as JourneyRow;
+  const colors = appearanceColors(normalizeAppearance(row.appearance));
+  const background = searchParams.transparent === "1" ? "transparent" : color(searchParams.background, colors.background);
+  const text = color(searchParams.text, colors.text);
   const { data: sequence, error: sequenceError } = await supabase
     .from("journey_assets")
     .select("id,video_id,asset_type,source_platform,title,source_url,embed_url,thumbnail_url,summary,note,position,metadata")
@@ -92,6 +96,7 @@ export default async function EmbedJourneyPage({ params, searchParams = {} }: Em
       variant="embed"
       journey={{
         id: row.id,
+        appearance: row.appearance,
         title: row.title,
         heading: row.heading,
         description: row.description,

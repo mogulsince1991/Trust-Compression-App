@@ -95,6 +95,7 @@ export type SourceRow = {
 };
 
 export type JourneySummary = {
+  appearance?: import("@/lib/journey-appearance").JourneyAppearance;
   id: string;
   title: string;
   heading: string | null;
@@ -256,6 +257,7 @@ export type TrackingLinkSummary = {
 };
 
 export type JourneyDraft = {
+  appearance?: import("@/lib/journey-appearance").JourneyAppearance;
   title: string;
   heading: string;
   description: string;

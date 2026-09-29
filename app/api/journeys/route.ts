@@ -1,9 +1,11 @@
+import { normalizeAppearance } from "@/lib/journey-appearance";
 import { NextResponse } from "next/server";
 import { createServiceSupabaseClient, createUserSupabaseClient } from "@/lib/supabase";
 import { normalizeJourneyEmbed, type JourneyAssetType } from "@/lib/journey-embeds";
 import { recordActivity } from "@/lib/server/activity";
 
 type JourneyRequest = {
+  appearance?: unknown;
   workspaceId?: string;
   title?: string;
   heading?: string;
@@ -64,7 +66,7 @@ export async function GET(request: Request) {
 
     let query = dataSupabase
       .from("journeys")
-      .select("id,title,heading,description,cta_label,cta_url,share_token,folder_id,created_at,published_at,is_public,deleted_at,journey_assets(id,library_asset_id,video_id,asset_type,source_platform,title,source_url,embed_url,thumbnail_url,summary,note,position,metadata),journey_videos(video_id,position)")
+      .select("id,title,heading,description,cta_label,cta_url,share_token,folder_id,created_at,published_at,is_public,deleted_at,appearance,journey_assets(id,library_asset_id,video_id,asset_type,source_platform,title,source_url,embed_url,thumbnail_url,summary,note,position,metadata),journey_videos(video_id,position)")
       .eq("workspace_id", workspaceId)
       .order(archived ? "deleted_at" : "created_at", { ascending: false })
       .limit(80);
@@ -81,6 +83,7 @@ export async function GET(request: Request) {
       const assets = mapJourneyAssets(journey);
       return {
         id: journey.id,
+        appearance: normalizeAppearance(journey.appearance),
         title: journey.title,
         heading: journey.heading,
         description: journey.description,
@@ -133,6 +136,7 @@ export async function POST(request: Request) {
       .from("journeys")
       .insert({
         workspace_id: workspaceId,
+        appearance: normalizeAppearance(body.appearance),
         title: body.title?.trim() || "Untitled journey",
         heading: body.heading?.trim() || body.title?.trim() || "A focused proof journey",
         description: body.description?.trim() || null,

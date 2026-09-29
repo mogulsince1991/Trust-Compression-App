@@ -9,7 +9,7 @@ function validUrl(value: string | null) {
 
 export function JourneyPresentationPreview({ draft, assets }: { draft: JourneyDraft; assets: JourneyAsset[] }) {
   const [mode, setMode] = useState("desktop");
-  const journey = useMemo(() => ({ id: "editor-preview", title: draft.title, heading: draft.heading, description: draft.description, cta_label: draft.ctaLabel, cta_url: validUrl(draft.ctaUrl) ? draft.ctaUrl : null, assets }), [draft, assets]);
+  const journey = useMemo(() => ({ id: "editor-preview", title: draft.title, heading: draft.heading, description: draft.description, cta_label: draft.ctaLabel, appearance: draft.appearance, cta_url: validUrl(draft.ctaUrl) ? draft.ctaUrl : null, assets }), [draft, assets]);
   const warnings = assets.flatMap(asset => [
     ...(!validUrl(asset.embedUrl) ? [`${asset.title}: no valid embedded preview URL.`] : []),
     ...(!asset.thumbnailUrl ? [`${asset.title}: using a title placeholder because no thumbnail is saved.`] : []),

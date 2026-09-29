@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     await claimWorkspaceInvites(user, serviceSupabase, userSupabase);
     const { data: memberships, error } = await serviceSupabase
       .from("workspace_members")
-      .select("role,created_at,workspaces(id,name,slug,settings,created_at,updated_at)")
+      .select("role,created_at,workspaces(id,name,slug,settings,journey_appearance,created_at,updated_at)")
       .eq("user_id", user.id)
       .order("created_at", { ascending: true });
 
@@ -29,7 +29,7 @@ export async function GET(request: Request) {
           name: String(workspace.name ?? "Workspace"),
           slug: String(workspace.slug ?? ""),
           role: String(row.role ?? "member"),
-          settings: workspace.settings ?? {},
+          settings: { ...(workspace.settings ?? {}), journeyAppearance: workspace.journey_appearance ?? {} },
           created_at: workspace.created_at ?? null,
           updated_at: workspace.updated_at ?? null,
         };

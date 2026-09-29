@@ -13,6 +13,7 @@ type SharePageProps = {
 };
 
 type JourneyRow = {
+  appearance?: import("@/lib/journey-appearance").JourneyAppearance;
   id: string;
   title: string;
   heading: string | null;
@@ -51,7 +52,7 @@ const loadJourney = cache(async (token: string) => {
   const { data: sendRow } = await supabase.from("journey_sends").select("id,journey_id,contact_id,share_token").eq("share_token", token).maybeSingle();
   send = (sendRow as JourneySendRow | null) ?? null;
 
-  const journeyQuery = supabase.from("journeys").select("id,title,heading,description,cta_label,cta_url").eq("is_public", true).is("deleted_at", null);
+  const journeyQuery = supabase.from("journeys").select("id,title,heading,description,cta_label,cta_url,appearance").eq("is_public", true).is("deleted_at", null);
   const { data: journey, error: journeyError } = send
     ? await journeyQuery.eq("id", send.journey_id).maybeSingle()
     : await journeyQuery.eq("share_token", token).maybeSingle();
@@ -120,6 +121,7 @@ export default async function SharePage({ params, searchParams }: SharePageProps
     <JourneyViewer
       journey={{
         id: row.id,
+        appearance: row.appearance,
         title: row.title,
         heading: row.heading,
         description: row.description,

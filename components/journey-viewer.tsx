@@ -7,12 +7,14 @@ import { formatJourneyAssetLabel, type JourneyAsset } from "@/components/trust-a
 import { PlaybackClock } from "@/lib/playback-clock";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 import { browserExcluded } from "@/lib/analytics-preferences";
+import { normalizeAppearance, appearanceColors, type JourneyAppearance } from "@/lib/journey-appearance";
 import { AppBrand } from "./app-brand";
 import { assetThumbnailUrl } from "./asset-thumbnail";
 import { VimeoPlayer } from "./vimeo-player";
 import { loadYouTubePlayer, type YouTubePlayer } from "@/lib/youtube-player";
 
 export type PublicJourney = {
+  appearance?: JourneyAppearance;
   id: string;
   title: string;
   heading: string | null;
@@ -28,6 +30,17 @@ export type PublicJourney = {
 type VideoOrientation = "wide" | "portrait" | "adaptive";
 
 export function JourneyViewer({ journey, variant = "share", preview = false }: { journey: PublicJourney; variant?: "share" | "embed"; preview?: boolean }) {
+  const appearance = normalizeAppearance(journey.appearance);
+  const colors = appearanceColors(appearance);
+  const appearanceStyle = {
+    "--jx-bg": `var(--embed-bg, ${colors.background})`,
+    "--jx-panel": `var(--embed-bg, ${colors.background})`,
+    "--jx-text": `var(--embed-text, ${colors.text})`,
+    "--jx-muted": `var(--embed-text, ${colors.text})`,
+    "--jx-accent": appearance.accent,
+    "--jx-button-text": appearance.buttonText,
+    "--jx-font": appearance.font === "modern" ? "var(--font-geist-sans), sans-serif" : appearance.font === "classic" ? "Georgia, serif" : "'Palatino Linotype', Palatino, serif"
+  } as React.CSSProperties;
   const [active, setActive] = useState(0);
   const [started, setStarted] = useState(false);
   const [activatedId, setActivatedId] = useState<string | null>(null);
@@ -344,7 +357,7 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
   if (!activeAsset) return <main className="journey-experience"><p>No content is available in this journey.</p></main>;
 
   return (
-    <main ref={rootRef} className={`journey-experience is-${orientation} is-${variant}${expanded ? " is-expanded" : ""}${activeAsset.assetType !== "video" ? " is-document" : ""}`}>
+    <main ref={rootRef} style={appearanceStyle} className={`journey-experience spacing-${appearance.layout} is-${orientation} is-${variant}${expanded ? " is-expanded" : ""}${activeAsset.assetType !== "video" ? " is-document" : ""}`}>
       <header className="jx-header">
         <span>{variant === "embed" ? "Explore the proof" : "Selected for you"}</span>
         <h1>{journey.heading || journey.title}</h1>
@@ -405,7 +418,7 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
         </div>}
         <nav className="jx-controls" aria-label="Asset navigation">
           <button onClick={previous} disabled={active === 0} aria-label="Previous asset"><ChevronLeft /></button>
-          <button className="jx-counter" onClick={() => setShowContents(v => !v)} aria-expanded={showContents}><List />{active + 1} of {journey.assets.length}<span>View all</span></button>
+          <button disabled={!appearance.showContents} className="jx-counter" onClick={() => setShowContents(v => !v)} aria-expanded={showContents}><List />{active + 1} of {journey.assets.length}{appearance.showContents && <span>View all</span>}</button>
           {variant === "embed" ? fullUrl && <a className="jx-expand-link" href={fullUrl} target="_blank" rel="noreferrer" aria-label="Open full journey in a new tab"><ExternalLink /></a> : <button onClick={() => setExpanded(v => !v)} aria-label={expanded ? "Close expanded view" : "Expand viewer"}>{expanded ? <X /> : <Maximize2 />}</button>}
           <button onClick={next} disabled={active === journey.assets.length - 1} aria-label="Next asset"><ChevronRight /></button>
         </nav>
@@ -418,7 +431,7 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
         {activeAsset.sourceUrl && <a className="jx-original" href={activeAsset.sourceUrl} target="_blank" rel="noreferrer">Open original<ExternalLink size={16} /></a>}
         {driveFileId && <details className="jx-context"><summary>Playback help</summary><p>If controls stay over the video, compare this same Google player without the journey layout.</p><a className="jx-original" href={`/drive-player-check/${encodeURIComponent(driveFileId)}`} target="_blank" rel="noreferrer">Compare plain Google player<ExternalLink size={16} /></a>{fullUrl && <a className="jx-original" href={`${fullUrl}&player=june-13`} target="_blank" rel="noreferrer">Try June 13 journey player<ExternalLink size={16} /></a>}</details>}
         {variant === "embed" && fullUrl && <a className="jx-original" href={fullUrl} target="_blank" rel="noreferrer">Open full journey<ExternalLink size={16} /></a>}
-      <section className={`jx-contents${showContents ? " is-open" : ""}`} ref={listRef} aria-label="Journey contents">
+      <section hidden={!appearance.showContents} className={`jx-contents${showContents ? " is-open" : ""}`} ref={listRef} aria-label="Journey contents">
         {journey.assets.map((asset, index) => (
           <button className={index === active ? "is-active" : ""} aria-current={index === active ? "step" : undefined} key={asset.id} data-index={index} onClick={() => selectAsset(index)}>
             <span>{index + 1}</span>
@@ -436,7 +449,12 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
         </a>
       )}
       </footer>
-      <AppBrand />
+      {appearance.branding === "trusttale" && <AppBrand />}
+      {appearance.branding === "company" && <div className="jx-company-brand">
+        {appearance.websiteUrl ? <a href={appearance.websiteUrl} target="_blank" rel="noreferrer">
+          {appearance.logoUrl && <img src={appearance.logoUrl} alt={appearance.companyName || "Company logo"} />}<span>{appearance.companyName}</span>
+        </a> : <>{appearance.logoUrl && <img src={appearance.logoUrl} alt={appearance.companyName || "Company logo"} />}<span>{appearance.companyName}</span></>}
+      </div>}
     </main>
   );
 }
