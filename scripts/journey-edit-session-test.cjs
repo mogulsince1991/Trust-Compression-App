@@ -1,0 +1,16 @@
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const vm = require("node:vm");
+const ts = require("typescript");
+const context = { exports: {} };
+vm.runInNewContext(ts.transpileModule(fs.readFileSync("lib/journey-edit-session.ts", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, context);
+const close = context.exports.shouldCloseJourneySession;
+assert.equal(close("library", true, false), true);
+assert.equal(close("journeys", true, false), true);
+assert.equal(close("home", true, false), true);
+assert.equal(close("editor", true, false), false);
+assert.equal(close("library", true, true), false);
+assert.equal(close("home", true, true), true);
+assert.equal(close("library", false, false), false);
+assert.equal(close("journeys", false, false), false);
+console.log("Saved sessions close on exit; explicit content picking and unsaved drafts are preserved.");

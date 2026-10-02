@@ -1,4 +1,5 @@
 "use client";
+import { shouldCloseJourneySession } from "@/lib/journey-edit-session";
 import { WorkspaceAppearance } from "./workspace-appearance";
 import { normalizeAppearance } from "@/lib/journey-appearance";
 
@@ -185,7 +186,16 @@ export function TrustAppIngestion({
   const [view, updateView] = useState<ViewId>(pathname.startsWith("/app") ? viewFromPath(pathname) : initialView);
   const [reportsVisited, setReportsVisited] = useState(false);
   useEffect(() => { if (view === "reports") setReportsVisited(true); }, [view]);
-  function setView(next: ViewId) { updateView(next); router.push(`/app/${sageRoutes[next]}`, { scroll: true }); }
+  function setView(next: ViewId, chooseContent = false) {
+    setChoosingJourneyContent(chooseContent);
+    if (draftKey) {
+      try {
+        const stored = JSON.parse(sessionStorage.getItem(draftKey) || "null");
+        if (stored) sessionStorage.setItem(draftKey, JSON.stringify({ ...stored, choosingContent: chooseContent }));
+      } catch {}
+    }
+    updateView(next); router.push(`/app/${sageRoutes[next]}`, { scroll: true });
+  }
   useEffect(() => {
     if (pathname.startsWith("/app")) updateView(viewFromPath(pathname));
     const reportId = pathname.startsWith("/app/settings/youtube/") ? pathname.split("/").pop() : null;
@@ -234,6 +244,7 @@ export function TrustAppIngestion({
   const [shareUrl, setShareUrl] = useState("");
   const [personalShareUrl, setPersonalShareUrl] = useState("");
   const [savedDraft, setSavedDraft] = useState("");
+  const [choosingJourneyContent, setChoosingJourneyContent] = useState(false);
   const [draftReady, setDraftReady] = useState<string | null>(null);
   const [draftStorageError, setDraftStorageError] = useState(false);
   const switching = useRef(false);
@@ -265,6 +276,9 @@ export function TrustAppIngestion({
     if (!draftKey) return;
     let stored: any = null;
     try { const raw = sessionStorage.getItem(draftKey); if (raw) stored = JSON.parse(raw); } catch {}
+    const storedSaved = !!stored?.journeyId && stored.savedDraft === JSON.stringify({ draft: stored.draft, assets: stored.assets });
+    if (shouldCloseJourneySession(viewFromPath(pathname), storedSaved, stored?.choosingContent === true)) stored = null;
+    setChoosingJourneyContent(stored?.choosingContent === true);
     setDraft(stored?.draft || emptyDraft);
     setDraftAssets(Array.isArray(stored?.assets) ? stored.assets : []);
     setSelectedJourneyId(stored?.journeyId || null);
@@ -276,8 +290,20 @@ export function TrustAppIngestion({
 
   useEffect(() => {
     if (!draftKey || draftReady !== draftKey) return;
-    try { sessionStorage.setItem(draftKey, JSON.stringify({ draft, assets: draftAssets, journeyId: selectedJourneyId, shareUrl, savedDraft })); setDraftStorageError(false); } catch { setDraftStorageError(true); }
-  }, [draftKey, draftReady, draft, draftAssets, selectedJourneyId, shareUrl, savedDraft]);
+    try { sessionStorage.setItem(draftKey, JSON.stringify({ draft, assets: draftAssets, journeyId: selectedJourneyId, shareUrl, savedDraft, choosingContent: choosingJourneyContent })); setDraftStorageError(false); } catch { setDraftStorageError(true); }
+  }, [draftKey, draftReady, draft, draftAssets, selectedJourneyId, shareUrl, savedDraft, choosingJourneyContent]);
+
+  useEffect(() => {
+    if (draftReady !== draftKey || !selectedJourneyId || !shouldCloseJourneySession(view, draftSaved, choosingJourneyContent)) return;
+    setSelectedJourneyId(null);
+    setDraft(emptyDraft);
+    setDraftAssets([]);
+    setShareUrl("");
+    setPersonalShareUrl("");
+    setSavedDraft("");
+    setChoosingJourneyContent(false);
+    try { if (draftKey) sessionStorage.removeItem(draftKey); } catch { setDraftStorageError(true); }
+  }, [view, draftSaved, choosingJourneyContent, draftReady, draftKey, selectedJourneyId]);
 
   useEffect(() => {
     if (draftSaved || (!draftAssets.length && !draft.title)) return;
@@ -1470,7 +1496,7 @@ export function TrustAppIngestion({
     {view === "library" && !reviewing && workspaceBooted && session && workspaceId && <LibrarySourceRefresh key={workspaceId} workspaceId={workspaceId} userId={session.user.id} onComplete={async isActive => { await Promise.all([loadVideos(workspaceId, isActive), loadSources(workspaceId, isActive)]); }} />}
     {view === "library" && <SageLibrary key={`${session?.user.id}:${workspaceId}`} selectionKey={`library-selection:${session?.user.id}:${workspaceId}`} videos={videos} libraryAssets={libraryAssets} assetDraft={libraryAssetDraft} onAssetDraftChange={setLibraryAssetDraft} onSaveAsset={saveLibraryAsset} saving={working} onArchive={archiveVideo} onDeleteAsset={deleteLibraryAsset} onSaveContext={saveVideoContext} onImport={importSource} onAddItems={addLibraryItems} draftCount={draftAssets.length} onOpenDraft={() => setView("editor")} />}
     {view === "journeys" && <SageJourneys onRemove={removeJourney} working={journeyWorking} readOnly={reviewing} onArchive={() => setView("archive")} journeys={journeys} onEdit={editJourney} onNew={newJourney} onResume={() => setView("editor")} hasDraft={draftAssets.length > 0 || Boolean(draft.title)} />}
-    {view === "editor" && <SageJourneyEditor key={workspaceId} draft={draft} assets={draftAssets} onChange={setDraft} onMove={moveDraftAsset} onRemove={removeFromJourney} onLibrary={() => setView("library")} onBack={() => setView("journeys")} onSave={publishJourney} onGenerate={generateJourney} working={journeyWorking} shareUrl={shareUrl} personalUrl={personalShareUrl} published={publishedJourney} contacts={contacts} onContactShare={createContactShare} saved={draftSaved} saveError={error} saveNotice={notice} />}
+    {view === "editor" && <SageJourneyEditor key={workspaceId} draft={draft} assets={draftAssets} onChange={setDraft} onMove={moveDraftAsset} onRemove={removeFromJourney} onLibrary={() => setView("library", true)} onBack={() => setView("journeys")} onSave={publishJourney} onGenerate={generateJourney} working={journeyWorking} shareUrl={shareUrl} personalUrl={personalShareUrl} published={publishedJourney} contacts={contacts} onContactShare={createContactShare} saved={draftSaved} saveError={error} saveNotice={notice} />}
     {view === "metrics" && <><header className="sage-page-heading"><div><h1>Activity</h1><p>See how buyers engage with your proof.</p></div><button onClick={() => setView("tracking")}>Tracked links</button></header><MetricsView metrics={metrics} videos={videos} sources={sources} journeys={journeys} contacts={contacts} tracking={tracking} /><SageRecipients contacts={contacts} metrics={metrics} journeys={journeys} /></>}
     {view === "tracking" && <><button className="sage-back" onClick={() => setView("metrics")}>Back to activity</button><LinkTrackingView draft={trackingDraft} journeys={journeys} tracking={tracking} working={trackingWorking} onDraftChange={setTrackingDraft} onCreate={createTrackingLink} /></>}
     {view === "archive" && workspaceId && <JourneyArchive key={workspaceId} activeWorkspaceId={workspaceId} onChanged={() => void refreshWorkspace(workspaceId)} />}
