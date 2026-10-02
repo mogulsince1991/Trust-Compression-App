@@ -7,6 +7,10 @@ import { JourneyViewer, type PublicJourney } from "@/components/journey-viewer";
 import type { JourneyAssetType } from "@/lib/journey-embeds";
 import { createPublicSupabaseClient } from "@/lib/supabase";
 
+// Published copy must be read again on every request, including link previews.
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+
 type SharePageProps = {
   params: { token: string };
   searchParams?: { player?: string; asset?: string };

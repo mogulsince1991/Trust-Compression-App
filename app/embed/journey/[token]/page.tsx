@@ -5,6 +5,9 @@ import { JourneyViewer, type PublicJourney } from "@/components/journey-viewer";
 import type { JourneyAssetType } from "@/lib/journey-embeds";
 import { createPublicSupabaseClient } from "@/lib/supabase";
 
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+
 type EmbedPageProps = {
   params: { token: string };
   searchParams?: { background?: string; text?: string; transparent?: string };
