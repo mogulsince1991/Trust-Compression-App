@@ -2,6 +2,7 @@
 
 import { ArrowRight, ChevronLeft, ChevronRight, Play, FileText, List, Maximize2, X, ExternalLink, RotateCcw } from "lucide-react";
 import type React from "react";
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatJourneyAssetLabel, type JourneyAsset } from "@/components/trust-app-shared";
 import { PlaybackClock } from "@/lib/playback-clock";
@@ -12,6 +13,8 @@ import { AppBrand } from "./app-brand";
 import { assetThumbnailUrl } from "./asset-thumbnail";
 import { VimeoPlayer } from "./vimeo-player";
 import { loadYouTubePlayer, type YouTubePlayer } from "@/lib/youtube-player";
+
+const PdfReader = dynamic(() => import("./pdf-reader"), { ssr: false });
 
 export type PublicJourney = {
   appearance?: JourneyAppearance;
@@ -391,6 +394,8 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
             <div ref={youtubeHost} className="jx-youtube" />
           ) : activated && activeAsset.sourcePlatform === "vimeo" ? (
             <VimeoPlayer url={embedUrl} title={displayTitle} onLoaded={() => setLoadedId(activeAsset.id)} onEvent={(eventType, metadata) => { if (!preview) void trackJourneyEvent({ journey, assetId: activeAsset.id, videoId: activeAsset.videoId, eventType, viewerId: getViewerId(), activeIndex: active, metadata: { ...metadata, surface: variant } }); }} />
+          ) : activated && activeAsset.assetType === "pdf" && embedUrl ? (
+            <PdfReader url={embedUrl} title={displayTitle} assetId={activeAsset.id} token={journey.share_token} onReady={() => setLoadedId(activeAsset.id)} />
           ) : activated && embedUrl ? (
             <iframe
               key={embedUrl}

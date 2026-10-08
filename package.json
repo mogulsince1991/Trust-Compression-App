@@ -3,12 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/prepare-pdfjs.cjs",
+    "prebuild": "node scripts/prepare-pdfjs.cjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
   },
   "dependencies": {
+    "pdfjs-dist": "6.4.299",
     "xlsx": "file:vendor/xlsx-0.20.3.tgz",
     "@supabase/supabase-js": "^2.45.4",
     "lucide-react": "^0.468.0",
