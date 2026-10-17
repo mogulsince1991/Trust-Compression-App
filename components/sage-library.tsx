@@ -11,10 +11,36 @@ import { AssetTitleEditor } from "./asset-title-editor";
 
 export function libraryItem(asset: LibraryAssetRow): JourneyAsset { return { ...asset, libraryAssetId: asset.id, videoId: null, durationSeconds: null, position: 1, note: null }; }
 export function AssetPreview({ asset }: { asset: JourneyAsset }) {
+  return <SingleAssetPreview key={`${asset.id}:${asset.embedUrl}`} asset={asset} />;
+}
+
+function SingleAssetPreview({ asset }: { asset: JourneyAsset }) {
   const [playing, setPlaying] = useState(false);
+  const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);
+  let driveId: string | null = null;
+  try {
+    const url = new URL(asset.sourceUrl || asset.embedUrl || "");
+    if (asset.assetType === "video" && url.hostname === "drive.google.com") driveId = url.pathname.match(/\/file\/d\/([\w-]+)/)?.[1] || url.searchParams.get("id");
+  } catch { /* Non-Drive assets keep their provider player. */ }
+  useEffect(() => {
+    if (!driveId) return;
+    const controller = new AbortController();
+    fetch(`/api/media/drive/${encodeURIComponent(driveId)}/preview`, { signal: controller.signal })
+      .then(response => response.ok ? response.json() : null)
+      .then(data => { if (data?.width > 0 && data?.height > 0) setDimensions({ width: Number(data.width), height: Number(data.height) }); })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [driveId]);
+  const width = dimensions?.width || Number(asset.metadata?.width || asset.metadata?.videoWidth || 0);
+  const height = dimensions?.height || Number(asset.metadata?.height || asset.metadata?.videoHeight || 0);
+  const portrait = width > 0 && height > 0 ? height > width : /portrait|9[:/]16/.test(String(asset.metadata?.orientation || asset.metadata?.aspectRatio || ""));
+  const ratio = width > 0 && height > 0 ? `${width} / ${height}` : portrait ? "9 / 16" : "16 / 9";
   if (!asset.embedUrl) return <div className="sage-preview-placeholder"><FileText /><p>Embedded preview unavailable.</p>{asset.sourceUrl && <a href={asset.sourceUrl} target="_blank" rel="noreferrer">Open original <ExternalLink /></a>}</div>;
   if (!playing) return <button className={`sage-media-poster ${asset.assetType !== "video" ? "is-document" : ""}`} onClick={() => setPlaying(true)} aria-label={`Preview ${asset.title}`}><AssetThumbnail asset={asset} quality="high" /><span>{asset.assetType === "video" ? "Play video" : "View document"}</span></button>;
   const directVideo = asset.assetType === "video" && /\.(mp4|webm|mov)(\?|$)/i.test(asset.embedUrl);
+  if (driveId) return <div className={`sage-drive-player${portrait ? " is-portrait" : ""}`} style={{ aspectRatio: ratio }}>
+    <iframe src={`https://drive.google.com/file/d/${encodeURIComponent(driveId)}/preview`} title={asset.title} allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen />
+  </div>;
   return directVideo ? <video className="sage-media-video" src={asset.embedUrl} controls playsInline autoPlay /> : <iframe className={`sage-media-frame ${asset.assetType !== "video" ? "is-document" : ""}`} src={asset.embedUrl} title={asset.title} allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen />;
 }
 
