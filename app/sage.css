@@ -215,6 +215,17 @@
   .sage-setup-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 760px) {
+  /* The shell owns scrolling; a 100vh body otherwise extends past its 100dvh height on iOS. */
+  html:has(.sage-app:not(.sage-auth)),
+  body:has(.sage-app:not(.sage-auth)) {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    overscroll-behavior-y: none;
+    background: #f5f3ee;
+  }
+  html[data-sage-theme="dark"]:has(.sage-app:not(.sage-auth)),
+  html[data-sage-theme="dark"] body:has(.sage-app:not(.sage-auth)) { background: #20251f; }
   .sage-library .sage-selection-bar { left:12px; }
   .sage-app { display: flex; flex-direction: column; height: 100dvh; min-height: 0; overflow: hidden; padding-bottom: 0; }
   .sage-main { display: flex; flex: 1; min-height: 0; flex-direction: column; }
