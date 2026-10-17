@@ -1,8 +1,12 @@
 import { createHash } from "node:crypto";
 
-async function drive(token: string, path: string, init: RequestInit = {}) {
+export async function drive(token: string, path: string, init: RequestInit = {}) {
   const response = await fetch(`https://www.googleapis.com/drive/v3/${path}`, { ...init, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...init.headers }, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(20000) });
-  if (!response.ok) throw Error(response.status === 401 ? "Google access expired. Reconnect Photos and Drive." : "Google Drive could not complete the transfer. Check Drive permissions, available space and link-sharing restrictions, then retry.");
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    if (error.error?.errors?.some((item: { reason?: string }) => item.reason === "storageQuotaExceeded")) throw Error("Google Drive storage is full. Free space in the connected account, then retry.");
+    throw Error(response.status === 401 ? "Google access expired. Reconnect Photos and Drive." : "Google Drive could not complete the transfer. Check Drive permissions, available space and link-sharing restrictions, then retry.");
+  }
   return response.json();
 }
 
@@ -15,7 +19,7 @@ export async function photoDriveFolder(token: string, workspaceId: string) {
   return folder.id as string;
 }
 
-export async function uploadPhotoToDrive(token: string, workspaceId: string, assetId: string, name: string, bytes: Buffer, mime: string) {
+export async function uploadPhotoToDrive(token: string, workspaceId: string, assetId: string, name: string, bytes: Buffer, mime: string, destinationFolderId?: string) {
   const extension = ({ "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" } as Record<string,string>)[mime];
   if (!extension) throw Error("Unsupported photo format.");
   const filename = `${name.replace(/\.[^.]+$/, "").slice(0,220) || "Photo"}.${extension}`;
@@ -24,7 +28,7 @@ export async function uploadPhotoToDrive(token: string, workspaceId: string, ass
   const previous = await drive(token, `files?${params}`);
   let file = previous.files?.[0];
   if (!file) {
-    const folderId = await photoDriveFolder(token, workspaceId);
+    const folderId = destinationFolderId || await photoDriveFolder(token, workspaceId);
     const start = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,size,md5Checksum", {
       method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "X-Upload-Content-Type": mime, "X-Upload-Content-Length": String(bytes.length) },
       body: JSON.stringify({ name: filename, parents: [folderId], appProperties: { trusttaleAsset: assetId } }),

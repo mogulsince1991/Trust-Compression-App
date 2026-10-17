@@ -1,11 +1,12 @@
 # Google Photos to customer Google Drive
 
 Library > Add content > Google Photos imports up to 100 selected photos per session.
-Owners/admins can connect; viewers cannot import. Google Picker lets people search
+Owners/admins connect workspace storage on Home or Settings. Existing content-writing
+members can upload without another permission toggle; viewers cannot import. Google Picker lets people search
 albums and select their contents, but this is not a live album/folder subscription.
 Videos are skipped. Existing Drive/YouTube video playback is unchanged.
 Selected photos go to an app-created TrustTale Photos folder in the connected Google
-account's Drive. New imports do not write to Supabase Storage, even temporarily.
+workspace account's Drive. New imports do not write to Supabase Storage, even temporarily.
 
 ## Google Cloud setup required
 
@@ -24,8 +25,17 @@ account's Drive. New imports do not write to Supabase Storage, even temporarily.
 5. Deploy after environment changes. Test sign-in, multi-selection, import, repeat
    import, image display in a published journey, and permanent deletion.
 
-The browser token model does not need a new server callback URL. Google credentials
-are held in component memory, not persisted in a workspace, database or browser storage.
+Workspace storage requires a server OAuth callback. Register
+`https://app.trusttale.co/api/workspace-storage/callback` in the Google client's
+authorized redirect URIs, plus the same path on any other app domains in use.
+Configure `GOOGLE_STORAGE_CLIENT_ID` and `GOOGLE_STORAGE_CLIENT_SECRET` (existing
+`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` are fallbacks). Enable Drive API.
+Workspace access and refresh tokens are encrypted with AES-GCM in service-only
+database tables, bound to the workspace. Prefer a dedicated `STORAGE_CREDENTIAL_KEY`;
+otherwise the service-role key is used. Changing the encryption key requires reconnecting.
+Only the Google Photos Picker token stays in browser component memory.
+Settings can choose folders already accessible to the app under `drive.file`,
+reconnect, or disconnect. Disconnect does not delete existing Drive files.
 Imported image copies are bounded to 2048px and 10 MB each; this is not original-file backup.
 The Google API URL is never used as a permanent image link.
 
@@ -37,7 +47,7 @@ Only after saving the Drive reference does it delete any legacy Supabase copy.
 If cleanup fails, import reports an error; reimport retries cleanup. No background
 storage staging is used. There were zero stored photos when this change was made.
 
-Requests require workspace owner/admin permissions. An explicit checkbox authorizes
+Imports require an existing content-writing workspace role. An explicit checkbox authorizes
 copying to Drive and anyone-with-link reader access to each imported file. The folder
 is not made public. Organization sharing restrictions produce an error, not a silent
 fallback to Supabase. A private uploaded Drive file may remain for the next retry.
@@ -47,7 +57,7 @@ image route but leaves the customer's Drive file untouched. Delete or change sha
 on the actual file in Drive. Direct Drive links remain accessible until changed there.
 Archiving is not deletion. Removing/restricting files in Drive can break journeys.
 
-No Google account token, base URL, camera metadata or location data is persisted.
+No Photos Picker token, base URL, camera metadata or location data is persisted.
 Filename, original dimensions, capture date and provider item ID are stored for display
 and deduplication. Drive copies use the customer's storage. Server transfer and
 processing usage still apply, but no photo bytes are retained in Supabase Storage.

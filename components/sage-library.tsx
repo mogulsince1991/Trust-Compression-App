@@ -95,7 +95,7 @@ export function SageLibrary({ workspaceId, onPhotosImported, selectionKey, video
       {preview.sourceUrl && <a className="sage-original-link" href={preview.sourceUrl} target="_blank" rel="noreferrer">{preview.metadata?.provider === "google_photos" ? "Open imported photo" : "Open original"} <ExternalLink /></a>}
       {originalVideo && <details><summary>Edit searchable context</summary><ContextEditor key={originalVideo.id} video={originalVideo} saving={saving} options={buildOptions(videos, [])} onSave={onSaveContext} /></details>}
       <button className="sage-danger" onClick={() => { if (originalVideo) onArchive(originalVideo); else if (originalAsset) onDeleteAsset(originalAsset); }}><Archive />Archive asset</button>
-      {preview.metadata?.provider === "google_photos" && originalAsset ? <DeleteGooglePhoto workspaceId={workspaceId} assetId={originalAsset.id} onDeleted={async () => { setPreviewId(null); await onPhotosImported(); }} /> : <p className="sage-help">Recipient access is controlled by the original file host.</p>}
+      {["google_photos", "workspace_photo"].includes(String(preview.metadata?.provider)) && originalAsset ? <DeleteGooglePhoto workspaceId={workspaceId} assetId={originalAsset.id} onDeleted={async () => { setPreviewId(null); await onPhotosImported(); }} /> : <p className="sage-help">Recipient access is controlled by the original file host.</p>}
     </aside>}
   </section>;
 }

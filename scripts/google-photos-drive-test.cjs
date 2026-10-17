@@ -47,7 +47,8 @@ const upload = () => exported.uploadPhotoToDrive('token','workspace','asset-id',
     require:name=> name==='next/server'?{NextResponse:{json:(body,options)=>({body,...options})}}:
       name==='@/lib/server/route-auth'?{httpError:(status,message)=>Object.assign(Error(message),{status}),requireWorkspaceAccess:async()=>({serviceSupabase:db,user:{id:'user'}}),requireWorkspaceManager:c=>c}:
       name==='@/lib/server/google-photos'?{PHOTOS_BUCKET:'library-photos',photoAssetId:()=> 'asset',verifyPhoto:()=>({id:'photo',mediaFile:{filename:'photo.jpg'}}),downloadPhoto:async()=>({bytes,mime:'image/jpeg'})}:
-      name==='@/lib/server/google-photos-drive'?{uploadPhotoToDrive:async()=>{events.push('drive');if(failure==='drive')throw Error('Drive failed');return file.id;}}:require(name),
+      name==='@/lib/server/google-photos-drive'?{uploadPhotoToDrive:async()=>{events.push('drive');if(failure==='drive')throw Error('Drive failed');return file.id;}}:
+      name==='@/lib/server/workspace-photo-storage'?{requirePhotoWriter:c=>c,workspacePhotoToken:async()=>({token:'workspace-token',connection:{folder_id:'folder'}})}:require(name),
   });
   const req = {url:'https://app.trusttale.co/api/import/google-photos',text:async()=>JSON.stringify({workspaceId:'workspace',action:'import',googleToken:'token',consent:true,driveSharingConsent:true,ticket:'ticket'})};
   assert.equal((await endpoint.POST(req)).status,200);

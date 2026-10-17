@@ -366,3 +366,7 @@
 .sage-photos-consent input { width: auto !important; flex: 0 0 auto; margin-top: 4px; }
 .sage-photos-results { max-height: 260px; overflow: auto; padding: 0; list-style: none; }
 .sage-photos-results li { display: grid; gap: 4px; padding: 10px 0; overflow-wrap: anywhere; }
+.sage-storage-card { margin-bottom: 24px; }
+.sage-storage-card h2 { display: flex; align-items: center; gap: 10px; }
+.sage-storage-card .sage-actions { flex-wrap: wrap; }
+.sage-storage-card input[type="file"] { max-width: 100%; }

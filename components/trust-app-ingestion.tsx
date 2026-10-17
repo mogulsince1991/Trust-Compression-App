@@ -32,6 +32,7 @@ import { ReviewSessionBanner } from "./review-session-banner";
 import { isReviewUser } from "@/lib/review-access";
 import { SageJourneys, SageJourneyEditor } from "./sage-journeys";
 import { SageHome, SageRecipients } from "./sage-home";
+import { WorkspacePhotoStorage } from "./workspace-photo-storage";
 import dynamic from "next/dynamic";
 const ContractorMetricsWorkspace = dynamic(() => import("./contractor-metrics-workspace").then(m => m.ContractorMetricsWorkspace), { loading: () => <p role="status">Opening reports...</p> });
 const JourneyArchive = dynamic(() => import("./journey-archive").then(m => m.JourneyArchive), { loading: () => <p role="status">Opening archive...</p> });
@@ -848,6 +849,7 @@ export function TrustAppIngestion({
       rememberWorkspaceId(nextWorkspace.id);
       await refreshWorkspace(nextWorkspace.id);
       setNotice(`${nextWorkspace.name} is ready.`);
+      setView("home");
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Could not create workspace.");
     } finally {
@@ -1492,7 +1494,7 @@ export function TrustAppIngestion({
 
   return <SageShell view={view} workspaces={workspaces} workspaceId={workspaceId} onSwitch={switchWorkspace} onNavigate={setView} onSignOut={() => void signOut()} isAdmin={isPlatformAdmin} busy={loading} notice={notice} error={error || (draftStorageError ? "Browser draft recovery is unavailable. Save your journey before leaving." : "")} onDismiss={() => { setNotice(""); setError(""); }}>
     {reviewing && <ReviewSessionBanner expiresAt={String(session?.user.app_metadata.review_expires_at || "")} />}
-    {view === "home" && <SageHome contentCount={videos.length + libraryAssets.length} journeys={journeys} metrics={metrics} onNavigate={setView} onNew={newJourney} onEdit={editJourney} draftCount={draftAssets.length} />}
+    {view === "home" && <>{workspaceId && !reviewing && <WorkspacePhotoStorage key={workspaceId} workspaceId={workspaceId} onUploaded={() => loadLibraryAssets(workspaceId)} />}<SageHome contentCount={videos.length + libraryAssets.length} journeys={journeys} metrics={metrics} onNavigate={setView} onNew={newJourney} onEdit={editJourney} draftCount={draftAssets.length} /></>}
     {view === "library" && !reviewing && workspaceBooted && session && workspaceId && <LibrarySourceRefresh key={workspaceId} workspaceId={workspaceId} userId={session.user.id} onComplete={async isActive => { await Promise.all([loadVideos(workspaceId, isActive), loadSources(workspaceId, isActive)]); }} />}
     {view === "library" && <SageLibrary workspaceId={workspaceId || ""} onPhotosImported={() => loadLibraryAssets(workspaceId)} key={`${session?.user.id}:${workspaceId}`} selectionKey={`library-selection:${session?.user.id}:${workspaceId}`} videos={videos} libraryAssets={libraryAssets} assetDraft={libraryAssetDraft} onAssetDraftChange={setLibraryAssetDraft} onSaveAsset={saveLibraryAsset} saving={working} onArchive={archiveVideo} onDeleteAsset={deleteLibraryAsset} onSaveContext={saveVideoContext} onImport={importSource} onAddItems={addLibraryItems} draftCount={draftAssets.length} onOpenDraft={() => setView("editor")} />}
     {view === "journeys" && <SageJourneys onRemove={removeJourney} working={journeyWorking} readOnly={reviewing} onArchive={() => setView("archive")} journeys={journeys} onEdit={editJourney} onNew={newJourney} onResume={() => setView("editor")} hasDraft={draftAssets.length > 0 || Boolean(draft.title)} />}
@@ -1504,6 +1506,7 @@ export function TrustAppIngestion({
     {["workspace", "sources", "socialProfiles"].includes(view) && <nav className="sage-settings-nav" aria-label="Settings sections"><button aria-current={view === "workspace" ? "page" : undefined} onClick={() => setView("workspace")}>Workspace & team</button><button aria-current={view === "sources" ? "page" : undefined} onClick={() => setView("sources")}>Content sources</button><button aria-current={view === "socialProfiles" ? "page" : undefined} onClick={() => setView("socialProfiles")}>YouTube insights</button><button onClick={() => { setView("reports"); router.push("/app/reports?tab=connections"); }}>CRM connections & spend</button></nav>}
     {view === "sources" && <SourcesView sources={sources} importing={working} onImport={importSource} onReimport={reimportSource} onDelete={deleteSource} />}
     {view === "workspace" && currentWorkspace && canManageWorkspace && !reviewing && <WorkspaceAppearance key={currentWorkspace.id} workspaceId={currentWorkspace.id} value={currentWorkspace.settings?.journeyAppearance} onSaved={() => { void loadWorkspaces(); }} />}
+    {view === "workspace" && workspaceId && !reviewing && <WorkspacePhotoStorage key={workspaceId} workspaceId={workspaceId} settings onUploaded={() => loadLibraryAssets(workspaceId)} />}
     {view === "workspace" && <WorkspaceView workspace={currentWorkspace} workspaces={workspaces} members={workspaceMembers} invites={workspaceInvites} integrationKeys={integrationKeys} integrationSecret={integrationSecret} mcpUrl={mcpUrl} canManage={canManageWorkspace} working={working} createName={createWorkspaceName} renameName={renameWorkspaceName} inviteDraft={inviteDraft} onCreateNameChange={setCreateWorkspaceName} onRenameNameChange={setRenameWorkspaceName} onInviteDraftChange={setInviteDraft} onCreate={createWorkspace} onRename={renameWorkspace} onInvite={inviteWorkspaceMember} onSwitch={switchWorkspace} onMemberRoleChange={updateWorkspaceMemberRole} onRemoveMember={removeWorkspaceMember} onRevokeInvite={revokeWorkspaceInvite} onCreateIntegrationKey={createIntegrationKey} onAttachIntegrationKey={attachIntegrationKey} onRevokeIntegrationKey={revokeIntegrationKey} />}
     {view === "workspace" && isPlatformAdmin && !reviewing && <ReviewAccessSettings />}
     {view === "workspace" && <section className="sage-panel"><h2>How-to videos</h2><p>Walkthroughs provided by Unmarked will appear here and alongside the relevant tools. No videos are published yet.</p>{["Adding content", "Creating and sharing journeys", "Understanding customer activity"].map(title => <label key={title}>{title}<input disabled placeholder="Video link coming soon" /></label>)}</section>}

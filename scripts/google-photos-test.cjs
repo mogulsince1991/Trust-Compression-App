@@ -50,7 +50,7 @@ assert.throws(() => verifyPhoto(signPhoto({ ...photo, type: 'VIDEO' }, 'a', 'b',
       httpError,
       requireWorkspaceAccess: async () => { if (!authenticated) throw httpError(401, 'Sign in'); return { workspaceRole: role, user: { id: 'user-a' }, serviceSupabase: {} }; },
       requireWorkspaceManager: context => { if (!['owner','admin'].includes(context.workspaceRole)) throw httpError(403, 'Read only'); return context; },
-    } : require(name),
+    } : name === '@/lib/server/workspace-photo-storage' ? { requirePhotoWriter: c => { if (c.workspaceRole === 'viewer') throw httpError(403,'Read only'); return c; } } : require(name),
   });
   const request = body => ({ url: 'https://app.trusttale.co/api/import/google-photos?workspaceId=workspace-a', text: async () => JSON.stringify(body), json: async () => body });
   assert.equal((await route.GET(request())).status, 403);

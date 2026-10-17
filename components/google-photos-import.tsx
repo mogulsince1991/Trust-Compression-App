@@ -3,6 +3,7 @@
 import Script from "next/script";
 import { useEffect, useRef, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
+import { WorkspacePhotoStorage } from "./workspace-photo-storage";
 
 type Photo = { id: string; name: string; ticket: string; result?: string; error?: string };
 type TokenResponse = { access_token?: string; error?: string; expires_in?: number };
@@ -42,7 +43,7 @@ export function GooglePhotosImport({ workspaceId, onImported }: { workspaceId: s
     const google = (window as Window & { google?: GoogleIdentity }).google;
     if (!google) { setMessage("Google sign-in could not load. Check your connection or browser blocker."); return; }
     running.current = true; setBusy(true); setMessage(""); setPhotos([]);
-    google.accounts.oauth2.initTokenClient({ client_id: clientId, scope: "https://www.googleapis.com/auth/photospicker.mediaitems.readonly https://www.googleapis.com/auth/drive.file",
+    google.accounts.oauth2.initTokenClient({ client_id: clientId, scope: "https://www.googleapis.com/auth/photospicker.mediaitems.readonly",
       error_callback: () => { running.current = false; if (mounted.current) { setBusy(false); setMessage("Google sign-in was closed or blocked. Try connecting again."); } },
       callback: async response => {
         try {
@@ -104,11 +105,12 @@ export function GooglePhotosImport({ workspaceId, onImported }: { workspaceId: s
     <Script src="https://accounts.google.com/gsi/client" strategy="afterInteractive" onReady={() => setScriptReady(true)} onError={() => setMessage("Google sign-in failed to load. Check your browser blocker and try again.")} />
     <h3>Import from Google Photos</h3>
     <p>Select up to 100 photos at once. You can search for an album in Google's picker and select the photos you want. This is a one-time import, not automatic album sync.</p>
-    <p>Selected photos are copied to a TrustTale Photos folder in the Google Drive account you connect. They use your Google storage, not TrustTale file storage. Originals stay in Google Photos. Videos are not copied.</p>
+    <WorkspacePhotoStorage workspaceId={workspaceId} onUploaded={onImported} />
+    <p>Selected photos are copied to this workspace's connected Google Drive, even if you select photos from a different Google account. Originals stay in Google Photos. Videos are not copied.</p>
     <p className="sage-help">Photos pass through temporary server memory, up to 2048 pixels and 10 MB each. Only file references are saved in TrustTale. Remove references in the library; manage or delete the actual copies in Google Drive. Google access is temporary and is not saved.</p>
     <p className="sage-help">Google Photos data is used for the selected import and sharing features, in accordance with the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noreferrer">Google User Data Policy, including Limited Use requirements</a>.</p>
-    <label className="sage-photos-consent"><input type="checkbox" checked={consent} disabled={busy} onChange={event => setConsent(event.target.checked)} />I have permission to copy these photos to my connected Google Drive and enable anyone-with-the-link viewing on those copies for customer journeys.</label>
-    <div className="sage-actions"><button type="button" disabled={!clientId || !scriptReady || busy || !consent} onClick={connect}>{busy ? "Working..." : picker ? "Choose different photos" : "Connect Google Photos and Drive"}</button>
+    <label className="sage-photos-consent"><input type="checkbox" checked={consent} disabled={busy} onChange={event => setConsent(event.target.checked)} />I have permission to copy these photos to the workspace Google Drive and enable anyone-with-the-link viewing on those copies for customer journeys.</label>
+    <div className="sage-actions"><button type="button" disabled={!clientId || !scriptReady || busy || !consent} onClick={connect}>{busy ? "Working..." : picker ? "Choose different photos" : "Choose from Google Photos"}</button>
       {picker && <><a href={picker.pickerUri} target="_blank" rel="noreferrer">Open Google Photos</a><button type="button" disabled={busy} onClick={loadSelection}>Load selected photos</button></>}
       {photos.some(photo => !photo.result) && <button type="button" className="sage-primary" disabled={busy || !consent} onClick={importPhotos}>Import {photos.filter(photo => !photo.result).length} photos</button>}
     </div>

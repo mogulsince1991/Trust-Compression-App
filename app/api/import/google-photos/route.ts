@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { httpError, requireWorkspaceAccess, requireWorkspaceManager } from "@/lib/server/route-auth";
 import { downloadPhoto, PHOTOS_BUCKET, photoAssetId, pickerRequest, signPhoto, verifyPhoto, type PickedPhoto } from "@/lib/server/google-photos";
 import { uploadPhotoToDrive } from "@/lib/server/google-photos-drive";
+import { requirePhotoWriter, workspacePhotoToken } from "@/lib/server/workspace-photo-storage";
 
 export const maxDuration = 180;
 export const dynamic = "force-dynamic";
@@ -11,7 +12,7 @@ const json = (data: object, status = 200) => NextResponse.json(data, { status, h
 export async function GET(request: Request) {
   try {
     const workspaceId = new URL(request.url).searchParams.get("workspaceId") || "";
-    requireWorkspaceManager(await requireWorkspaceAccess(request, workspaceId));
+    requirePhotoWriter(await requireWorkspaceAccess(request, workspaceId));
     const clientId = process.env.GOOGLE_PHOTOS_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
     if (!clientId) throw httpError(503, "Google Photos needs setup. Ask your administrator to configure the Google Photos OAuth client.");
     return json({ clientId });
@@ -25,7 +26,8 @@ export async function POST(request: Request) {
     const body = JSON.parse(raw);
     const { workspaceId, action, googleToken, sessionId } = body;
     if (typeof workspaceId !== "string") throw httpError(400, "Workspace is required.");
-    const { serviceSupabase, user } = requireWorkspaceManager(await requireWorkspaceAccess(request, workspaceId));
+    const context = requirePhotoWriter(await requireWorkspaceAccess(request, workspaceId));
+    const { serviceSupabase, user } = context;
     if (typeof googleToken !== "string" || !googleToken || googleToken.length > 4096) throw httpError(400, "Connect Google Photos first.");
     const secret = process.env.SUPABASE_SERVICE_ROLE_KEY!;
     if (action === "create") {
@@ -62,7 +64,8 @@ export async function POST(request: Request) {
       return json({ status: existing.archived_at ? "restored" : "existing" });
     }
     const { bytes, mime } = await downloadPhoto(photo, googleToken);
-    const driveFileId = await uploadPhotoToDrive(googleToken, workspaceId, id, photo.mediaFile.filename || "Photo.jpg", bytes, mime);
+    const storage = await workspacePhotoToken(context, workspaceId);
+    const driveFileId = await uploadPhotoToDrive(storage.token, workspaceId, id, photo.mediaFile.filename || "Photo.jpg", bytes, mime, storage.connection.folder_id);
     const photoKey = existing?.metadata?.photoKey || randomBytes(32).toString("hex");
     const mediaUrl = `${new URL(request.url).origin}/api/media/photos/${photoKey}`;
     const payload = {
@@ -86,7 +89,7 @@ export async function DELETE(request: Request) {
     const { workspaceId, assetId } = await request.json();
     const { serviceSupabase } = requireWorkspaceManager(await requireWorkspaceAccess(request, workspaceId));
     const { data, error } = await serviceSupabase.from("library_assets").select("metadata").eq("workspace_id", workspaceId).eq("id", assetId).single();
-    if (error || data.metadata?.provider !== "google_photos") throw httpError(404, "Photo not found.");
+    if (error || !["google_photos", "workspace_photo"].includes(data.metadata?.provider)) throw httpError(404, "Photo not found.");
     if (data.metadata.driveFileId) {
       await removeLegacyCopy(serviceSupabase, workspaceId, assetId, data.metadata);
       const saved = await serviceSupabase.from("library_assets").update({ archived_at: new Date().toISOString(), metadata: { provider: "google_photos", photoDeleted: true } }).eq("workspace_id", workspaceId).eq("id", assetId);
