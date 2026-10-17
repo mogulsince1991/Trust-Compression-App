@@ -12,6 +12,7 @@ import { toRuntimeMetricRules } from "../../../../../lib/metrics/contractor/conf
 import { requireWorkspaceAccess } from "../../../../../lib/server/route-auth";
 import { recordActivity } from "../../../../../lib/server/activity";
 import { SALES_RULE } from "../../../../../lib/metrics/contractor/salesDocuments.js";
+import { reportToday } from "../../../../../lib/metrics/contractor/report-date";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,6 +37,9 @@ export async function POST(request) {
     const { user, userSupabase, serviceSupabase } = await requireWorkspaceAccess(request, workspaceId);
     const ruleSet = await getContractorRuleSet(serviceSupabase, workspaceId, ruleSetId);
     const runtimeRules = toRuntimeMetricRules(ruleSet);
+    if (endDate > reportToday(runtimeRules.timezone)) {
+      return NextResponse.json({ error: "End date cannot be later than today in the report timezone." }, { status: 400 });
+    }
     const shared = new Map();
 
     const current = await generateReportPayload({

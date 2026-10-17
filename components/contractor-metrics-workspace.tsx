@@ -14,6 +14,7 @@ import { SALES_RULE } from "@/lib/metrics/contractor/salesDocuments.js";
 import { ContractorSpend } from "./contractor-spend";
 import { orderMetrics } from "@/lib/metrics/contractor/metric-validation";
 import { printReport } from "@/lib/metrics/contractor/print-report";
+import { reportToday } from "@/lib/metrics/contractor/report-date";
 
 type AnyRecord = Record<string, any>;
 type TabId = "metrics" | "config" | "connections";
@@ -107,8 +108,8 @@ export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorksp
   const [previewFilters, setPreviewFilters] = useState<Record<string, PreviewFilterState>>({});
   const [previewRequests, setPreviewRequests] = useState<Record<string, PreviewRequestState>>({});
   const [clientName, setClientName] = useState("Trust Compression Contractor Report");
-  const [startDate, setStartDate] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`; });
-  const [endDate, setEndDate] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()).padStart(2, "0")}`; });
+  const [startDate, setStartDate] = useState(() => `${reportToday().slice(0, 7)}-01`);
+  const [endDate, setEndDate] = useState(() => reportToday());
   const [ghl, setGhl] = useState(EMPTY_GHL);
   const [jobtread, setJobtread] = useState(EMPTY_JOBTREAD);
 
@@ -191,7 +192,7 @@ export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorksp
         fetch(`/api/connect/accounts?workspaceId=${encodeURIComponent(nextWorkspaceId)}`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`/api/metrics/contractor/config?workspaceId=${encodeURIComponent(nextWorkspaceId)}`, { headers: { Authorization: `Bearer ${token}` } }),
         supabase
-          .from("contractor_reports")
+          .from("contractor_latest_reports")
           .select("id,client_name,start_date,end_date,created_at,totals,breakdowns,source_snapshot,rule_set_id,rules_snapshot,executiveSummary:detail->executiveSummary,dashboard:detail->dashboard,configuredMetrics:detail->configuredMetrics,comparison:detail->comparison,unmatched:detail->unmatched,debug:detail->debug")
           .eq("workspace_id", nextWorkspaceId)
           .order("created_at", { ascending: false })
@@ -276,6 +277,10 @@ export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorksp
 
   async function runReport() {
     if (!workspaceId || !session || !ruleSetDraft) return;
+    if (!startDate || !endDate || startDate > endDate || endDate > reportToday(ruleSetDraft.settings?.timezone)) {
+      setError("Choose a valid date range ending today or earlier.");
+      return;
+    }
     setWorking("report");
     setNotice("");
     setError("");
@@ -593,8 +598,8 @@ export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorksp
               <div className={styles.formGrid}>
                 <Field label="Client name" value={clientName} onChange={setClientName} />
                 <SelectField label="Report template" value={selectedRuleSetId ?? ""} onChange={(value) => { setSelectedRuleSetId(value); const next = ruleSets.find((entry) => entry.id === value) ?? null; setRuleSetDraft(clone(next)); }} options={ruleSets.map((entry) => ({ value: entry.id ?? entry.slug, label: entry.name }))} />
-                <Field label="Start date" type="date" value={startDate} onChange={setStartDate} />
-                <Field label="End date" type="date" value={endDate} onChange={setEndDate} />
+                <Field label="Start date" type="date" max={reportToday(ruleSetDraft?.settings?.timezone)} value={startDate} onChange={setStartDate} />
+                <Field label="End date" type="date" min={startDate} max={reportToday(ruleSetDraft?.settings?.timezone)} value={endDate} onChange={setEndDate} />
               </div>
             </Panel>
             <Panel title="Dashboard status" icon={<Database />}>
@@ -1077,8 +1082,8 @@ function MetricCard({ label, value, detail, delta, inspector }: { label: string;
   );
 }
 
-function Field({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (value: string) => void; type?: string }) {
-  return <label><span>{label}</span><input type={type} value={value} onChange={(event) => onChange(event.target.value)} /></label>;
+function Field({ label, value, onChange, type = "text", min, max }: { label: string; value: string; onChange: (value: string) => void; type?: string; min?: string; max?: string }) {
+  return <label><span>{label}</span><input type={type} min={min} max={max} value={value} onChange={(event) => onChange(event.target.value)} /></label>;
 }
 
 function SelectField({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: Array<{ value: string; label: string }> }) {

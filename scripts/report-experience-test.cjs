@@ -18,6 +18,12 @@ const source = fs.readFileSync('app/api/metrics/contractor/report/route.js', 'ut
 assert.match(source, /exportDatasets: persist \? undefined : current.exportDatasets/);
 assert.match(source, /No partial or legacy sales totals were used/);
 const ui = fs.readFileSync('components/contractor-metrics-workspace.tsx', 'utf8');
+const { reportToday } = load('lib/metrics/contractor/report-date.ts');
+assert.equal(reportToday('America/New_York', new Date('2026-10-17T02:00:00Z')), '2026-10-16');
+assert.equal(reportToday('Asia/Tokyo', new Date('2026-10-17T02:00:00Z')), '2026-10-17');
+assert.match(ui, /from\("contractor_latest_reports"\)/);
+assert.match(ui, /useState\(\(\) => reportToday\(\)\)/);
+assert.match(source, /endDate > reportToday\(runtimeRules.timezone\)/);
 assert.match(ui, /\.limit\(3\)/);
 assert.match(ui, /Saved report from/);
 assert.match(ui, /rules_snapshot/);
