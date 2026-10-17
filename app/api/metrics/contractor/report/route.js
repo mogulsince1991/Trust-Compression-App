@@ -36,6 +36,7 @@ export async function POST(request) {
     const { user, userSupabase, serviceSupabase } = await requireWorkspaceAccess(request, workspaceId);
     const ruleSet = await getContractorRuleSet(serviceSupabase, workspaceId, ruleSetId);
     const runtimeRules = toRuntimeMetricRules(ruleSet);
+    const shared = new Map();
 
     const current = await generateReportPayload({
       userSupabase,
@@ -46,6 +47,7 @@ export async function POST(request) {
       endDate,
       ruleSet,
       runtimeRules,
+      shared,
     });
 
     const comparisonRange = compareToPreviousPeriod ? previousPeriodRange(startDate, endDate) : null;
@@ -59,6 +61,7 @@ export async function POST(request) {
           endDate: comparisonRange.endDate,
           ruleSet,
           runtimeRules,
+          shared,
         })
       : null;
 
@@ -126,13 +129,15 @@ export async function POST(request) {
         .select("id")
         .single();
 
-      if (runError) throw runError;
+      if (runError) console.error("Report saved, run log failed", { reportId: savedReport.id, code: runError.code });
       savedRun = insertedRun;
     }
 
-    await recordActivity(serviceSupabase, { workspaceId, actorUserId: user.id, eventType: "contractor_report_generated", entityType: "contractor_report", entityId: savedReport?.id ?? null, surface: "contractor_metrics", metadata: { persisted: persist, comparison: Boolean(comparison) } });
+    try { await recordActivity(serviceSupabase, { workspaceId, actorUserId: user.id, eventType: "contractor_report_generated", entityType: "contractor_report", entityId: savedReport?.id ?? null, surface: "contractor_metrics", metadata: { persisted: persist, comparison: Boolean(comparison) } }); }
+    catch { console.error("Report activity log failed", { reportId: savedReport?.id }); }
 
-    return NextResponse.json({
+    return streamReport({
+      startDate, endDate, clientName,
       reportId: savedReport?.id ?? null,
       reportRunId: savedRun?.id ?? null,
       createdAt: savedReport?.created_at ?? new Date().toISOString(),
@@ -145,7 +150,7 @@ export async function POST(request) {
       unmatched: current.unmatched,
       dashboard: current.dashboard,
       debug: current.debug,
-      exportDatasets: current.exportDatasets,
+      exportDatasets: persist ? undefined : current.exportDatasets,
       comparison: comparison
         ? {
             label: "Previous period",
@@ -157,12 +162,22 @@ export async function POST(request) {
         : null,
     });
   } catch (error) {
-    const status = typeof error === "object" && error && "status" in error ? Number(error.status) : 400;
+    console.error("Contractor report failed", { name: error?.name, code: error?.code, message: error?.message });
+    const status = typeof error === "object" && error && "status" in error ? Number(error.status) : 502;
     return NextResponse.json({ error: error instanceof Error ? error.message : "Contractor metrics report failed." }, { status });
   }
 }
 
-async function generateReportPayload({ userSupabase, serviceSupabase, workspaceId, clientName, startDate, endDate, ruleSet, runtimeRules }) {
+function streamReport(payload) {
+  const bytes = new TextEncoder().encode(JSON.stringify(payload));
+  let offset = 0;
+  return new Response(new ReadableStream({ pull(controller) {
+    if (offset >= bytes.length) { controller.close(); return; }
+    controller.enqueue(bytes.subarray(offset, offset + 65536)); offset += 65536;
+  } }), { headers: { "Content-Type": "application/json", "Cache-Control": "private, no-store" } });
+}
+
+async function generateReportPayload({ userSupabase, serviceSupabase, workspaceId, clientName, startDate, endDate, ruleSet, runtimeRules, shared }) {
   const [{ data: spendRows, error: spendError }, { data: connectedAccounts, error: accountsError }] = await Promise.all([
     readSpendRows(userSupabase, workspaceId, startDate, endDate),
     serviceSupabase
@@ -181,13 +196,14 @@ async function generateReportPayload({ userSupabase, serviceSupabase, workspaceI
       if (account.provider === "ghl" || account.provider === "gohighlevel") {
         const accountLabel = account.account_label ?? "GoHighLevel";
         try {
+          const key = `ghl:${account.id}`;
+          if (!shared.has(key)) shared.set(key, fetchGoHighLevelSnapshot(account, {
+            limit: 100000, scanLimit: 100000, maxPages: 1000, timeZone: runtimeRules?.timezone,
+          }));
           return {
             provider: "gohighlevel",
             accountLabel,
-            snapshot: await fetchGoHighLevelSnapshot(account, {
-              limit: 100000, scanLimit: 100000, maxPages: 1000,
-              timeZone: runtimeRules?.timezone,
-            }),
+            snapshot: await shared.get(key),
             error: null,
           };
         } catch (error) {
@@ -210,6 +226,7 @@ async function generateReportPayload({ userSupabase, serviceSupabase, workspaceI
               startDate,
               endDate,
               timeZone: runtimeRules?.timezone,
+              requestCache: shared,
             }),
             error: null,
           };
@@ -569,8 +586,8 @@ function toUploadedSpendRow(row) {
 }
 
 
-async function fetchChunkedJobTreadSnapshot(account, { startDate, endDate, timeZone }) {
-  return fetchJobTreadSnapshot(account, { startDate, endDate, timeZone, filterToWindow: true });
+async function fetchChunkedJobTreadSnapshot(account, { startDate, endDate, timeZone, requestCache }) {
+  return fetchJobTreadSnapshot(account, { startDate, endDate, timeZone, requestCache, filterToWindow: true });
 }
 
 function dedupeRows(rows, keyFn) {

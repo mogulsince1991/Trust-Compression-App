@@ -8,6 +8,7 @@ const database = { from() {
   return {
     select() { return this; }, match(value) { scope = value; return this; },
     eq(_, value) { key = value; return this; },
+    async in(_, keys) { return { data: keys.flatMap(cache_key => { const row = records.get(JSON.stringify({ ...scope, cache_key })); return row ? [{ ...row, cache_key }] : []; }) }; },
     async maybeSingle() { return { data: records.get(JSON.stringify({ ...scope, cache_key: key })) ?? null }; },
     async upsert(row) { const { payload, updated_at, ...identity } = row; records.set(JSON.stringify(identity), { payload, updated_at }); return {}; },
   };

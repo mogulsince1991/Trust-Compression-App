@@ -23,6 +23,16 @@ export function documentCache(account: any) {
   const scope = { workspace_id: account.workspace_id, connector_id: account.id, rule_version: SALES_RULE.version };
   if (!db || !scope.workspace_id || !scope.connector_id) throw new Error("Document history cache requires a connected workspace account.");
   return {
+    async getMany(keys: string[], maxAge: number) {
+      const found = new Map<string, any>();
+      for (let offset = 0; offset < keys.length; offset += 200) {
+        const { data, error } = await db.from("contractor_connector_cache").select("cache_key,payload,updated_at")
+          .match(scope).in("cache_key", keys.slice(offset, offset + 200));
+        if (error) throw error;
+        for (const row of data ?? []) if (Date.now() - Date.parse(row.updated_at) < maxAge) found.set(row.cache_key, row.payload);
+      }
+      return found;
+    },
     async get(key: string, maxAge: number) {
       const { data, error } = await db.from("contractor_connector_cache").select("payload,updated_at")
         .match(scope).eq("cache_key", key).maybeSingle();
@@ -43,11 +53,12 @@ export async function discoverSalesDocuments(query: Query, organizationId: strin
       id: {}, number: {}, type: {}, status: {}, name: {}, issueDate: {}, closedAt: {}, createdAt: {}, priceWithTax: {}, job: { id: {}, number: {}, name: {} },
     }, nextPage: {} } } }), response => response.organization?.documents);
   const candidates = documents.filter(doc => doc.job?.id && isSalesDocument(doc) && Number(doc.priceWithTax) > 0);
+  const histories = await cache.getMany(candidates.map(doc => `history:${doc.id}`), 24 * 60 * 60 * 1000);
   const result: any[] = [];
   for (let offset = 0; offset < candidates.length; offset += 8) {
     result.push(...await Promise.all(candidates.slice(offset, offset + 8).map(async doc => {
       const fingerprint = JSON.stringify([doc.status,doc.closedAt,doc.issueDate,doc.createdAt,doc.priceWithTax,doc.name,doc.number]);
-      const saved = await cache.get(`history:${doc.id}`, 24 * 60 * 60 * 1000);
+      const saved = histories.get(`history:${doc.id}`);
       let history = saved?.fingerprint === fingerprint ? saved : null;
       if (!history) {
         const events = await readAllPages(query,

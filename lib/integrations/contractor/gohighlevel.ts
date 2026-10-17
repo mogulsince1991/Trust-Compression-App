@@ -117,7 +117,7 @@ async function fetchGoHighLevelContacts(
       requestUrl.searchParams.set("startAfter", cursor.time);
     }
 
-    const response = await fetch(requestUrl.toString(), {
+    const response = await readFetch(requestUrl.toString(), {
       headers: {
         Accept: "application/json",
         Authorization: `Bearer ${accessToken}`,
@@ -209,3 +209,4 @@ async function safeJson(response: Response) {
 function readProviderError(payload: any, fallback: string) {
   return payload?.message || payload?.error?.message || payload?.error || fallback;
 }
+import { readFetch } from "./read-fetch";

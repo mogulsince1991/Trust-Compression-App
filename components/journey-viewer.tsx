@@ -82,7 +82,7 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
   const hasDriveDimensions = !!driveFileId && Number.isFinite(driveWidth) && Number.isFinite(driveHeight) && driveWidth > 0 && driveHeight > 0;
   const orientation = hasDriveDimensions ? (driveHeight > driveWidth ? "portrait" : "wide") : imageOrientation?.id === activeAsset?.id ? imageOrientation.value : activeAsset ? inferOrientation(activeAsset) : "wide";
   const driveRatio = hasDriveDimensions ? `${driveWidth} / ${driveHeight}` : orientation === "portrait" ? "9 / 16" : "16 / 9";
-  const displayTitle = currentDrivePreview?.title || activeAsset?.title || "Video";
+  const displayTitle = (activeAsset?.metadata?.localTitleOverride ? activeAsset.title : currentDrivePreview?.title) || activeAsset?.title || "Video";
   const thumbnailUrl = currentDrivePreview?.thumbnailUrl || (activeAsset ? assetThumbnailUrl(activeAsset) : null);
   const visibleThumbnail = thumbnailUrl && thumbnailUrl !== brokenThumbnail ? thumbnailUrl : null;
 

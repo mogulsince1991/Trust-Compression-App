@@ -13,6 +13,7 @@ import { ContractorTotalSales } from "./contractor-total-sales";
 import { SALES_RULE } from "@/lib/metrics/contractor/salesDocuments.js";
 import { ContractorSpend } from "./contractor-spend";
 import { orderMetrics } from "@/lib/metrics/contractor/metric-validation";
+import { printReport } from "@/lib/metrics/contractor/print-report";
 
 type AnyRecord = Record<string, any>;
 type TabId = "metrics" | "config" | "connections";
@@ -113,7 +114,7 @@ export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorksp
 
   const activeReport = preview ?? fromStoredReport(reports[0] ?? null, ruleSetDraft);
   const activeReportSource = preview ? "Live API response" : activeReport ? "Saved report snapshot" : null;
-  const sections = normalizeSections(ruleSetDraft?.settings?.dashboardSections);
+  const sections = normalizeSections((tab === "metrics" ? activeReport?.ruleSet : null)?.settings?.dashboardSections ?? ruleSetDraft?.settings?.dashboardSections);
   const metrics = ruleSetDraft?.metricDefinitions ?? [];
   const metricMap = Object.fromEntries((activeReport?.configuredMetrics ?? []).map((metric: any) => [metric.id, metric]));
   const comparisonMap = Object.fromEntries((activeReport?.comparison?.configuredMetrics ?? []).map((metric: any) => [metric.id, metric]));
@@ -191,10 +192,10 @@ export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorksp
         fetch(`/api/metrics/contractor/config?workspaceId=${encodeURIComponent(nextWorkspaceId)}`, { headers: { Authorization: `Bearer ${token}` } }),
         supabase
           .from("contractor_reports")
-          .select("id,client_name,start_date,end_date,created_at,totals,breakdowns,detail,source_snapshot,rule_set_id")
+          .select("id,client_name,start_date,end_date,created_at,totals,breakdowns,source_snapshot,rule_set_id,rules_snapshot,executiveSummary:detail->executiveSummary,dashboard:detail->dashboard,configuredMetrics:detail->configuredMetrics,comparison:detail->comparison,unmatched:detail->unmatched,debug:detail->debug")
           .eq("workspace_id", nextWorkspaceId)
           .order("created_at", { ascending: false })
-          .limit(8),
+          .limit(3),
         supabase
           .from("contractor_data_sources")
           .select("id,provider,display_name,status,last_synced_at,last_error,updated_at")
@@ -293,7 +294,7 @@ export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorksp
       });
       const result = await parseJsonResponse(response, "Could not generate contractor report.");
       if (!response.ok) throw new Error(result.error ?? "Could not generate contractor report.");
-      setPreview({ ...result, ruleSet: ruleSetDraft });
+      setPreview({ ...result, startDate, endDate, clientName, ruleSet: result.ruleSet ?? ruleSetDraft });
       setNotice("Contractor report generated.");
       setTab("metrics");
       await refresh(workspaceId, session.access_token);
@@ -565,11 +566,18 @@ export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorksp
         <div className={styles.heroActions}>
           <button className={styles.secondary} type="button" disabled={working === "refresh"} onClick={() => refresh()}><RefreshCw />Refresh workspace</button>
           <button className={styles.primary} type="button" disabled={working === "report"} onClick={runReport}><Sparkles />{working === "report" ? "Generating..." : "Run contractor report"}</button>
+          <button className={styles.secondary} type="button" disabled={!activeReport} onClick={() => { try { printReport(activeReport); } catch (e) { setError(e instanceof Error ? e.message : "Could not open PDF export."); } }}>Export PDF</button>
         </div>
       </section>
 
       {notice ? <div className={styles.notice}>{notice}</div> : null}
       {error ? <div className={styles.error}>{error}</div> : null}
+      <Panel title="Saved reports" icon={<Save />}>
+        <p className={styles.copy}>Your three most recent reports. Open a saved report immediately without contacting your CRMs again.</p>
+        <div className={styles.reportList}>{reports.map(report => <button key={report.id} className={styles.secondary} disabled={working === "report"} onClick={() => { setPreview(fromStoredReport(report, ruleSetDraft)); setTab("metrics"); }}><span>Saved report from {report.start_date} to {report.end_date}<small> · {report.client_name} · {formatDateTime(report.created_at)}</small></span></button>)}</div>
+        {!reports.length && <p>Your first successful report will appear here automatically.</p>}
+      </Panel>
+      {working === "report" && <p role="status">Reading CRM records and verifying sales history. Your last saved report remains available if this run fails.</p>}
 
       <nav className={styles.shellTabs}>
         {TABS.map((entry) => {
@@ -598,8 +606,8 @@ export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorksp
               {activeReport ? (
                 <div className={styles.previewPanel}>
                   <div className={styles.reportRow}>
-                    <strong>{ruleSetDraft.name}</strong>
-                    <small>{startDate} to {endDate}</small>
+                    <strong>{activeReport.ruleSet?.name || ruleSetDraft.name}</strong>
+                    <small>{activeReport.startDate} to {activeReport.endDate}</small>
                     <small>{activeReport?.createdAt ? `Generated ${formatDateTime(activeReport.createdAt)}` : "Live report ready to run."}</small>
                   </div>
                   <div className={styles.reportRow}>
@@ -1025,6 +1033,7 @@ export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorksp
 }
 
 async function parseJsonResponse(response: Response, fallbackMessage: string) {
+  if (response.status === 504) return { error: "The CRM scan exceeded the server time limit. Your saved reports are safe. Retry this date range; completed sales-history checks are cached so they do not need to run again." };
   const raw = await response.text();
   if (!raw) return {};
 
@@ -1279,8 +1288,9 @@ function normalizeSections(sections?: any[]) {
 }
 
 function fromStoredReport(report: any, ruleSet: any) {
-  if (!report || report.source_snapshot?.salesRuleVersion !== SALES_RULE.version) return null;
-  return { exportDatasets: report.detail?.exportDatasets, reportId: report.id, createdAt: report.created_at, ruleSet, sourceSnapshot: report.source_snapshot ?? {}, totals: report.totals ?? {}, breakdowns: report.breakdowns ?? {}, executiveSummary: report.detail?.executiveSummary ?? [], configuredMetrics: report.detail?.configuredMetrics ?? [], unmatched: report.detail?.unmatched ?? {}, dashboard: report.detail?.dashboard ?? {}, debug: report.detail?.debug ?? null, comparison: report.detail?.comparison ?? null };
+  if (!report) return null;
+  report = { ...report, detail: report.detail ?? report };
+  return { startDate: report.start_date, endDate: report.end_date, clientName: report.client_name, exportDatasets: report.detail?.exportDatasets, reportId: report.id, createdAt: report.created_at, ruleSet: report.rules_snapshot ?? ruleSet, sourceSnapshot: report.source_snapshot ?? {}, totals: report.totals ?? {}, breakdowns: report.breakdowns ?? {}, executiveSummary: report.detail?.executiveSummary ?? [], configuredMetrics: report.detail?.configuredMetrics ?? [], unmatched: report.detail?.unmatched ?? {}, dashboard: report.detail?.dashboard ?? {}, debug: report.detail?.debug ?? null, comparison: report.detail?.comparison ?? null };
 }
 
 function providerLabel(provider: string) {

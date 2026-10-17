@@ -1,6 +1,8 @@
 "use client";
 
 import styles from "./contractor-metrics-console.module.css";
+import { createBrowserSupabaseClient } from "@/lib/supabase";
+import { useState } from "react";
 
 const columns = [
   ["documentNumber", "Document"], ["customerName", "Customer"], ["documentDate", "Document date"],
@@ -10,6 +12,8 @@ const columns = [
 const money = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 export function ContractorTotalSales({ report }: { report: any }) {
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState("");
   const sales = report.breakdowns?.totalSalesReport;
   if (!sales) return null;
   return <section className={styles.previewPanel} aria-label="Total Sales">
@@ -19,7 +23,22 @@ export function ContractorTotalSales({ report }: { report: any }) {
       <span>Gross: <strong>{money(sales.gross.total)}</strong> · {sales.gross.count} sales rows · {sales.gross.documentCount} documents</span>
       <span>Net: <strong>{money(sales.net.total)}</strong> · {sales.net.count} sales rows · {sales.net.jobs} jobs</span>
     </div>
-    <button type="button" className={styles.secondary} onClick={() => downloadReport(report)}>Download all report datasets</button>
+    <button type="button" className={styles.secondary} disabled={downloading} onClick={async () => {
+      setDownloading(true); setDownloadError("");
+      try {
+        let datasets = report.exportDatasets;
+        if (!datasets && report.reportId) {
+          const client = createBrowserSupabaseClient();
+          if (!client) throw Error("Sign in to download datasets.");
+          const { data, error } = await client.from("contractor_reports").select("datasets:detail->exportDatasets").eq("id", report.reportId).single();
+          if (error) throw error;
+          datasets = data?.datasets;
+        }
+        downloadReport({ ...report, exportDatasets: datasets });
+      } catch { setDownloadError("Could not download datasets. Please try again."); }
+      finally { setDownloading(false); }
+    }}>{downloading ? "Preparing download..." : "Download all report datasets"}</button>
+    {downloadError && <p role="alert">{downloadError}</p>}
     <div style={{ overflowX: "auto" }}><table>
       <thead><tr>{columns.map(([key, label]) => <th key={key} scope="col">{label}</th>)}</tr></thead>
       <tbody>{sales.rows.map((row: any, index: number) => <tr key={`${row.jobId}-${row.documentId}-${index}`}>

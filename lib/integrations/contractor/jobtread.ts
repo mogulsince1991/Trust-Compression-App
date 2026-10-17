@@ -1,4 +1,5 @@
 import { dateKeyInTimeZone } from "@/lib/metrics/contractor/domain.js";
+import { readFetch } from "./read-fetch";
 import { discoverSalesDocuments, documentCache, readAllPages } from "./document-history";
 
 const DEFAULT_JOBTREAD_API_BASE_URL = "https://api.jobtread.com";
@@ -21,7 +22,7 @@ export async function verifyJobTreadConnection(account: any) {
 
 export async function fetchJobTreadSnapshot(
   account: any,
-  options?: { limit?: number; maxPages?: number; startDate?: string; endDate?: string; filterToWindow?: boolean; timeZone?: string }
+  options?: { limit?: number; maxPages?: number; startDate?: string; endDate?: string; filterToWindow?: boolean; timeZone?: string; requestCache?: Map<string, Promise<any>> }
 ) {
   const cache = documentCache(account);
   const cacheKey = `snapshot:${options?.startDate ?? "all"}:${options?.endDate ?? "all"}:${options?.timeZone ?? "America/New_York"}:${options?.filterToWindow === true}`;
@@ -34,6 +35,7 @@ export async function fetchJobTreadSnapshot(
     endDate: options?.endDate,
     includeAllRows: options?.filterToWindow !== true,
     timeZone: options?.timeZone,
+    requestCache: options?.requestCache,
   });
   const metadata = account.metadata ?? {};
   const baseUrl = normalizeBaseUrl(
@@ -107,7 +109,7 @@ export async function fetchJobTreadPreview(
 
 async function fetchJobTreadRows(
   account: any,
-  options?: { limit?: number; maxPages?: number; startDate?: string; endDate?: string; includeAllRows?: boolean; timeZone?: string }
+  options?: { limit?: number; maxPages?: number; startDate?: string; endDate?: string; includeAllRows?: boolean; timeZone?: string; requestCache?: Map<string, Promise<any>> }
 ) {
   const metadata = account.metadata ?? {};
   const { baseUrl, pavePath, grantKey } = resolveJobTreadConnection(account);
@@ -121,7 +123,10 @@ async function fetchJobTreadRows(
 
   const organizationId = await getOrganizationId({ baseUrl, pavePath, grantKey });
   const query = (query: Record<string, any>) => paveQuery({ baseUrl, pavePath, grantKey, query });
-  const documents = await discoverSalesDocuments(query, organizationId, account);
+  const requestCache = options?.requestCache ?? new Map<string, Promise<any>>();
+  const documentsKey = `documents:${account.id}`;
+  if (!requestCache.has(documentsKey)) requestCache.set(documentsKey, discoverSalesDocuments(query, organizationId, account));
+  const documents = await requestCache.get(documentsKey);
   const jobs = await readAllPages(query, params => ({ organization: { $: { id: organizationId }, jobs: {
     $: params, nodes: { id: {}, number: {}, createdAt: {} }, nextPage: {},
   } } }), response => response.organization?.jobs);
@@ -303,7 +308,7 @@ async function paveQuery({
 }) {
   const requestUrl = new URL(pavePath, baseUrl);
   let rawText = "";
-  const response = await fetch(requestUrl.toString(), {
+  const response = await readFetch(requestUrl.toString(), {
     method: "POST",
     headers: {
       Accept: "application/json",

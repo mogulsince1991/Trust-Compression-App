@@ -1,0 +1,34 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const ts = require('typescript');
+function load(path, globals = {}) {
+  const context = { exports: {}, ...globals };
+  vm.runInNewContext(ts.transpileModule(fs.readFileSync(path, 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText, context);
+  return context.exports;
+}
+const { reportPrintHtml } = load('lib/metrics/contractor/print-report.ts');
+const html = reportPrintHtml({ clientName: '<script>bad</script>', startDate: '2026-09-01', endDate: '2026-09-30', configuredMetrics: [{ name: 'Close rate', value: .25, displayType: 'percent' }], dashboard: { paidChannelPerformance: [{ name: 'Search', spend: 200, revenue: 1000 }] } });
+assert.ok(html.includes('&lt;script&gt;bad&lt;/script&gt;'));
+assert.ok(!html.includes('<script>bad'));
+assert.ok(html.includes('25.0%'));
+assert.ok(html.includes('2026-09-01 to 2026-09-30'));
+assert.ok(html.includes('display:table-header-group'));
+const source = fs.readFileSync('app/api/metrics/contractor/report/route.js', 'utf8');
+assert.match(source, /exportDatasets: persist \? undefined : current.exportDatasets/);
+assert.match(source, /No partial or legacy sales totals were used/);
+const ui = fs.readFileSync('components/contractor-metrics-workspace.tsx', 'utf8');
+assert.match(ui, /\.limit\(3\)/);
+assert.match(ui, /Saved report from/);
+assert.match(ui, /rules_snapshot/);
+let attempts = 0;
+const { readFetch } = load('lib/integrations/contractor/read-fetch.ts', { AbortSignal, setTimeout: (fn) => { fn(); }, fetch: async () => { attempts++; return new Response('', { status: attempts < 3 ? 503 : 200 }); } });
+(async () => {
+  assert.equal((await readFetch('https://example.test')).status, 200);
+  assert.equal(attempts, 3);
+  let unauthorizedCalls = 0;
+  const denied = load('lib/integrations/contractor/read-fetch.ts', { AbortSignal, setTimeout, fetch: async () => { unauthorizedCalls++; return new Response('', { status: 401 }); } });
+  assert.equal((await denied.readFetch('https://example.test')).status, 401);
+  assert.equal(unauthorizedCalls, 1);
+  console.log('PDF escaping, period labels, saved report selection, payload reduction, and bounded CRM retry checks passed.');
+})().catch(error => { console.error(error); process.exitCode = 1; });
