@@ -396,6 +396,8 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
             <VimeoPlayer url={embedUrl} title={displayTitle} onLoaded={() => setLoadedId(activeAsset.id)} onEvent={(eventType, metadata) => { if (!preview) void trackJourneyEvent({ journey, assetId: activeAsset.id, videoId: activeAsset.videoId, eventType, viewerId: getViewerId(), activeIndex: active, metadata: { ...metadata, surface: variant } }); }} />
           ) : activated && activeAsset.assetType === "pdf" && embedUrl ? (
             <PdfReader url={embedUrl} title={displayTitle} assetId={activeAsset.id} token={journey.share_token} onReady={() => setLoadedId(activeAsset.id)} />
+          ) : activated && activeAsset.sourcePlatform === "image" && embedUrl ? (
+            <img src={embedUrl} alt={displayTitle} style={{ width: "100%", height: "100%", objectFit: "contain" }} onLoad={() => setLoadedId(activeAsset.id)} onError={() => setFailed(true)} />
           ) : activated && embedUrl ? (
             <iframe
               key={embedUrl}

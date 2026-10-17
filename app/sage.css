@@ -360,3 +360,9 @@
 @media(max-width:760px) {
   .sage-app .sage-editor-footer { bottom: calc(80px + env(safe-area-inset-bottom)); flex-wrap: wrap; }
 }
+.sage-photo-preview { display: block; width: 100%; max-height: 70dvh; object-fit: contain; }
+.sage-photos-import { display: grid; gap: 12px; }
+.sage-photos-consent { display: flex !important; gap: 10px; align-items: flex-start; }
+.sage-photos-consent input { width: auto !important; flex: 0 0 auto; margin-top: 4px; }
+.sage-photos-results { max-height: 260px; overflow: auto; padding: 0; list-style: none; }
+.sage-photos-results li { display: grid; gap: 4px; padding: 10px 0; overflow-wrap: anywhere; }
