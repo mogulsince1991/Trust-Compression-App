@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { localReturnPath } from "@/lib/app-origin";
 import { randomBytes } from "crypto";
 import { createUserSupabaseClient } from "@/lib/supabase";
 
@@ -34,7 +35,7 @@ export async function POST(request: Request) {
       workspace_id: workspaceId,
       user_id: user.id,
       provider: "google_drive",
-      redirect_to: body.redirectTo?.trim() || "/"
+      redirect_to: localReturnPath(body.redirectTo?.trim())
     });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

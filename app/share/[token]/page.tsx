@@ -1,4 +1,6 @@
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
+import { appOriginFromHost } from "@/lib/app-origin";
 import { cache } from "react";
 import type { Metadata } from "next";
 import { richLinkImage } from "@/lib/rich-links";
@@ -95,7 +97,7 @@ export async function generateMetadata({ params }: SharePageProps): Promise<Meta
   const { row, orderedAssets } = await loadJourney(params.token);
   const title = row.heading?.trim() || row.title;
   const description = row.description?.trim() || "Explore our work, answers, and helpful resources.";
-  const origin = "https://trusttale.co";
+  const origin = appOriginFromHost(headers().get("host"));
   const image = orderedAssets.map(asset => richLinkImage(asset, origin)).find(Boolean)
     || `${origin}/api/share-preview?title=${encodeURIComponent(title.slice(0, 140))}`;
   return {

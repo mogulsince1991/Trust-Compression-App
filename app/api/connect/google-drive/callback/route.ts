@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { localReturnPath } from "@/lib/app-origin";
 import { createServiceSupabaseClient } from "@/lib/supabase";
 
 type TokenResponse = {
@@ -94,7 +95,9 @@ export async function GET(request: Request) {
   await supabase.from("connector_oauth_states").delete().eq("id", oauthState.id);
 
   if (upsertError) return redirectWithMessage(url, `/?connect_error=${encodeURIComponent(upsertError.message)}`);
-  return redirectWithMessage(url, `${oauthState.redirect_to || "/"}?connect_success=google_drive`);
+  const destination = new URL(localReturnPath(oauthState.redirect_to), url.origin);
+  destination.searchParams.set("connect_success", "google_drive");
+  return NextResponse.redirect(destination);
 }
 
 async function fetchGoogleProfile(accessToken: string): Promise<GoogleProfile> {

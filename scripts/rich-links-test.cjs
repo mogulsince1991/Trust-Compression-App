@@ -3,9 +3,11 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const ts = require('typescript');
 const exported = {};
+const origins = {};
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/app-origin.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, { exports: origins, URL });
 vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/rich-links.ts', 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
-}).outputText, { exports: exported, URL });
+}).outputText, { exports: exported, URL, require: () => origins });
 const origin = 'https://trusttale.co';
 assert.equal(exported.richLinkImage({ thumbnailUrl: '/cover.png' }, origin), origin + '/cover.png');
 assert.equal(exported.richLinkImage({ thumbnailUrl: 'javascript:alert(1)' }, origin), null);

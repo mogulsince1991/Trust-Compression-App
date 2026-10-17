@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { localAppUrl } from "@/lib/app-origin";
 import { analyticsExclusion } from "@/lib/server/analytics-exclusion";
 import { createServiceSupabaseClient } from "@/lib/supabase";
 import { appendTrackingParams, sanitizeMetadata, sanitizeSearchParams } from "@/lib/tracking";
@@ -23,11 +24,12 @@ export async function GET(request: Request, { params }: RouteContext) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!link) return NextResponse.json({ error: "Tracking link was not found." }, { status: 404 });
+  const destinationUrl = localAppUrl(link.destination_url, new URL(request.url).origin);
   try {
-    if (await analyticsExclusion(request, link.workspace_id)) return NextResponse.redirect(link.destination_url, { status: 302 });
+    if (await analyticsExclusion(request, link.workspace_id)) return NextResponse.redirect(destinationUrl, { status: 302 });
   } catch {
     // Do not break the destination or pollute counts when exclusion lookup fails.
-    return NextResponse.redirect(link.destination_url, { status: 302 });
+    return NextResponse.redirect(destinationUrl, { status: 302 });
   }
 
   const requestUrl = new URL(request.url);
@@ -73,7 +75,7 @@ export async function GET(request: Request, { params }: RouteContext) {
     if (legacyInsert.error) return NextResponse.json({ error: legacyInsert.error.message }, { status: 500 });
   }
 
-  const destination = appendTrackingParams(link.destination_url, {
+  const destination = appendTrackingParams(destinationUrl, {
     slug: link.slug,
     visitId,
     journeyId: link.journey_id

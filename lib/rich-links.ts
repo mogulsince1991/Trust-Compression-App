@@ -1,3 +1,4 @@
+import { localAppUrl } from "./app-origin";
 type PreviewAsset = { sourceUrl?: string | null; embedUrl?: string | null; thumbnailUrl?: string | null; metadata?: Record<string, unknown> | null };
 
 export function richLinkImage(asset: PreviewAsset, origin: string): string | null {
@@ -13,7 +14,7 @@ export function richLinkImage(asset: PreviewAsset, origin: string): string | nul
   } catch { /* A saved thumbnail can still be valid when the source is missing. */ }
   if (!asset.thumbnailUrl) return null;
   try {
-    const image = new URL(asset.thumbnailUrl, origin);
+    const image = new URL(localAppUrl(asset.thumbnailUrl, origin), origin);
     return image.protocol === "https:" && !image.username && !image.password ? image.href : null;
   } catch { return null; }
 }

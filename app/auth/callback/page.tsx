@@ -52,7 +52,7 @@ export default function AuthCallbackPage() {
           fix: [
             "Confirm the Google OAuth consent screen is External or your account is added as a test user.",
             "Confirm Supabase Authentication > Providers > Google is enabled with the same Google Client ID and Secret.",
-            "Confirm Supabase Authentication > URL Configuration allows https://trustcompression.unmarked.media/auth/callback."
+            `Confirm Supabase Authentication > URL Configuration allows ${window.location.origin}/auth/callback.`
           ]
         });
         return;
@@ -82,7 +82,7 @@ export default function AuthCallbackPage() {
             "In Google Cloud, edit the OAuth Client ID that is saved inside Supabase, not a different Google client.",
             "That Google client should have Authorized redirect URI: https://boswlaonbdxugkocquzv.supabase.co/auth/v1/callback",
             "In Supabase, Authentication > Providers > Google must use that exact same Google Client ID and Client Secret.",
-            "Remove app-owned Google callback URLs until the Drive/YouTube connector route is built."
+            "Keep Drive connector callbacks separate from the Supabase account sign-in callback."
           ]
         });
         return;
@@ -97,8 +97,8 @@ export default function AuthCallbackPage() {
             detail: error.message,
             evidence: `Callback received a non-Google code beginning with ${code.slice(0, 8)}...`,
             fix: [
-              "Confirm this exact URL is in Supabase Redirect URLs: https://trustcompression.unmarked.media/auth/callback",
-              "Confirm Supabase Site URL is https://trustcompression.unmarked.media",
+              `Confirm this exact URL is in Supabase Redirect URLs: ${window.location.origin}/auth/callback`,
+              "Confirm Supabase Site URL matches this environment's primary domain.",
               "Try again in a fresh browser tab after saving Supabase Auth settings."
             ]
           });
@@ -136,7 +136,7 @@ export default function AuthCallbackPage() {
         fix: [
           "Start from the Trust Compression sign-in button again, not a bookmarked Google URL.",
           "Confirm Supabase Google provider is enabled and saved.",
-          "Confirm Supabase Redirect URLs include https://trustcompression.unmarked.media/auth/callback."
+          `Confirm Supabase Redirect URLs include ${window.location.origin}/auth/callback.`
         ]
       });
     }
