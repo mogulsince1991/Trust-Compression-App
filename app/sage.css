@@ -353,5 +353,6 @@
 .sage-editor-footer p { font-size: 12px; margin-top: 4px; max-width: 48ch; }
 .sage-editor-footer [role="alert"] { color: #b42318; }
 @media(max-width:760px) {
-  .sage-app .sage-editor-footer { bottom: calc(80px + env(safe-area-inset-bottom)); flex-wrap: wrap; }
+  /* The scroll area already ends above the mobile navigation, including its safe area. */
+  .sage-app .sage-editor-footer { bottom: 12px; flex-wrap: wrap; }
 }
