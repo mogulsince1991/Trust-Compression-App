@@ -13,7 +13,7 @@ export function libraryItem(asset: LibraryAssetRow): JourneyAsset { return { ...
 export function AssetPreview({ asset }: { asset: JourneyAsset }) {
   const [playing, setPlaying] = useState(false);
   if (!asset.embedUrl) return <div className="sage-preview-placeholder"><FileText /><p>Embedded preview unavailable.</p>{asset.sourceUrl && <a href={asset.sourceUrl} target="_blank" rel="noreferrer">Open original <ExternalLink /></a>}</div>;
-  if (!playing) return <button className={`sage-media-poster ${asset.assetType !== "video" ? "is-document" : ""}`} onClick={() => setPlaying(true)} aria-label={`Preview ${asset.title}`}><AssetThumbnail asset={asset} /><span>{asset.assetType === "video" ? "Play video" : "View document"}</span></button>;
+  if (!playing) return <button className={`sage-media-poster ${asset.assetType !== "video" ? "is-document" : ""}`} onClick={() => setPlaying(true)} aria-label={`Preview ${asset.title}`}><AssetThumbnail asset={asset} quality="high" /><span>{asset.assetType === "video" ? "Play video" : "View document"}</span></button>;
   const directVideo = asset.assetType === "video" && /\.(mp4|webm|mov)(\?|$)/i.test(asset.embedUrl);
   return directVideo ? <video className="sage-media-video" src={asset.embedUrl} controls playsInline autoPlay /> : <iframe className={`sage-media-frame ${asset.assetType !== "video" ? "is-document" : ""}`} src={asset.embedUrl} title={asset.title} allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen />;
 }
