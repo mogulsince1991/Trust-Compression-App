@@ -42,7 +42,7 @@ export function GooglePhotosImport({ workspaceId, onImported }: { workspaceId: s
     const google = (window as Window & { google?: GoogleIdentity }).google;
     if (!google) { setMessage("Google sign-in could not load. Check your connection or browser blocker."); return; }
     running.current = true; setBusy(true); setMessage(""); setPhotos([]);
-    google.accounts.oauth2.initTokenClient({ client_id: clientId, scope: "https://www.googleapis.com/auth/photospicker.mediaitems.readonly",
+    google.accounts.oauth2.initTokenClient({ client_id: clientId, scope: "https://www.googleapis.com/auth/photospicker.mediaitems.readonly https://www.googleapis.com/auth/drive.file",
       error_callback: () => { running.current = false; if (mounted.current) { setBusy(false); setMessage("Google sign-in was closed or blocked. Try connecting again."); } },
       callback: async response => {
         try {
@@ -83,7 +83,7 @@ export function GooglePhotosImport({ workspaceId, onImported }: { workspaceId: s
         if (!mounted.current) break;
         setMessage(`Importing ${++completed} of ${pending.length}: ${photo.name}`);
         try {
-          const result = await api({ action: "import", ticket: photo.ticket, consent });
+          const result = await api({ action: "import", ticket: photo.ticket, consent, driveSharingConsent: consent });
           if (mounted.current) setPhotos(current => current.map(p => p.id === photo.id ? { ...p, result: result.status, error: undefined } : p));
         } catch (error) {
           failed++;
@@ -104,11 +104,11 @@ export function GooglePhotosImport({ workspaceId, onImported }: { workspaceId: s
     <Script src="https://accounts.google.com/gsi/client" strategy="afterInteractive" onReady={() => setScriptReady(true)} onError={() => setMessage("Google sign-in failed to load. Check your browser blocker and try again.")} />
     <h3>Import from Google Photos</h3>
     <p>Select up to 100 photos at once. You can search for an album in Google's picker and select the photos you want. This is a one-time import, not automatic album sync.</p>
-    <p>TrustTale saves image copies up to 2048 pixels for reliable previews and journeys. Originals stay in Google Photos. Videos are not copied.</p>
-    <p className="sage-help">Delete an imported copy from its library preview. Deleting it also stops it displaying in existing journeys; archiving only hides it from the library. Google access is temporary and is not saved.</p>
+    <p>Selected photos are copied to a TrustTale Photos folder in the Google Drive account you connect. They use your Google storage, not TrustTale file storage. Originals stay in Google Photos. Videos are not copied.</p>
+    <p className="sage-help">Photos pass through temporary server memory, up to 2048 pixels and 10 MB each. Only file references are saved in TrustTale. Remove references in the library; manage or delete the actual copies in Google Drive. Google access is temporary and is not saved.</p>
     <p className="sage-help">Google Photos data is used for the selected import and sharing features, in accordance with the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noreferrer">Google User Data Policy, including Limited Use requirements</a>.</p>
-    <label className="sage-photos-consent"><input type="checkbox" checked={consent} disabled={busy} onChange={event => setConsent(event.target.checked)} />I have permission to copy these photos into this workspace and share them. Anyone with a photo or journey link can view the imported copy.</label>
-    <div className="sage-actions"><button type="button" disabled={!clientId || !scriptReady || busy || !consent} onClick={connect}>{busy ? "Working..." : picker ? "Choose different photos" : "Connect Google Photos"}</button>
+    <label className="sage-photos-consent"><input type="checkbox" checked={consent} disabled={busy} onChange={event => setConsent(event.target.checked)} />I have permission to copy these photos to my connected Google Drive and enable anyone-with-the-link viewing on those copies for customer journeys.</label>
+    <div className="sage-actions"><button type="button" disabled={!clientId || !scriptReady || busy || !consent} onClick={connect}>{busy ? "Working..." : picker ? "Choose different photos" : "Connect Google Photos and Drive"}</button>
       {picker && <><a href={picker.pickerUri} target="_blank" rel="noreferrer">Open Google Photos</a><button type="button" disabled={busy} onClick={loadSelection}>Load selected photos</button></>}
       {photos.some(photo => !photo.result) && <button type="button" className="sage-primary" disabled={busy || !consent} onClick={importPhotos}>Import {photos.filter(photo => !photo.result).length} photos</button>}
     </div>
@@ -122,7 +122,7 @@ export function DeleteGooglePhoto({ workspaceId, assetId, onDeleted }: { workspa
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   return <div><button type="button" className="sage-danger" disabled={busy} onClick={async () => {
-    if (!window.confirm("Permanently delete this imported copy? Existing journeys will no longer show it. The original in Google Photos is unchanged.")) return;
+    if (!window.confirm("Remove this photo from TrustTale and revoke its TrustTale image link? Drive files remain in your Google Drive and can be deleted there. Legacy Supabase copies, if any, will be deleted. Google Photos originals are unchanged.")) return;
     setBusy(true); setError("");
     try {
       const session = await createBrowserSupabaseClient()?.auth.getSession();
@@ -133,5 +133,5 @@ export function DeleteGooglePhoto({ workspaceId, assetId, onDeleted }: { workspa
       await onDeleted();
     } catch (e) { setError(e instanceof Error ? e.message : "Could not delete photo."); }
     finally { setBusy(false); }
-  }}>{busy ? "Deleting..." : "Permanently delete photo copy"}</button>{error && <p role="alert">{error}</p>}</div>;
+  }}>{busy ? "Removing..." : "Remove photo from TrustTale"}</button>{error && <p role="alert">{error}</p>}</div>;
 }

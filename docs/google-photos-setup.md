@@ -1,20 +1,23 @@
-# Google Photos import
+# Google Photos to customer Google Drive
 
 Library > Add content > Google Photos imports up to 100 selected photos per session.
 Owners/admins can connect; viewers cannot import. Google Picker lets people search
 albums and select their contents, but this is not a live album/folder subscription.
 Videos are skipped. Existing Drive/YouTube video playback is unchanged.
+Selected photos go to an app-created TrustTale Photos folder in the connected Google
+account's Drive. New imports do not write to Supabase Storage, even temporarily.
 
 ## Google Cloud setup required
 
-1. Enable the Google Photos Picker API in the OAuth client's Google Cloud project.
+1. Enable Google Photos Picker API and Google Drive API in the OAuth client's project.
 2. Use a Web application OAuth client. Configure `GOOGLE_PHOTOS_CLIENT_ID` in Vercel
    (the existing Google client ID is a fallback; no client secret is sent to the browser).
 3. Add the exact authorized JavaScript origins used by customers:
    `https://app.trusttale.co`, `https://trusttale.co`, and
    `https://trustcompression.unmarked.media` where applicable. No paths or trailing slash.
 4. Configure OAuth consent for
-   `https://www.googleapis.com/auth/photospicker.mediaitems.readonly`.
+   `https://www.googleapis.com/auth/photospicker.mediaitems.readonly` and
+   `https://www.googleapis.com/auth/drive.file`. Users must reconnect for Drive access.
    Add test users while testing; complete Google's publication/verification requirements
    before making access generally available. Review the Photos API developer policies
    against your intended use and update your public privacy policy.
@@ -28,22 +31,32 @@ The Google API URL is never used as a permanent image link.
 
 ## Storage and privacy
 
-The private `library-photos` bucket only accepts supported raster image types. Server
-requests authenticate membership and require workspace owner/admin permissions.
-Each saved copy has a random 256-bit share capability. Anyone who receives that image
-link (including through a journey) can view it. An explicit checkbox explains copying
-and sharing before OAuth/import. Do not use this for sensitive private documents.
+Photo bytes pass through bounded server memory, then upload to Google Drive.
+The server verifies Drive's persisted byte count and MD5 before saving references.
+Only after saving the Drive reference does it delete any legacy Supabase copy.
+If cleanup fails, import reports an error; reimport retries cleanup. No background
+storage staging is used. There were zero stored photos when this change was made.
 
-Library preview offers **Permanently delete photo copy**. This removes stored bytes
-and revokes the copy's media route, including existing journey references. Existing
-signed URLs expire within five minutes. Archiving is not deletion and leaves journey
-links working. Reimporting a deleted photo creates a new capability.
+Requests require workspace owner/admin permissions. An explicit checkbox authorizes
+copying to Drive and anyone-with-link reader access to each imported file. The folder
+is not made public. Organization sharing restrictions produce an error, not a silent
+fallback to Supabase. A private uploaded Drive file may remain for the next retry.
+
+Library preview offers **Remove photo from TrustTale**. This revokes the TrustTale
+image route but leaves the customer's Drive file untouched. Delete or change sharing
+on the actual file in Drive. Direct Drive links remain accessible until changed there.
+Archiving is not deletion. Removing/restricting files in Drive can break journeys.
 
 No Google account token, base URL, camera metadata or location data is persisted.
 Filename, original dimensions, capture date and provider item ID are stored for display
-and deduplication. Storage/bandwidth costs apply to the imported copies.
+and deduplication. Drive copies use the customer's storage. Server transfer and
+processing usage still apply, but no photo bytes are retained in Supabase Storage.
+
+Run `node scripts/google-photos-test.cjs` and `node scripts/google-photos-drive-test.cjs`.
+A real Google OAuth import is still needed to verify account-level API configuration.
 
 References:
 - https://developers.google.com/photos/picker/guides/media-items
 - https://developers.google.com/identity/oauth2/web/guides/use-token-model
 - https://developers.google.com/photos/support/api-policy
+- https://developers.google.com/workspace/drive/api/guides/manage-uploads

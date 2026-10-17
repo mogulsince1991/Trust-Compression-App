@@ -46,7 +46,7 @@ assert.throws(() => verifyPhoto(signPhoto({ ...photo, type: 'VIDEO' }, 'a', 'b',
   const routeCode = ts.transpileModule(fs.readFileSync('app/api/import/google-photos/route.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   vm.runInNewContext(routeCode, {
     exports: route, process: { env: { GOOGLE_PHOTOS_CLIENT_ID: 'client-id', SUPABASE_SERVICE_ROLE_KEY: 'secret' } }, URL, Date,
-    require: name => name === 'next/server' ? { NextResponse: { json: (body, options) => ({ body, ...options }) } } : name === '@/lib/server/google-photos' ? exportsObject : name === '@/lib/server/route-auth' ? {
+    require: name => name === '@/lib/server/google-photos-drive' ? { uploadPhotoToDrive: async () => { throw Error('Unexpected Drive upload'); } } : name === 'next/server' ? { NextResponse: { json: (body, options) => ({ body, ...options }) } } : name === '@/lib/server/google-photos' ? exportsObject : name === '@/lib/server/route-auth' ? {
       httpError,
       requireWorkspaceAccess: async () => { if (!authenticated) throw httpError(401, 'Sign in'); return { workspaceRole: role, user: { id: 'user-a' }, serviceSupabase: {} }; },
       requireWorkspaceManager: context => { if (!['owner','admin'].includes(context.workspaceRole)) throw httpError(403, 'Read only'); return context; },
@@ -62,6 +62,7 @@ assert.throws(() => verifyPhoto(signPhoto({ ...photo, type: 'VIDEO' }, 'a', 'b',
   assert.equal((await route.POST(request({ workspaceId: 'workspace-a', action: 'import', googleToken: 'token', ticket, consent: false }))).status, 400);
   assert.equal((await route.POST(request({ workspaceId: 'workspace-b', action: 'import', googleToken: 'token', ticket, consent: true }))).status, 400);
   assert.equal((await route.POST(request({ workspaceId: 'workspace-a', action: 'create' }))).status, 400);
+  assert.ok(!fs.readFileSync('app/api/import/google-photos/route.ts', 'utf8').includes('.upload('), 'Photos imports must never upload to Supabase Storage');
   console.log('Google Photos: scoped tickets, expiry, dedup IDs, SSRF restrictions, video exclusion, byte limits and image validation passed.');
   console.log('Import routes: unauthenticated/read-only users, missing consent/token and cross-workspace tickets rejected.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
