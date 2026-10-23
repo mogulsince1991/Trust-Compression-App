@@ -359,6 +359,13 @@
 .library-refresh button { margin-left: auto; min-height: 44px; }
 .sage-app .sage-editor-footer { position: sticky; bottom: 16px; z-index: 25; }
 .sage-editor-footer p { font-size: 12px; margin-top: 4px; max-width: 48ch; }
+#sage-action-dock:empty { display: none; }
+@media (max-width: 760px) {
+  #sage-action-dock { flex: none; position: relative; z-index: 35; padding: 8px 12px; background: var(--sage-surface); }
+  .sage-app #sage-action-dock > .sage-editor-footer,
+  .sage-app #sage-action-dock > .sage-selection-bar { position: relative; inset: auto; margin: 0; width: 100%; flex-wrap: wrap; }
+  #sage-action-dock .sage-existing-journey-picker { max-height: 55dvh; overflow-y: auto; }
+}
 .sage-editor-footer [role="alert"] { color: #b42318; }
 @media(max-width:760px) {
   .sage-app .sage-editor-footer { bottom: calc(80px + env(safe-area-inset-bottom)); flex-wrap: wrap; }
