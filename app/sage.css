@@ -367,6 +367,14 @@
 .sage-photos-results { max-height: 260px; overflow: auto; padding: 0; list-style: none; }
 .sage-photos-results li { display: grid; gap: 4px; padding: 10px 0; overflow-wrap: anywhere; }
 .sage-storage-card { margin-bottom: 24px; }
+.journey-content-picker { margin-bottom:24px }
+.journey-content-options { max-height:45vh; overflow:auto; margin:16px 0 }
+.journey-content-option { display:flex; align-items:center; gap:12px; padding:12px 4px; border-bottom:1px solid #7774; cursor:pointer }
+.journey-content-option input { flex:0 0 auto; width:20px; height:20px }
+.journey-content-option .sage-thumbnail { flex:0 0 72px; width:72px; height:48px; overflow:hidden }
+.journey-content-option strong { display:block; overflow-wrap:anywhere }
+.journey-content-option small { display:block; opacity:.7 }
+.journey-content-picker-actions { flex-wrap:wrap; justify-content:flex-end }
 .sage-storage-card h2 { display: flex; align-items: center; gap: 10px; }
 .sage-storage-card .sage-actions { flex-wrap: wrap; }
 .sage-storage-card input[type="file"] { max-width: 100%; }

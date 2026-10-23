@@ -17,6 +17,7 @@ const stored = new Map();
 const context = {
   draftKey: 'user-a:workspace-a', draftReady: 'user-a:workspace-a', draftAssets: [], draft: { title: '' },
   selectedJourneyId: null, shareUrl: '', savedDraft: '',
+  currentWorkspace: { settings: {} }, normalizeAppearance: value => value || {},
   sessionStorage: { setItem: (key, value) => stored.set(key, value) },
   setError: value => { context.error = value; },
   setDraftAssets: value => { context.draftAssets = value; },
@@ -31,6 +32,11 @@ assert.equal(context.draft.title, 'Proof journey');
 assert.equal(JSON.parse(stored.get(context.draftKey)).assets.length, 2);
 context.addLibraryItems([{ id: 'one', videoId: 'video-1' }]);
 assert.equal(context.draftAssets.length, 2);
+context.selectedJourneyId = 'published-journey';
+context.shareUrl = '/share/existing-link';
+context.addLibraryItems([{ id: 'two', libraryAssetId: 'doc-1' }]);
+assert.equal(JSON.parse(stored.get(context.draftKey)).journeyId, 'published-journey');
+assert.equal(JSON.parse(stored.get(context.draftKey)).shareUrl, '/share/existing-link');
 context.draftReady = 'another-workspace'; context.view = null;
 context.addLibraryItems([{ id: 'three', videoId: 'video-3' }]);
 assert.equal(context.view, null);
