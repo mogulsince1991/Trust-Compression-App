@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { reportsEnabled, REPORT_UPGRADE_MESSAGE } from "@/lib/report-access";
 import { useSearchParams } from "next/navigation";
 import { ArrowDown, ArrowUp, BarChart3, Database, Info, Link2, Loader2, Plus, RefreshCw, Save, Settings2, Sparkles, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -84,6 +85,11 @@ const TABLE_OPTIONS = [
 ];
 
 export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorkspaceId?: string | null } = {}) {
+  if (!reportsEnabled(activeWorkspaceId)) return <Gate title="Reports" body={REPORT_UPGRADE_MESSAGE} />;
+  return <EnabledMetricsWorkspace activeWorkspaceId={activeWorkspaceId} />;
+}
+
+function EnabledMetricsWorkspace({ activeWorkspaceId }: { activeWorkspaceId?: string | null }) {
   const searchParams = useSearchParams();
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const [session, setSession] = useState<Session | null>(null);
@@ -107,7 +113,7 @@ export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorksp
   const [previews, setPreviews] = useState<Record<string, SourcePreview>>({});
   const [previewFilters, setPreviewFilters] = useState<Record<string, PreviewFilterState>>({});
   const [previewRequests, setPreviewRequests] = useState<Record<string, PreviewRequestState>>({});
-  const [clientName, setClientName] = useState("Trust Compression Contractor Report");
+  const [clientName, setClientName] = useState("TrustTale Report");
   const [startDate, setStartDate] = useState(() => `${reportToday().slice(0, 7)}-01`);
   const [endDate, setEndDate] = useState(() => reportToday());
   const [ghl, setGhl] = useState(EMPTY_GHL);
@@ -205,14 +211,14 @@ export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorksp
       ]);
 
       const accountsJson = await parseJsonResponse(accountsResponse, "Could not load connected accounts.");
-      const configJson = await parseJsonResponse(configResponse, "Could not load contractor config.");
+      const configJson = await parseJsonResponse(configResponse, "Could not load report configuration.");
 
       if (!accountsResponse.ok) {
         throw new Error(accountsJson.error ?? "Could not load connected accounts.");
       }
 
       if (!configResponse.ok) {
-        throw new Error(configJson.error ?? "Could not load contractor config.");
+        throw new Error(configJson.error ?? "Could not load report configuration.");
       }
 
       setAccounts(accountsJson.accounts ?? []);
@@ -243,7 +249,7 @@ export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorksp
     } catch (nextError) {
       setRuleSetDraft((current) => current ?? clone(createDefaultContractorRuleSet()));
       setRuleSets((current) => (current.length ? current : [createDefaultContractorRuleSet()]));
-      setError(nextError instanceof Error ? nextError.message : "Could not refresh contractor metrics workspace.");
+      setError(nextError instanceof Error ? nextError.message : "Could not refresh metrics workspace.");
     } finally {
       setWorking("");
     }
@@ -297,14 +303,14 @@ export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorksp
           compareToPreviousPeriod: (ruleSetDraft.settings?.comparisonMode ?? "previous_period") === "previous_period",
         }),
       });
-      const result = await parseJsonResponse(response, "Could not generate contractor report.");
-      if (!response.ok) throw new Error(result.error ?? "Could not generate contractor report.");
+      const result = await parseJsonResponse(response, "Could not generate report.");
+      if (!response.ok) throw new Error(result.error ?? "Could not generate report.");
       setPreview({ ...result, startDate, endDate, clientName, ruleSet: result.ruleSet ?? ruleSetDraft });
-      setNotice("Contractor report generated.");
+      setNotice("Report generated.");
       setTab("metrics");
       await refresh(workspaceId, session.access_token);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not generate contractor report.");
+      setError(nextError instanceof Error ? nextError.message : "Could not generate report.");
     } finally {
       setWorking("");
     }
@@ -322,13 +328,13 @@ export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorksp
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({ workspaceId, ruleSet: ruleSetDraft }),
       });
-      const result = await parseJsonResponse(response, "Could not save contractor report config.");
-      if (!response.ok || !result.ruleSet) throw new Error(result.error ?? "Could not save contractor report config.");
+      const result = await parseJsonResponse(response, "Could not save report config.");
+      if (!response.ok || !result.ruleSet) throw new Error(result.error ?? "Could not save report config.");
       setRuleSetDraft(clone(result.ruleSet));
       setNotice("Config saved. Run a new report to calculate your changes; saved reports keep their original results.");
       await refresh(workspaceId, session.access_token);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not save contractor report config.");
+      setError(nextError instanceof Error ? nextError.message : "Could not save report config.");
     } finally {
       setWorking("");
     }
@@ -546,18 +552,18 @@ export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorksp
       <main className={styles.screen}>
         <div className={styles.loadingBox}>
           <Loader2 className={styles.spin} />
-          <p className={styles.copy}>Loading contractor metrics workspace.</p>
+          <p className={styles.copy}>Loading metrics workspace.</p>
         </div>
       </main>
     );
   }
 
   if (!session) {
-    return <Gate title="Sign in to open contractor metrics." body="This workspace uses your Trust Compression session plus server-side connected accounts." />;
+    return <Gate title="Sign in to open metrics." body="This workspace uses your Trust Compression session plus server-side connected accounts." />;
   }
 
   if (!workspaceId || !ruleSetDraft) {
-    return <Gate title="Workspace not ready." body={error || "We could not load the contractor metrics workspace right now."} />;
+    return <Gate title="Workspace not ready." body={error || "We could not load the metrics workspace right now."} />;
   }
 
   const metricOptions = metrics.map((metric: any) => ({ value: metric.id, label: metric.name }));
@@ -570,7 +576,7 @@ export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorksp
         <p>Compare leads, sales, and spend. Choose a period, then run a report from your connected CRMs.</p>
         <div className={styles.heroActions}>
           <button className={styles.secondary} type="button" disabled={working === "refresh"} onClick={() => refresh()}><RefreshCw />Refresh workspace</button>
-          <button className={styles.primary} type="button" disabled={working === "report"} onClick={runReport}><Sparkles />{working === "report" ? "Generating..." : "Run contractor report"}</button>
+          <button className={styles.primary} type="button" disabled={working === "report"} onClick={runReport}><Sparkles />{working === "report" ? "Generating..." : "Run report"}</button>
           <button className={styles.secondary} type="button" disabled={!activeReport} onClick={() => { try { printReport(activeReport); } catch (e) { setError(e instanceof Error ? e.message : "Could not open PDF export."); } }}>Export PDF</button>
         </div>
       </section>
@@ -685,7 +691,7 @@ export function ContractorMetricsWorkspace({ activeWorkspaceId }: { activeWorksp
             </>
           ) : (
             <Panel title="No report yet" icon={<Sparkles />}>
-              <p className={styles.copy}>Run the contractor report to see KPI cards, ranked tables, and drilldown rows using your current workspace defaults.</p>
+              <p className={styles.copy}>Run the report to see KPI cards, ranked tables, and drilldown rows using your current workspace defaults.</p>
             </Panel>
           )}
         </div>
@@ -1052,7 +1058,7 @@ async function parseJsonResponse(response: Response, fallbackMessage: string) {
 }
 
 function Gate({ title, body }: { title: string; body: string }) {
-  return <main className={styles.screen}><section className={styles.hero}><span>Contractor Metrics</span><h1>{title}</h1><p>{body}</p></section></main>;
+  return <main className={styles.screen}><section className={styles.hero}><span>Metrics</span><h1>{title}</h1><p>{body}</p></section></main>;
 }
 
 function Panel({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {

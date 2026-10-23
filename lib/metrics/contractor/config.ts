@@ -348,10 +348,10 @@ const DEFAULT_DASHBOARD_SECTIONS: ContractorDashboardSection[] = [
 ];
 
 export const DEFAULT_CONTRACTOR_RULE_SET: ContractorRuleSetRecord = {
-  name: "Default Contractor Report",
+  name: "Default Report",
   slug: "default-contractor-report",
   version: 1,
-  description: "Workspace-editable contractor reporting template based on the existing local GHL + JobTread engine.",
+  description: "Workspace-editable reporting template based on the existing local GHL + JobTread engine.",
   isDefault: true,
   status: "active",
   providers: [

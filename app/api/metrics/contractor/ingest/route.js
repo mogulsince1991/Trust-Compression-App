@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireWorkspaceAccess } from "@/lib/server/route-auth";
 import { createUserSupabaseClient } from "../../../../../lib/supabase";
 import { normalizeJobTreadJobs, normalizeSpendRows, normalizeWindsorContacts } from "../../../../../lib/metrics/contractor/normalize.js";
 
@@ -9,7 +10,7 @@ const PROVIDERS = new Set(["gohighlevel", "jobtread", "windsor", "spend_upload",
 
 export async function POST(request) {
   const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-  if (!token) return NextResponse.json({ error: "Sign in before importing contractor metrics data." }, { status: 401 });
+  if (!token) return NextResponse.json({ error: "Sign in before importing metrics data." }, { status: 401 });
 
   try {
     const body = await request.json();
@@ -19,6 +20,7 @@ export async function POST(request) {
     const externalAccountId = clean(body.externalAccountId);
 
     if (!workspaceId) return NextResponse.json({ error: "workspaceId is required." }, { status: 400 });
+    await requireWorkspaceAccess(request, workspaceId);
     if (!PROVIDERS.has(provider)) return NextResponse.json({ error: "Unsupported provider." }, { status: 400 });
 
     const supabase = createUserSupabaseClient(token);
@@ -97,7 +99,7 @@ export async function POST(request) {
 
     return NextResponse.json({ sourceId: source.id, syncRunId: syncRun.id, ...counts });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Contractor metrics ingest failed." }, { status: 400 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Metrics ingest failed." }, { status: error?.status || 400 });
   }
 }
 
@@ -242,5 +244,5 @@ function providerLabel(provider) {
   if (provider === "gohighlevel") return "GoHighLevel";
   if (provider === "jobtread") return "JobTread";
   if (provider === "spend_upload") return "Spend upload";
-  return "Contractor metrics source";
+  return "Metrics source";
 }

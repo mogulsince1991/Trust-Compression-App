@@ -88,7 +88,7 @@ export async function GET(request: Request) {
       resource("asset_added", "Library asset added", assetsResult.data),
       resource("source_connected", "Source added", sourcesResult.data),
       resource("tracking_link_created", "Tracking link created", linksResult.data),
-      resource("report_generated", "Contractor report generated", reportsResult.data),
+      resource("report_generated", "Report generated", reportsResult.data),
       resource("workspace_invite_created", "Workspace invitation created", invitesResult.data),
       resource("social_profile_saved", "Social profile saved", socialResult.data),
     ];

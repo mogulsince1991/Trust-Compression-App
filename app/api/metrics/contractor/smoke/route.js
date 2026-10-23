@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
+import { requireWorkspaceAccess } from "@/lib/server/route-auth";
 import { buildReport } from "../../../../../lib/metrics/contractor/report.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request) {
+  try { await requireWorkspaceAccess(request, new URL(request.url).searchParams.get("workspaceId") || ""); }
+  catch (error) { return NextResponse.json({ error: error.message }, { status: error.status || 403 }); }
   const report = buildReport({
     client: "Smoke Test Contractor",
     startDate: "2026-06-01",

@@ -65,7 +65,7 @@ export function ContractorMetricsConsole() {
   const [selectedRuleSetId, setSelectedRuleSetId] = useState<string | null>(null);
   const [ruleSetDraft, setRuleSetDraft] = useState<any | null>(null);
   const [preview, setPreview] = useState<any | null>(null);
-  const [clientName, setClientName] = useState("Trust Compression Contractor Report");
+  const [clientName, setClientName] = useState("TrustTale Report");
   const [startDate, setStartDate] = useState("2026-06-01");
   const [endDate, setEndDate] = useState("2026-06-30");
   const [ghl, setGhl] = useState(EMPTY_GHL);
@@ -180,13 +180,13 @@ export function ContractorMetricsConsole() {
         }),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? "Could not generate contractor report.");
+      if (!response.ok) throw new Error(result.error ?? "Could not generate report.");
       setPreview({ ...result, ruleSet: ruleSetDraft });
-      setNotice("Report generated from the current contractor template.");
+      setNotice("Report generated from the current report template.");
       setTab("metrics");
       await refresh(workspaceId, session.access_token);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not generate contractor report.");
+      setError(nextError instanceof Error ? nextError.message : "Could not generate report.");
     } finally {
       setWorking("");
     }
@@ -205,13 +205,13 @@ export function ContractorMetricsConsole() {
         body: JSON.stringify({ workspaceId, ruleSet: ruleSetDraft }),
       });
       const result = await response.json();
-      if (!response.ok || !result.ruleSet) throw new Error(result.error ?? "Could not save contractor report config.");
+      if (!response.ok || !result.ruleSet) throw new Error(result.error ?? "Could not save report config.");
       setRuleSetDraft(clone(result.ruleSet));
       setSelectedRuleSetId(result.ruleSet.id ?? null);
       setNotice("Workspace report config saved.");
       await refresh(workspaceId, session.access_token);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not save contractor report config.");
+      setError(nextError instanceof Error ? nextError.message : "Could not save report config.");
     } finally {
       setWorking("");
     }
@@ -361,9 +361,9 @@ export function ContractorMetricsConsole() {
     });
   }
 
-  if (loading) return <main className={styles.screen}><div className={styles.loadingBox}><Loader2 className={styles.spin} /><p className={styles.copy}>Loading contractor metrics workspace.</p></div></main>;
-  if (!session) return <Gate title="Sign in to open contractor metrics." body="This reporting workspace uses your Trust Compression session plus server-side connected accounts." />;
-  if (!workspaceId || !ruleSetDraft) return <Gate title="Workspace not ready." body={error || "We could not load the contractor metrics workspace right now."} />;
+  if (loading) return <main className={styles.screen}><div className={styles.loadingBox}><Loader2 className={styles.spin} /><p className={styles.copy}>Loading metrics workspace.</p></div></main>;
+  if (!session) return <Gate title="Sign in to open metrics." body="This reporting workspace uses your Trust Compression session plus server-side connected accounts." />;
+  if (!workspaceId || !ruleSetDraft) return <Gate title="Workspace not ready." body={error || "We could not load the metrics workspace right now."} />;
 
   const vendorAliasText = (ruleSetDraft.classifications.paidVendorAliases ?? []).map((entry: any) => `${entry.vendor}: ${(entry.aliases ?? []).join(", ")}`).join("\n");
   const closingOutcomeText = (ruleSetDraft.classifications.closingOutcomeRules ?? []).map((entry: any) => `${entry.reason} | ${entry.pattern} | ${entry.description}`).join("\n");
@@ -372,12 +372,12 @@ export function ContractorMetricsConsole() {
   return (
     <main className={styles.screen}>
       <section className={styles.hero}>
-        <span>Contractor Metrics</span>
+        <span>Metrics</span>
         <h1>Owner-facing reporting with CRM-backed attribution defaults.</h1>
-        <p>Run the contractor dashboard, tune attribution defaults without JSON, and keep GoHighLevel plus JobTread flowing into one reporting workspace.</p>
+        <p>Run the report dashboard, tune attribution defaults without JSON, and keep GoHighLevel plus JobTread flowing into one reporting workspace.</p>
         <div className={styles.heroActions}>
           <Link href="/" className={styles.linkButton}>Open main app</Link>
-          <button className={styles.primary} type="button" onClick={runReport} disabled={working === "report"}><Sparkles />{working === "report" ? "Generating..." : "Run contractor report"}</button>
+          <button className={styles.primary} type="button" onClick={runReport} disabled={working === "report"}><Sparkles />{working === "report" ? "Generating..." : "Run report"}</button>
           <button className={styles.secondary} type="button" onClick={() => refresh()} disabled={working === "refresh"}><RefreshCw />Refresh workspace</button>
         </div>
       </section>
@@ -437,7 +437,7 @@ export function ContractorMetricsConsole() {
               })}
             </>
           ) : (
-            <Panel title="Metrics" icon={<BarChart3 />}><p className={styles.copy}>Run the contractor report to populate the dashboard with KPI cards, grouped tables, and inline detail.</p></Panel>
+            <Panel title="Metrics" icon={<BarChart3 />}><p className={styles.copy}>Run the report to populate the dashboard with KPI cards, grouped tables, and inline detail.</p></Panel>
           )}
         </div>
       ) : null}
@@ -456,7 +456,7 @@ export function ContractorMetricsConsole() {
               </div>
             </Panel>
             <Panel title="Shared attribution defaults" icon={<Database />}>
-              <p className={styles.copy}>Source bucket mapping, paid vendor aliases, and closing outcome rules apply across the full contractor dashboard.</p>
+              <p className={styles.copy}>Source bucket mapping, paid vendor aliases, and closing outcome rules apply across the full report dashboard.</p>
             </Panel>
           </section>
 
@@ -565,7 +565,7 @@ export function ContractorMetricsConsole() {
 }
 
 function Gate({ title, body }: { title: string; body: string }) {
-  return <main className={styles.screen}><section className={styles.hero}><span>Contractor Metrics</span><h1>{title}</h1><p>{body}</p><div className={styles.heroActions}><Link href="/" className={styles.linkButton}>Open main app</Link></div></section></main>;
+  return <main className={styles.screen}><section className={styles.hero}><span>Metrics</span><h1>{title}</h1><p>{body}</p><div className={styles.heroActions}><Link href="/" className={styles.linkButton}>Open main app</Link></div></section></main>;
 }
 
 function Panel({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {

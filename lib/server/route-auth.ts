@@ -1,4 +1,5 @@
 import type { User } from "@supabase/supabase-js";
+import { reportsEnabled, REPORT_UPGRADE_MESSAGE } from "@/lib/report-access";
 import { createServiceSupabaseClient, createUserSupabaseClient } from "@/lib/supabase";
 
 export type WorkspaceAccessContext = {
@@ -45,6 +46,10 @@ export async function requireWorkspaceAccess(request: Request, workspaceId: stri
 
   if (!membership?.role) {
     throw httpError(403, "You do not have access to this workspace.");
+  }
+
+  if (new URL(request.url).pathname.startsWith("/api/metrics/contractor/") && !reportsEnabled(workspaceId)) {
+    throw httpError(403, REPORT_UPGRADE_MESSAGE);
   }
 
   return {

@@ -24,7 +24,7 @@ export async function POST(request) {
     const workspaceId = String(body.workspaceId ?? "").trim();
     const startDate = String(body.startDate ?? "").trim();
     const endDate = String(body.endDate ?? "").trim();
-    const clientName = String(body.clientName ?? "Contractor").trim();
+    const clientName = String(body.clientName ?? "Report").trim();
     const ruleSetId = String(body.ruleSetId ?? "").trim() || null;
     const compareToPreviousPeriod = body.compareToPreviousPeriod !== false;
     const persist = body.persist !== false;
@@ -166,9 +166,9 @@ export async function POST(request) {
         : null,
     });
   } catch (error) {
-    console.error("Contractor report failed", { name: error?.name, code: error?.code, message: error?.message });
+    console.error("Report failed", { name: error?.name, code: error?.code, message: error?.message });
     const status = typeof error === "object" && error && "status" in error ? Number(error.status) : 502;
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Contractor metrics report failed." }, { status });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Metrics report failed." }, { status });
   }
 }
 
