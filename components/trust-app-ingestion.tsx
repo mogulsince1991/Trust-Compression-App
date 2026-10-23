@@ -1096,8 +1096,19 @@ export function TrustAppIngestion({
     }
   }
 
-  function editJourney(journey: JourneySummary) {
-    if (!draftSaved && (draftAssets.length || draft.title) && !window.confirm("Replace the current unsaved draft with this journey?")) return;
+  function editJourney(journey: JourneySummary, additions: JourneyAsset[] = []) {
+    if (!draftSaved && (draftAssets.length || draft.title) && !window.confirm("Replace the current unsaved draft with this journey?")) return false;
+    if (!draftKey || draftReady !== draftKey) { setError("Your workspace is still loading. Please try again."); return false; }
+    const assets = [...journey.assets];
+    for (const item of additions) {
+      if (!assets.some(asset => item.videoId ? asset.videoId === item.videoId : item.libraryAssetId ? asset.libraryAssetId === item.libraryAssetId : asset.id === item.id)) {
+        assets.push({ ...item, id: item.videoId ? `video:${item.videoId}` : item.libraryAssetId ? `asset:${item.libraryAssetId}` : item.id, position: assets.length + 1 });
+      }
+    }
+    const nextDraft = { appearance: journey.appearance, title: journey.title ?? "", heading: journey.heading ?? "", description: journey.description ?? "", ctaLabel: journey.ctaLabel ?? "Continue the conversation", ctaUrl: journey.ctaUrl ?? "", folderName: folders.find(f => f.id === journey.folderId)?.name ?? "" };
+    try {
+      sessionStorage.setItem(draftKey, JSON.stringify({ draft: nextDraft, assets, journeyId: journey.id, shareUrl: journey.shareUrl ?? "", savedDraft: JSON.stringify({ draft: nextDraft, assets: journey.assets }) }));
+    } catch { setError("Could not preserve your journey for navigation. Please enable browser storage and try again."); return false; }
     setSelectedJourneyId(journey.id);
     setDraft({
       appearance: journey.appearance,
@@ -1108,12 +1119,14 @@ export function TrustAppIngestion({
       ctaUrl: journey.ctaUrl ?? "",
       folderName: folders.find((folder) => folder.id === journey.folderId)?.name ?? ""
     });
-    setDraftAssets(journey.assets);
+    setDraftAssets(assets);
     setShareUrl(journey.shareUrl ?? "");
     setPersonalShareUrl("");
     setSavedDraft(JSON.stringify({ draft: { appearance: journey.appearance, title: journey.title ?? "", heading: journey.heading ?? "", description: journey.description ?? "", ctaLabel: journey.ctaLabel ?? "Continue the conversation", ctaUrl: journey.ctaUrl ?? "", folderName: folders.find(f => f.id === journey.folderId)?.name ?? "" }, assets: journey.assets }));
     setView("editor");
-    setNotice("Editing saved journey.");
+    setError("");
+    setNotice(additions.length ? `Added ${assets.length - journey.assets.length} new item(s). Save changes to update this journey.` : "Editing saved journey.");
+    return true;
   }
 
   function hydrateJourneyDraft(journey: JourneySummary) {
@@ -1497,7 +1510,7 @@ export function TrustAppIngestion({
     {reviewing && <ReviewSessionBanner expiresAt={String(session?.user.app_metadata.review_expires_at || "")} />}
     {view === "home" && <SageHome contentCount={videos.length + libraryAssets.length} journeys={journeys} metrics={metrics} onNavigate={setView} onNew={newJourney} onEdit={editJourney} draftCount={draftAssets.length} />}
     {view === "library" && !reviewing && workspaceBooted && session && workspaceId && <LibrarySourceRefresh key={workspaceId} workspaceId={workspaceId} userId={session.user.id} onComplete={async isActive => { await Promise.all([loadVideos(workspaceId, isActive), loadSources(workspaceId, isActive), loadLibraryAssets(workspaceId, isActive)]); }} />}
-    {view === "library" && <SageLibrary workspaceId={workspaceId || ""} onPhotosImported={() => loadLibraryAssets(workspaceId)} key={`${session?.user.id}:${workspaceId}`} selectionKey={`library-selection:${session?.user.id}:${workspaceId}`} videos={videos} libraryAssets={libraryAssets} assetDraft={libraryAssetDraft} onAssetDraftChange={setLibraryAssetDraft} onSaveAsset={saveLibraryAsset} saving={working} onArchive={archiveVideo} onDeleteAsset={deleteLibraryAsset} onSaveContext={saveVideoContext} onImport={importSource} onAddItems={addLibraryItems} draftCount={draftAssets.length} onOpenDraft={() => setView("editor")} />}
+    {view === "library" && <SageLibrary workspaceId={workspaceId || ""} onPhotosImported={() => loadLibraryAssets(workspaceId)} key={`${session?.user.id}:${workspaceId}`} selectionKey={`library-selection:${session?.user.id}:${workspaceId}`} videos={videos} libraryAssets={libraryAssets} assetDraft={libraryAssetDraft} onAssetDraftChange={setLibraryAssetDraft} onSaveAsset={saveLibraryAsset} saving={working} onArchive={archiveVideo} onDeleteAsset={deleteLibraryAsset} onSaveContext={saveVideoContext} onImport={importSource} onAddItems={addLibraryItems} journeys={journeys} onAddToExisting={(id, items) => { const journey = journeys.find(item => item.id === id); return journey ? editJourney(journey, items) : false; }} draftCount={draftAssets.length} onOpenDraft={() => setView("editor")} />}
     {view === "journeys" && <SageJourneys onRemove={removeJourney} working={journeyWorking} readOnly={reviewing} onArchive={() => setView("archive")} journeys={journeys} onEdit={editJourney} onNew={newJourney} onResume={() => setView("editor")} hasDraft={draftAssets.length > 0 || Boolean(draft.title)} />}
     {view === "editor" && <><JourneyContentPicker key={`${workspaceId}:${selectedJourneyId || "draft"}`} items={[...videos.map((video, i) => buildJourneyAssetFromVideo(video, i + 1)), ...libraryAssets.map(libraryItem)]} assets={draftAssets} onAdd={addLibraryItems} busy={journeyWorking} /><SageJourneyEditor key={workspaceId} draft={draft} assets={draftAssets} onChange={setDraft} onMove={moveDraftAsset} onRemove={removeFromJourney} onLibrary={() => setView("library", true)} onBack={() => setView("journeys")} onSave={publishJourney} onGenerate={generateJourney} working={journeyWorking} shareUrl={shareUrl} personalUrl={personalShareUrl} published={publishedJourney} contacts={contacts} onContactShare={createContactShare} saved={draftSaved} saveError={error} saveNotice={notice} /></>}
     {view === "metrics" && <><header className="sage-page-heading"><div><h1>Activity</h1><p>See how buyers engage with your proof.</p></div><button onClick={() => setView("tracking")}>Tracked links</button></header><MetricsView metrics={metrics} videos={videos} sources={sources} journeys={journeys} contacts={contacts} tracking={tracking} /><SageRecipients contacts={contacts} metrics={metrics} journeys={journeys} /></>}

@@ -75,6 +75,9 @@
 .sage-panel > p { margin: 10px 0 20px; }
 .sage-panel .sage-section-heading { margin-top: 0; }
 .sage-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.sage-existing-journey-picker { position:absolute; bottom:calc(100% + 8px); right:0; width:min(420px, 100%); padding:18px; border:1px solid var(--sage-line); border-radius:12px; background:var(--sage-surface); box-shadow:0 8px 32px #0003; }
+.sage-existing-journey-picker label { display:block; margin-bottom:8px; font-weight:600; }
+.sage-existing-journey-picker select { width:100%; padding:10px; color:inherit; background:var(--sage-surface); border:1px solid var(--sage-line); border-radius:8px; }
 .sage-app .sage-search { display: flex; gap: 10px; align-items: center; border: 1px solid var(--sage-line); border-radius: 11px; background: var(--sage-surface); padding: 0 14px; margin-bottom: 18px; }
 .sage-search > svg { color: var(--sage-muted); }
 .sage-app .sage-search input { border: 0; background: transparent !important; padding: 13px 0; }
