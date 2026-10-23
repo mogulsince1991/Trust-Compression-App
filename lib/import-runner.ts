@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { saveDriveImage } from "./server/drive-image-import";
 import { preserveCuratedFields } from "./source-refresh";
 import { classifyVideo } from "@/lib/smart-organize";
 import { importSourceVideos, parseSourceUrl, type ImportedVideo, type ParsedSource } from "@/lib/source-import";
@@ -172,6 +173,9 @@ async function createSyncRun(supabase: SupabaseClient, workspaceId: string, sour
 }
 
 async function persistImportedVideo({ supabase, workspaceId, sourceId, sourceUrl, parsed, video, userId, automatic = false }: { supabase: SupabaseClient; workspaceId: string; sourceId: string; sourceUrl: string; parsed: ParsedSource; video: ImportedVideo; userId: string; automatic?: boolean }) {
+  if (parsed.platform === "google_drive" && String(video.metadata.mimeType).startsWith("image/")) {
+    return saveDriveImage(supabase, workspaceId, { id: video.externalId, title: video.title, description: video.description, metadata: { ...video.metadata, sourceId } }, userId, automatic);
+  }
   const existingByLink = await findExistingBySourceLink(supabase, workspaceId, parsed.platform, video.externalId);
   const existingByLegacy = existingByLink ? null : await findExistingByLegacyKey(supabase, workspaceId, parsed.platform, video.externalId);
   const existingId = existingByLink?.video_id ?? existingByLegacy?.id ?? null;

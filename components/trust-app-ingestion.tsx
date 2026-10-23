@@ -449,17 +449,17 @@ export function TrustAppIngestion({
     return nextWorkspaces;
   }
 
-  async function loadLibraryAssets(nextWorkspaceId = workspaceId) {
+  async function loadLibraryAssets(nextWorkspaceId = workspaceId, isActive = () => true) {
     if (!session || !nextWorkspaceId) return;
     const response = await fetch(`/api/library-assets?workspaceId=${encodeURIComponent(nextWorkspaceId)}`, {
       headers: { Authorization: `Bearer ${session.access_token}` }
     });
     if (!response.ok) {
-      setLibraryAssets([]);
+      if (isActive()) setLibraryAssets([]);
       return;
     }
     const result = (await response.json()) as { assets?: Array<Record<string, any>> };
-    setLibraryAssets((result.assets ?? []).map(mapLibraryAssetRow));
+    if (isActive()) setLibraryAssets((result.assets ?? []).map(mapLibraryAssetRow));
   }
 
   async function loadWorkspaceInvites(nextWorkspaceId = workspaceId) {
@@ -1495,7 +1495,7 @@ export function TrustAppIngestion({
   return <SageShell view={view} workspaces={workspaces} workspaceId={workspaceId} onSwitch={switchWorkspace} onNavigate={setView} onSignOut={() => void signOut()} isAdmin={isPlatformAdmin} busy={loading} notice={notice} error={error || (draftStorageError ? "Browser draft recovery is unavailable. Save your journey before leaving." : "")} onDismiss={() => { setNotice(""); setError(""); }}>
     {reviewing && <ReviewSessionBanner expiresAt={String(session?.user.app_metadata.review_expires_at || "")} />}
     {view === "home" && <SageHome contentCount={videos.length + libraryAssets.length} journeys={journeys} metrics={metrics} onNavigate={setView} onNew={newJourney} onEdit={editJourney} draftCount={draftAssets.length} />}
-    {view === "library" && !reviewing && workspaceBooted && session && workspaceId && <LibrarySourceRefresh key={workspaceId} workspaceId={workspaceId} userId={session.user.id} onComplete={async isActive => { await Promise.all([loadVideos(workspaceId, isActive), loadSources(workspaceId, isActive)]); }} />}
+    {view === "library" && !reviewing && workspaceBooted && session && workspaceId && <LibrarySourceRefresh key={workspaceId} workspaceId={workspaceId} userId={session.user.id} onComplete={async isActive => { await Promise.all([loadVideos(workspaceId, isActive), loadSources(workspaceId, isActive), loadLibraryAssets(workspaceId, isActive)]); }} />}
     {view === "library" && <SageLibrary workspaceId={workspaceId || ""} onPhotosImported={() => loadLibraryAssets(workspaceId)} key={`${session?.user.id}:${workspaceId}`} selectionKey={`library-selection:${session?.user.id}:${workspaceId}`} videos={videos} libraryAssets={libraryAssets} assetDraft={libraryAssetDraft} onAssetDraftChange={setLibraryAssetDraft} onSaveAsset={saveLibraryAsset} saving={working} onArchive={archiveVideo} onDeleteAsset={deleteLibraryAsset} onSaveContext={saveVideoContext} onImport={importSource} onAddItems={addLibraryItems} draftCount={draftAssets.length} onOpenDraft={() => setView("editor")} />}
     {view === "journeys" && <SageJourneys onRemove={removeJourney} working={journeyWorking} readOnly={reviewing} onArchive={() => setView("archive")} journeys={journeys} onEdit={editJourney} onNew={newJourney} onResume={() => setView("editor")} hasDraft={draftAssets.length > 0 || Boolean(draft.title)} />}
     {view === "editor" && <SageJourneyEditor key={workspaceId} draft={draft} assets={draftAssets} onChange={setDraft} onMove={moveDraftAsset} onRemove={removeFromJourney} onLibrary={() => setView("library", true)} onBack={() => setView("journeys")} onSave={publishJourney} onGenerate={generateJourney} working={journeyWorking} shareUrl={shareUrl} personalUrl={personalShareUrl} published={publishedJourney} contacts={contacts} onContactShare={createContactShare} saved={draftSaved} saveError={error} saveNotice={notice} />}

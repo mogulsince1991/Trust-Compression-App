@@ -17,6 +17,8 @@ export async function GET(request: Request) {
     if (!workspaceId) throw httpError(400, "Workspace is required.");
 
     const { serviceSupabase } = await requireWorkspaceAccess(request, workspaceId);
+    const assets = [];
+    for (let offset = 0; ; offset += 500) {
     const { data, error } = await serviceSupabase
       .from("library_assets")
       .select("id,workspace_id,asset_type,source_platform,title,source_url,embed_url,thumbnail_url,summary,metadata,created_at,updated_at,archived_at")
@@ -24,10 +26,13 @@ export async function GET(request: Request) {
       .is("archived_at", null)
       .order("created_at", { ascending: false })
       .order("id")
-      .limit(200);
+      .range(offset, offset + 499);
 
     if (error) throw httpError(500, error.message);
-    return NextResponse.json({ assets: data ?? [] });
+    assets.push(...(data ?? []));
+    if (!data || data.length < 500) break;
+    }
+    return NextResponse.json({ assets });
   } catch (error) {
     const status = typeof error === "object" && error && "status" in error && typeof (error as any).status === "number" ? (error as any).status : 400;
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load library assets." }, { status });

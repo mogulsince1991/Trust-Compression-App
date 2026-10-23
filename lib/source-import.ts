@@ -220,7 +220,7 @@ async function importDriveFolder(source: Extract<ParsedSource, { kind: "drive_fo
   }
 
   const files = await fetchPublicDriveFolderTree(source.folderId, apiKey);
-  if (!files.length) throw new Error("No public video files were found in that Google Drive folder, or the folder is not shared publicly.");
+  if (!files.length) throw new Error("No public videos or photos were found in that Google Drive folder, or the folder is not shared publicly.");
 
   return files.map(({ file, folderId, folderPath }) =>
     driveFileToVideo(file.id, file, file.webViewLink ?? `https://drive.google.com/file/d/${file.id}/view`, "drive_public_folder", folderId, folderPath)
@@ -261,7 +261,7 @@ async function fetchPublicDriveFolderTree(rootFolderId: string, apiKey: string) 
       for (const file of data.files ?? []) {
         if (file.mimeType === DRIVE_FOLDER_MIME_TYPE) {
           queue.push({ id: file.id, path: [folder.path, file.name ?? "Untitled folder"].filter(Boolean).join("/") });
-        } else if (file.mimeType?.startsWith("video/")) {
+        } else if (file.mimeType?.startsWith("video/") || file.mimeType?.startsWith("image/")) {
           if (videos.length >= MAX_DRIVE_FILES) throw new Error("Folder refresh exceeds 2,500 videos. Connect smaller subfolders; existing content is unchanged.");
           videos.push({ file, folderId: folder.id, folderPath: folder.path });
         }

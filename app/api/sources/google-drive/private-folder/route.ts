@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { saveDriveImage } from "@/lib/server/drive-image-import";
 import { createUserSupabaseClient } from "@/lib/supabase";
 import { preserveCuratedFields } from "@/lib/source-refresh";
 
@@ -96,6 +97,11 @@ export async function POST(request: Request) {
     }
 
     for (const file of files) {
+      if (file.mimeType?.startsWith("image/")) {
+        const result = await saveDriveImage(supabase, workspaceId, { id: file.id, title: file.name || "Google Drive photo", description: file.description, metadata: { mimeType: file.mimeType, folderId: file.folderId, folderPath: file.folderPath, sourceId: source.id } }, user.id, body.automatic);
+        imported += result.imported; updated += result.updated;
+        continue;
+      }
       if (body.automatic && known.has(file.id)) continue;
       const payload = driveFileToVideoPayload({ file, workspaceId, sourceId: source.id, folderUrl, folderId, userId: user.id });
       const { data: existing } = await supabase
@@ -181,7 +187,7 @@ async function fetchDriveVideosRecursively(rootFolderId: string, accessToken: st
       for (const file of data.files ?? []) {
         if (file.mimeType === DRIVE_FOLDER_MIME_TYPE) {
           queue.push({ id: file.id, path: [folder.path, file.name ?? "Untitled folder"].filter(Boolean).join("/") });
-        } else if (file.mimeType?.startsWith("video/")) {
+        } else if (file.mimeType?.startsWith("video/") || file.mimeType?.startsWith("image/")) {
           if (files.length >= MAX_DRIVE_FILES) throw new Error("Refresh exceeds 2,500 videos. Connect smaller subfolders.");
           files.push({ ...file, folderId: folder.id, folderPath: folder.path });
         }

@@ -7,7 +7,7 @@ import type { JourneyEmbedDraft } from "./trust-app-shared";
 const choices = [
   { id: "file", title: "File or document", detail: "PDF, image, Google Doc, presentation or shared Drive file", icon: FileText },
   { id: "video", title: "One video", detail: "YouTube, Drive, Vimeo, Loom and supported embeds", icon: Video },
-  { id: "folder", title: "Resource folder", detail: "Import supported content from a Google Drive folder", icon: FolderOpen },
+  { id: "folder", title: "Resource folder", detail: "Import videos and photos from a Google Drive folder", icon: FolderOpen },
   { id: "channel", title: "Channel or playlist", detail: "Import videos from a YouTube channel or playlist", icon: Layers }
 ];
 

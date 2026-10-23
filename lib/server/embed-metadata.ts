@@ -11,6 +11,12 @@ export async function enrichEmbed<T extends NormalizedJourneyEmbed>(asset: T, ti
       const response = await fetch(url, { next: { revalidate: 300 }, signal: AbortSignal.timeout(5000) });
       if (!response.ok) return asset;
       const data = await response.json();
+      if (String(data.mimeType).startsWith("image/")) {
+        const imageUrl = `/api/media/drive/${id}/preview?image=1&size=1200`;
+        return { ...asset, assetType: "embed", sourcePlatform: "image", embedUrl: imageUrl, thumbnailUrl: imageUrl,
+          title: !titleProvided && typeof data.name === "string" ? data.name : asset.title,
+          metadata: { ...asset.metadata, mimeType: data.mimeType, measurement: "unavailable" } };
+      }
       return { ...asset, assetType: String(data.mimeType).startsWith("video/") ? "video" : asset.assetType,
         title: !titleProvided && typeof data.name === "string" ? data.name : asset.title,
         thumbnailUrl: data.thumbnailLink ? `/api/media/drive/${id}/preview?image=1` : null,
