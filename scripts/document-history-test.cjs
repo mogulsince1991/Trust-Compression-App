@@ -33,15 +33,20 @@ const { readAllPages, documentCache, discoverSalesDocuments } = exportsObject;
   assert.equal(await documentCache(b).get('snapshot:May', 1000), null);
   assert.equal(await documentCache({ ...a, id: 'other' }).get('snapshot:May', 1000), null);
   assert.ok(Array.from(records.keys()).every(key => key.includes('document-sales-v1')));
-  let historyQueries = 0;
+  let historyQueries = 0, documentQueries = 0;
   const query = async q => {
-    if (q.organization) return { organization: { documents: { nodes: [{ id: 'd', type: 'customerOrder', status: 'denied', priceWithTax: 10, job: { id: 'old-job' } }] } } };
+    if (q.organization) { documentQueries++; return { organization: { documents: { nodes: [{ id: 'd', type: 'customerOrder', status: 'denied', priceWithTax: 10, job: { id: 'old-job' } }] } } }; }
     historyQueries++;
     return { document: { events: { nodes: [{ type: 'documentUpdated', createdAt: '2026-05-02T12:00:00Z', data: { next: { status: 'approved' }, previous: { status: 'draft' } } }] } } };
   };
   assert.equal((await discoverSalesDocuments(query, 'org', a))[0].historicallyApprovedAt, '2026-05-02T12:00:00Z');
   await discoverSalesDocuments(query, 'org', a);
   assert.equal(historyQueries, 1, 'Unchanged audited documents reuse durable history');
+  assert.equal(documentQueries, 1, 'A repeated run reuses completed document pages');
+  for (const [key, value] of records) if (key.includes('document-page:')) value.updated_at = new Date(Date.now() - 6 * 60 * 1000).toISOString();
+  await discoverSalesDocuments(query, 'org', a);
+  assert.equal(documentQueries, 2, 'Expired document pages are fetched fresh');
+  assert.equal(historyQueries, 1, 'Fresh document pages retain valid unchanged approval history');
   await discoverSalesDocuments(query, 'org', b);
   assert.equal(historyQueries, 2, 'History cannot leak across workspaces');
   console.log('Document pagination, incomplete scans, approval history, cache reuse, rule version and tenant isolation passed.');

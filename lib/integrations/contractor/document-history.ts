@@ -48,7 +48,14 @@ export function documentCache(account: any) {
 
 export async function discoverSalesDocuments(query: Query, organizationId: string, account: any) {
   const cache = documentCache(account);
-  const documents = await readAllPages(query,
+  const documents = await readAllPages(async input => {
+    const key = `document-page:${organizationId}:${JSON.stringify(input)}`;
+    const saved = await cache.get(key, 5 * 60 * 1000);
+    if (saved) return saved;
+    const page = await query(input);
+    if (Array.isArray(page?.organization?.documents?.nodes)) await cache.put(key, page);
+    return page;
+  },
     params => ({ organization: { $: { id: organizationId }, documents: { $: { ...params, sortBy: [{ field: "createdAt", order: "desc" }] }, nodes: {
       id: {}, number: {}, type: {}, status: {}, name: {}, issueDate: {}, closedAt: {}, createdAt: {}, priceWithTax: {}, job: { id: {}, number: {}, name: {} },
     }, nextPage: {} } } }), response => response.organization?.documents);
@@ -65,7 +72,7 @@ export async function discoverSalesDocuments(query: Query, organizationId: strin
           params => ({ document: { $: { id: doc.id }, events: { $: { ...params, sortBy: [{ field: "createdAt", order: "asc" }] }, nodes: { type: {}, createdAt: {}, data: {} }, nextPage: {} } } }),
           response => response.document?.events);
         const approval = events.find(event => /documentUpdated/i.test(event.type ?? "") && /^approved$/i.test(event.data?.next?.status ?? "") && !/^approved$/i.test(event.data?.previous?.status ?? ""));
-        history = { fingerprint, approvedAt: approval?.createdAt ?? "", events, document: doc };
+        history = { fingerprint, approvedAt: approval?.createdAt ?? "" };
         // Save each completed audit, so a retried large scan resumes safely.
         await cache.put(`history:${doc.id}`, history);
       }

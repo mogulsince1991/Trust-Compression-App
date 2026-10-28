@@ -19,6 +19,9 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export async function POST(request) {
+  const startedAt = Date.now();
+  let phase = "validation";
+  let audit = null;
   try {
     const body = await request.json();
     const workspaceId = String(body.workspaceId ?? "").trim();
@@ -35,6 +38,7 @@ export async function POST(request) {
     }
 
     const { user, userSupabase, serviceSupabase } = await requireWorkspaceAccess(request, workspaceId);
+    audit = { serviceSupabase, workspaceId, userId: user.id };
     const ruleSet = await getContractorRuleSet(serviceSupabase, workspaceId, ruleSetId);
     const runtimeRules = toRuntimeMetricRules(ruleSet);
     if (endDate > reportToday(runtimeRules.timezone)) {
@@ -42,6 +46,7 @@ export async function POST(request) {
     }
     const shared = new Map();
 
+    phase = "current-period sources and calculations";
     const current = await generateReportPayload({
       userSupabase,
       serviceSupabase,
@@ -55,6 +60,8 @@ export async function POST(request) {
     });
 
     const comparisonRange = compareToPreviousPeriod ? previousPeriodRange(startDate, endDate) : null;
+    console.info("Report phase completed", { phase, elapsedMs: Date.now() - startedAt });
+    phase = "comparison-period sources and calculations";
     const comparison = comparisonRange
       ? await generateReportPayload({
           userSupabase,
@@ -69,6 +76,8 @@ export async function POST(request) {
         })
       : null;
 
+    console.info("Report phase completed", { phase, elapsedMs: Date.now() - startedAt });
+    phase = "saving report";
     let savedReport = null;
     let savedRun = null;
 
@@ -166,9 +175,12 @@ export async function POST(request) {
         : null,
     });
   } catch (error) {
-    console.error("Report failed", { name: error?.name, code: error?.code, message: error?.message });
+    console.error("Report failed", { phase, elapsedMs: Date.now() - startedAt, name: error?.name, code: error?.code, message: error?.message });
+    if (audit) {
+      try { await recordActivity(audit.serviceSupabase, { workspaceId: audit.workspaceId, actorUserId: audit.userId, eventType: "report_failed", surface: "metrics", metadata: { phase, elapsedMs: Date.now() - startedAt, code: String(error?.code ?? error?.name ?? "unknown") } }); } catch { /* Do not mask the report failure. */ }
+    }
     const status = typeof error === "object" && error && "status" in error ? Number(error.status) : 502;
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Metrics report failed." }, { status });
+    return NextResponse.json({ error: `Report failed during ${phase}: ${error?.message || "The report could not be completed. Please try again."}`, phase }, { status });
   }
 }
 

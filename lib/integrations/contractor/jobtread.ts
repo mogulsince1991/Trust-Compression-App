@@ -127,14 +127,32 @@ async function fetchJobTreadRows(
   const documentsKey = `documents:${account.id}`;
   if (!requestCache.has(documentsKey)) requestCache.set(documentsKey, discoverSalesDocuments(query, organizationId, account));
   const documents = await requestCache.get(documentsKey);
-  const jobs = await readAllPages(query, params => ({ organization: { $: { id: organizationId }, jobs: {
+  const cache = documentCache(account);
+  const jobsKey = `job-index:${account.id}`;
+  if (!requestCache.has(jobsKey)) requestCache.set(jobsKey, (async () => {
+    const saved = await cache.get("job-index", 5 * 60 * 1000);
+    if (saved) return saved;
+    const rows = await readAllPages(query, params => ({ organization: { $: { id: organizationId }, jobs: {
     $: params, nodes: { id: {}, number: {}, createdAt: {} }, nextPage: {},
-  } } }), response => response.organization?.jobs);
+    } } }), response => response.organization?.jobs);
+    await cache.put("job-index", rows);
+    return rows;
+  })());
+  const jobs: any[] = await requestCache.get(jobsKey);
   const salesJobIds = new Set(documents.filter(doc => inOptionalDateRange(doc.historicallyApprovedAt, startDate, endDate, "America/New_York")).map(doc => doc.job.id));
   const candidateMap = new Map(jobs.filter(job => includeAllRows || salesJobIds.has(job.id) || inOptionalDateRange(job.createdAt, startDate, endDate, timeZone)).map(job => [job.id, job]));
   for (const doc of documents) if (salesJobIds.has(doc.job.id)) candidateMap.set(doc.job.id, doc.job);
+  const savedDetails = await cache.getMany(Array.from(candidateMap.keys()).map(id => `job-detail:${id}`), 5 * 60 * 1000);
   const detailRows = await mapInBatches(Array.from(candidateMap.values()), DETAIL_BATCH_SIZE, async (job) => {
-    const detail = await getJobDetail({ baseUrl, pavePath, grantKey, jobId: job.id });
+    const key = `job-detail:${job.id}`;
+    if (!requestCache.has(key)) requestCache.set(key, (async () => {
+      const saved = savedDetails.get(key);
+      if (saved) return saved;
+      const detail = await getJobDetail({ baseUrl, pavePath, grantKey, jobId: job.id });
+      if (detail?.job) await cache.put(key, detail);
+      return detail;
+    })());
+    const detail = await requestCache.get(key);
     if (!detail?.job) throw new Error("JobTread did not return a required sales job.");
     detail.job.documents = { nodes: documents.filter(doc => doc.job.id === job.id) };
     return { ...normalizeJob(detail.job), organizationId };

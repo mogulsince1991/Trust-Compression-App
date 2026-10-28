@@ -1,4 +1,5 @@
 import { dateKeyInTimeZone } from "@/lib/metrics/contractor/domain.js";
+import { documentCache } from "./document-history";
 
 const DEFAULT_GHL_API_BASE_URL = "https://services.leadconnectorhq.com";
 const DEFAULT_GHL_CONTACTS_PATH = "/contacts/";
@@ -11,6 +12,10 @@ export async function fetchGoHighLevelSnapshot(
   account: any,
   options?: { limit?: number; maxPages?: number; startDate?: string; endDate?: string; scanLimit?: number; timeZone?: string }
 ) {
+  const cache = documentCache(account);
+  const cacheKey = `ghl-snapshot:${JSON.stringify(options ?? {})}`;
+  const saved = await cache.get(cacheKey, 5 * 60 * 1000);
+  if (saved) return saved;
   const leads = await fetchGoHighLevelContacts(account, {
     limit: options?.limit ?? DEFAULT_OUTPUT_LIMIT,
     maxPages: options?.maxPages ?? DEFAULT_MAX_PAGES,
@@ -27,7 +32,7 @@ export async function fetchGoHighLevelSnapshot(
   );
   const contactsPath = String(metadata.contactsPath ?? process.env.GHL_CONTACTS_PATH ?? DEFAULT_GHL_CONTACTS_PATH);
 
-  return {
+  const snapshot = {
     displayName: account.account_label || "GoHighLevel",
     externalAccountId: locationId,
     leads,
@@ -40,6 +45,8 @@ export async function fetchGoHighLevelSnapshot(
       contactsPath,
     },
   };
+  await cache.put(cacheKey, snapshot);
+  return snapshot;
 }
 
 export async function fetchGoHighLevelPreview(
