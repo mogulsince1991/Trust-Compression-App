@@ -24,7 +24,7 @@ assert.equal(reportToday('Asia/Tokyo', new Date('2026-10-17T02:00:00Z')), '2026-
 assert.match(ui, /from\("contractor_latest_reports"\)/);
 assert.match(ui, /useState\(\(\) => reportToday\(\)\)/);
 assert.match(source, /endDate > reportToday\(runtimeRules.timezone\)/);
-assert.match(ui, /\.limit\(3\)/);
+assert.match(ui, /\.limit\(10\)/);
 assert.match(ui, /Saved report from/);
 assert.match(ui, /rules_snapshot/);
 let attempts = 0;

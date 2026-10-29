@@ -202,7 +202,7 @@ function EnabledMetricsWorkspace({ activeWorkspaceId }: { activeWorkspaceId?: st
           .select("id,client_name,start_date,end_date,created_at,totals,breakdowns,source_snapshot,rule_set_id,rules_snapshot,executiveSummary:detail->executiveSummary,dashboard:detail->dashboard,configuredMetrics:detail->configuredMetrics,comparison:detail->comparison,unmatched:detail->unmatched,debug:detail->debug")
           .eq("workspace_id", nextWorkspaceId)
           .order("created_at", { ascending: false })
-          .limit(3),
+          .limit(10),
         supabase
           .from("contractor_data_sources")
           .select("id,provider,display_name,status,last_synced_at,last_error,updated_at")
@@ -584,7 +584,7 @@ function EnabledMetricsWorkspace({ activeWorkspaceId }: { activeWorkspaceId?: st
       {notice ? <div className={styles.notice}>{notice}</div> : null}
       {error ? <div className={styles.error}>{error}</div> : null}
       <Panel title="Saved reports" icon={<Save />}>
-        <p className={styles.copy}>Your three most recent reports. Open a saved report immediately without contacting your CRMs again.</p>
+        <p className={styles.copy}>Your 10 most recent date ranges, with the latest report for each range. Open a saved report immediately without contacting your CRMs again.</p>
         <div className={styles.reportList}>{reports.map(report => <button key={report.id} className={styles.secondary} disabled={working === "report"} onClick={() => { setPreview(fromStoredReport(report, ruleSetDraft)); setTab("metrics"); }}><span>Saved report from {report.start_date} to {report.end_date}<small> · {report.client_name} · {formatDateTime(report.created_at)}</small></span></button>)}</div>
         {!reports.length && <p>Your first successful report will appear here automatically.</p>}
       </Panel>
