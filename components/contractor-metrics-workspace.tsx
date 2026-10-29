@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { JobTreadConnectionCheck } from "./jobtread-connection-check";
 import { reportsEnabled, REPORT_UPGRADE_MESSAGE } from "@/lib/report-access";
 import { useSearchParams } from "next/navigation";
 import { ArrowDown, ArrowUp, BarChart3, Database, Info, Link2, Loader2, Plus, RefreshCw, Save, Settings2, Sparkles, Trash2 } from "lucide-react";
@@ -1003,6 +1004,7 @@ function EnabledMetricsWorkspace({ activeWorkspaceId }: { activeWorkspaceId?: st
                         </div>
                       </div>
                       <p className={styles.copy}>{describeAccount(account)}</p>
+                      {account.provider === "jobtread" && <JobTreadConnectionCheck key={`${workspaceId}:${account.id}`} workspaceId={workspaceId} accountId={account.id} token={session.access_token} />}
                       <div className={styles.formGrid}>
                         <Field label="Preview row limit" value={requestState.limit} onChange={(value) => updatePreviewRequest(account.id, "limit", value)} />
                         <Field label="Preview start date" type="date" value={requestState.startDate} onChange={(value) => updatePreviewRequest(account.id, "startDate", value)} />
