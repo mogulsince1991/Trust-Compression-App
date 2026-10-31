@@ -12,3 +12,21 @@
 .jx-landing-placeholder { display: grid; place-items: center; color: white; }
 .jx-landing-grid strong { overflow-wrap: anywhere; font-size: 16px; }
 .jx-landing-grid button > span:last-child { font-size: 13px; opacity: .75; }
+.journey-experience.is-landing { max-width: 1120px; margin-inline: auto; }
+.is-landing .jx-header { text-align: center; justify-items: center; margin: 20px auto 28px; }
+.is-landing .jx-header span { display: block; text-transform: uppercase; letter-spacing: .12em; }
+.is-landing .jx-header h1 { font-size: clamp(28px, 4vw, 52px); max-width: 24ch; line-height: 1.08; }
+.jx-landing-hero { max-width: 880px; width: 100%; margin: 0 auto 28px; }
+.jx-breakout-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px 24px; }
+.jx-landing-card { min-width: 0; }
+.jx-landing-card h3 { font-size: 20px; margin: 14px 0 8px; line-height: 1.3; overflow-wrap: anywhere; }
+.jx-landing-card > p { opacity: .8; line-height: 1.5; white-space: pre-line; }
+.jx-landing-cover { position: relative; display: grid; place-items: center; width: 100%; aspect-ratio: 16 / 9; padding: 0; border: 1px solid color-mix(in srgb, currentColor 18%, transparent); border-radius: 14px; overflow: hidden; background: #151515; color: #fff; cursor: pointer; }
+.jx-landing-cover img { width: 100%; height: 100%; position: absolute; inset: 0; object-fit: contain; }
+.jx-landing-play { display: grid; place-items: center; position: relative; width: 64px; height: 64px; border-radius: 50%; background: #f4f2eb; color: #272727; box-shadow: 0 4px 24px #0005; }
+.jx-landing-cover:focus-visible { outline: 3px solid var(--jx-accent); outline-offset: 4px; }
+.journey-experience.is-landing .jx-landing-card .jx-media { width: 100%; height: auto; min-height: 0; max-height: none; aspect-ratio: 16 / 9; border-radius: 14px; }
+.journey-experience.is-landing.is-document .jx-landing-card .jx-media { height: 480px; aspect-ratio: auto; }
+.is-landing .jx-landing-intro { margin-top: 24px; }
+@media (max-width: 640px) { .jx-breakout-grid { grid-template-columns: 1fr; gap: 28px; } .is-landing .jx-header { margin-top: 12px; } }
+@media (prefers-reduced-motion: reduce) { .is-landing * { scroll-behavior: auto; } }

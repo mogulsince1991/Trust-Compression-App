@@ -34,6 +34,8 @@ type VideoOrientation = "wide" | "portrait" | "adaptive";
 
 export function JourneyViewer({ journey, variant = "share", preview = false }: { journey: PublicJourney; variant?: "share" | "embed"; preview?: boolean }) {
   const appearance = normalizeAppearance(journey.appearance);
+  const isLanding = appearance.journeyType === "landing";
+  const heroIndex = Math.max(0, journey.assets.findIndex(asset => asset.assetType === "video"));
   const colors = appearanceColors(appearance);
   const appearanceStyle = {
     "--jx-bg": `var(--embed-bg, ${colors.background})`,
@@ -44,7 +46,7 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
     "--jx-button-text": appearance.buttonText,
     "--jx-font": appearance.font === "modern" ? '"Avenir Next", "Segoe UI", sans-serif' : appearance.font === "classic" ? "Georgia, serif" : "'Palatino Linotype', Palatino, serif"
   } as React.CSSProperties;
-  const [active, setActive] = useState(0);
+  const [active, setActive] = useState(isLanding ? heroIndex : 0);
   const [started, setStarted] = useState(false);
   const [activatedId, setActivatedId] = useState<string | null>(null);
   const [loadedId, setLoadedId] = useState<string | null>(null);
@@ -254,6 +256,7 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
       flush(); setStarted(false);
       if (clock.started && !clock.completed) { clock.completed = true; emit("asset_completed"); }
       positions.current.set(asset.id, 0);
+      if (isLanding) { setActivatedId(null); setLoadedId(null); return; }
       setActivatedId(journey.assets[active + 1]?.id ?? null); setLoadedId(null);
       if (!preview) try { localStorage.removeItem(storageKey); } catch {}
       if (active === journey.assets.length - 1) {
@@ -293,10 +296,11 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
       youtube?.destroy();
       host?.replaceChildren();
     };
-  }, [active, activeAsset, journey, variant, isYouTube, activated, embedUrl, directVideoUrl, storageKey, preview]);
+  }, [active, activeAsset, journey, variant, isYouTube, activated, embedUrl, directVideoUrl, storageKey, preview, isLanding]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
+      if (isLanding) return;
       if (event.key === "Escape") { setExpanded(false); setShowContents(false); return; }
       if (event.target instanceof HTMLElement && event.target.closest("input,textarea,select,button,a,[contenteditable],video,iframe")) return;
       if (variant === "embed" && !stageRef.current?.contains(document.activeElement)) return;
@@ -306,7 +310,7 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [journey.assets.length, variant, active]);
+  }, [journey.assets.length, variant, active, isLanding]);
 
   useEffect(() => {
     if (!expanded) return;
@@ -359,24 +363,7 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
 
   if (!activeAsset) return <main className="journey-experience"><p>No content is available in this journey.</p></main>;
 
-  return (
-    <main ref={rootRef} style={appearanceStyle} className={`journey-experience spacing-${appearance.layout} is-${orientation} is-${variant}${expanded ? " is-expanded" : ""}${activeAsset.assetType !== "video" ? " is-document" : ""}`}>
-      <header className="jx-header">
-        <span>{appearance.journeyType === "landing" ? appearance.confirmationLabel : variant === "embed" ? "Explore the proof" : "Selected for you"}</span>
-        <h1>{journey.heading || journey.title}</h1>
-        {journey.description && <p className="jx-subheadline">{journey.description}</p>}
-      </header>
-      {appearance.journeyType === "landing" && <section className="jx-landing-intro" aria-label="Prepare for your next step">
-        {appearance.preparationSteps.trim() && <ol>{appearance.preparationSteps.split("\n").map(s => s.trim()).filter(Boolean).map((step, i) => <li key={i}><span>{String(i + 1).padStart(2, "0")}</span><p>{step}</p></li>)}</ol>}
-        {appearance.calendarUrl && <a className="jx-cta" href={appearance.calendarUrl} target="_blank" rel="noreferrer">Calendar / appointment details <ExternalLink size={18} /></a>}
-        <h2>{appearance.resourcesHeading}</h2>
-        <div className="jx-landing-grid">{journey.assets.map((asset, index) => <button key={asset.id} aria-pressed={index === active} onClick={() => { selectAsset(index); stageRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>
-          {asset.thumbnailUrl ? <img src={asset.thumbnailUrl} alt="" loading="lazy" /> : <span className="jx-landing-placeholder">{asset.assetType === "video" ? <Play /> : <FileText />}</span>}
-          <strong>{asset.title}</strong><span>{index === active ? "Selected below" : asset.assetType === "video" ? "Watch video" : "View resource"}</span>
-        </button>)}</div>
-      </section>}
-      {resume && <div className="jx-resume"><span>Pick up where you left off on this browser?</span><button onClick={() => { selectAsset(journey.assets.findIndex(a => a.id === resume.assetId), resume.position); setResume(null); }}>Continue</button><button onClick={restart}>Start over</button></div>}
-      <div className="jx-layout">
+  const player = (
       <section className="jx-stage" ref={stageRef} tabIndex={0} aria-label="Journey player">
         <div className={`jx-media${driveFileId ? " jx-drive-original" : ""}`} style={driveFileId ? { "--drive-ratio": driveRatio } as React.CSSProperties : undefined} key={activeAsset.id}>
           {activated && directVideoUrl ? (
@@ -432,14 +419,44 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
           <button onClick={() => setMuted(value => !value)} aria-label={muted ? "Unmute video" : "Mute video"}>{muted ? "Unmute" : "Mute"}</button>
           <label className="jx-volume">Volume<input key={activeAsset.id} type="range" min="0" max="1" step="0.05" defaultValue="1" onChange={event => { if (videoRef.current) { videoRef.current.volume = Number(event.target.value); setMuted(Number(event.target.value) === 0); } }} /></label>
         </div>}
-        <nav className="jx-controls" aria-label="Asset navigation">
+        {!isLanding && <nav className="jx-controls" aria-label="Asset navigation">
           <button onClick={previous} disabled={active === 0} aria-label="Previous asset"><ChevronLeft /></button>
           <button disabled={!appearance.showContents} className="jx-counter" onClick={() => setShowContents(v => !v)} aria-expanded={showContents}><List />{active + 1} of {journey.assets.length}{appearance.showContents && <span>View all</span>}</button>
           {variant === "embed" ? fullUrl && <a className="jx-expand-link" href={fullUrl} target="_blank" rel="noreferrer" aria-label="Open full journey in a new tab"><ExternalLink /></a> : <button onClick={() => setExpanded(v => !v)} aria-label={expanded ? "Close expanded view" : "Expand viewer"}>{expanded ? <X /> : <Maximize2 />}</button>}
           <button onClick={next} disabled={active === journey.assets.length - 1} aria-label="Next asset"><ChevronRight /></button>
-        </nav>
+        </nav>}
         {(slow || failed) && <div className="jx-help"><button onClick={retry}>Reload preview</button><span>Some providers require public sharing permissions.</span></div>}
       </section>
+  );
+  function landingCard(asset: JourneyAsset, index: number) {
+    const thumbnail = assetThumbnailUrl(asset);
+    return <article className={`jx-landing-card${index === heroIndex ? " jx-landing-hero" : ""}`} key={asset.id}>
+      {index === active ? player : <button className="jx-landing-cover" aria-label={`${asset.assetType === "video" ? "Play" : "Open"} ${asset.title}`} onClick={() => { selectAsset(index); setActivatedId(asset.id); }}>
+        {thumbnail && <img src={thumbnail} alt="" loading="lazy" />}
+        <span className="jx-landing-play">{asset.assetType === "video" ? <Play /> : <FileText />}</span>
+      </button>}
+      <h3>{asset.title}</h3>
+      {(asset.note || asset.summary) && <p>{asset.note || asset.summary}</p>}
+    </article>;
+  }
+  return (
+    <main ref={rootRef} style={appearanceStyle} className={`journey-experience spacing-${appearance.layout} is-${orientation} is-${variant}${isLanding ? " is-landing" : ""}${expanded ? " is-expanded" : ""}${activeAsset.assetType !== "video" ? " is-document" : ""}`}>
+      <header className="jx-header">
+        <span>{isLanding ? appearance.confirmationLabel : variant === "embed" ? "Explore the proof" : "Selected for you"}</span>
+        <h1>{journey.heading || journey.title}</h1>
+        {journey.description && <p className="jx-subheadline">{journey.description}</p>}
+      </header>
+      {isLanding ? <>
+        {landingCard(journey.assets[heroIndex], heroIndex)}
+        <section className="jx-landing-intro" aria-label="Prepare for your next step">
+          {appearance.preparationSteps.trim() && <ol>{appearance.preparationSteps.split("\n").map(s => s.trim()).filter(Boolean).map((step, i) => <li key={i}><span>{String(i + 1).padStart(2, "0")}</span><p>{step}</p></li>)}</ol>}
+          {appearance.calendarUrl && <a className="jx-cta" href={appearance.calendarUrl} target="_blank" rel="noreferrer">Calendar / appointment details <ExternalLink size={18} /></a>}
+          {journey.assets.length > 1 && <><h2>{appearance.resourcesHeading}</h2><div className="jx-breakout-grid">{journey.assets.map((asset, index) => index !== heroIndex ? landingCard(asset, index) : null)}</div></>}
+        </section>
+      </> : <>
+      {resume && <div className="jx-resume"><span>Pick up where you left off on this browser?</span><button onClick={() => { selectAsset(journey.assets.findIndex(a => a.id === resume.assetId), resume.position); setResume(null); }}>Continue</button><button onClick={restart}>Start over</button></div>}
+      <div className="jx-layout">
+      {player}
       <aside className="jx-details">
         <span className="jx-kind">{formatJourneyAssetLabel(activeAsset)}{activeAsset.durationSeconds ? ` / ${Math.ceil(activeAsset.durationSeconds / 60)} min` : ""}</span>
         <h2 aria-live="polite">{displayTitle}</h2>
@@ -457,6 +474,7 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
       </section>
       </aside>
       </div>
+      </>}
       <footer className="jx-footer">
         <div>{finished ? <><strong>Ready for the next step?</strong><button onClick={restart}>Watch again</button></> : <span>{activeAsset.assetType !== "video" ? "Read at your own pace. Use the arrows to continue." : variant === "embed" ? "Explore at your own pace." : "Your proof, one story at a time."}</span>}</div>
       {journey.cta_url && (

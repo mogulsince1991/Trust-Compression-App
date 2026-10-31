@@ -4,7 +4,7 @@ assert.doesNotMatch(source, /onTouchStart|onTouchEnd|touchStart/, 'Scrolling mus
 const handler = source.slice(source.indexOf('    function ended() {'), source.indexOf('    function visibility()'));
 let advances = 0, activated, completed = 0;
 const positions = { current: new Map([['first', 120]]) };
-const context = { disposed: false, endedThisPlayback: false, playedThisPlayback: true, preview: false,
+const context = { disposed: false, endedThisPlayback: false, playedThisPlayback: true, preview: false, isLanding: false,
   asset: { id: 'first' }, active: 0, journey: { assets: [{ id: 'first' }, { id: 'second' }] },
   clock: { started: true, completed: false }, positions, storageKey: 'test',
   flush() {}, setStarted() {}, emit() { completed++; }, setActivatedId(id) { activated=id; },
@@ -23,4 +23,10 @@ assert.match(source,/"playlist", "list", "listType", "index", "start", "end", "t
 context.endedThisPlayback=false; context.playedThisPlayback=false;
 vm.runInContext('ended();',context);
 assert.equal(advances,1,'An initial ended state must not skip an unplayed video');
+context.endedThisPlayback=false; context.playedThisPlayback=true; context.isLanding=true;
+vm.runInContext('ended();',context);
+assert.equal(advances,1,'Landing videos must not auto-advance into another card');
+assert.equal(activated,null,'Completed landing videos return to their replay poster');
+assert.match(source, /landingCard\(journey.assets\[heroIndex\], heroIndex\)/);
+assert.match(source, /index !== heroIndex \? landingCard/);
 console.log('Playback end: one advance, replay position reset, stale end ignored, YouTube loop settings removed.');

@@ -7,7 +7,7 @@ export function JourneyAppearanceEditor({ value, onChange }: { value?: JourneyAp
   const change = (patch: Partial<JourneyAppearance>) => onChange({ ...a, ...patch });
   return <section className="sage-panel sage-form"><h2>Journey appearance</h2><p>Style your customer-facing page. Video sizing stays automatic.</p>
     <label>Journey type<select value={a.journeyType} onChange={e => change({ journeyType: e.target.value as JourneyAppearance["journeyType"] })}><option value="collection">Collection journey</option><option value="landing">Landing page journey</option></select></label>
-    {a.journeyType === "landing" && <fieldset className="sage-form"><legend>Thank-you / confirmation page</legend><p>Set your main headline and introduction in Details. Add and reorder library videos in Content.</p>
+    {a.journeyType === "landing" && <fieldset className="sage-form"><legend>Thank-you / confirmation page</legend><p>Set your main headline and introduction in Details. The first video in Content is your main urgency or due-diligence video at the top. All remaining items become breakout videos or resources below. Reorder Content to change the main video.</p>
       <label>Confirmation label<input value={a.confirmationLabel} maxLength={120} onChange={e => change({ confirmationLabel: e.target.value })} /></label>
       <label>Preparation steps (one per line)<textarea value={a.preparationSteps} maxLength={2000} onChange={e => change({ preparationSteps: e.target.value })} /></label>
       <label>Video section heading<input value={a.resourcesHeading} maxLength={160} onChange={e => change({ resourcesHeading: e.target.value })} /></label>
