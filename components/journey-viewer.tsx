@@ -8,7 +8,7 @@ import { formatJourneyAssetLabel, type JourneyAsset } from "@/components/trust-a
 import { PlaybackClock } from "@/lib/playback-clock";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 import { browserExcluded } from "@/lib/analytics-preferences";
-import { normalizeAppearance, appearanceColors, type JourneyAppearance } from "@/lib/journey-appearance";
+import { normalizeAppearance, appearanceColors, journeyAssetTitleKey, journeyFonts, type JourneyAppearance } from "@/lib/journey-appearance";
 import { AppBrand } from "./app-brand";
 import { assetThumbnailUrl } from "./asset-thumbnail";
 import { VimeoPlayer } from "./vimeo-player";
@@ -44,7 +44,10 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
     "--jx-muted": `var(--embed-text, ${colors.text})`,
     "--jx-accent": appearance.accent,
     "--jx-button-text": appearance.buttonText,
-    "--jx-font": appearance.font === "modern" ? '"Avenir Next", "Segoe UI", sans-serif' : appearance.font === "classic" ? "Georgia, serif" : "'Palatino Linotype', Palatino, serif"
+    "--jx-gradient-end": appearance.gradientEnd,
+    "--jx-align": appearance.alignment,
+    "--jx-button-radius": appearance.buttonStyle === "pill" ? "999px" : appearance.buttonStyle === "square" ? "0px" : "12px",
+    "--jx-font": journeyFonts[appearance.font]
   } as React.CSSProperties;
   const [active, setActive] = useState(isLanding ? heroIndex : 0);
   const [started, setStarted] = useState(false);
@@ -84,7 +87,8 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
   const hasDriveDimensions = !!driveFileId && Number.isFinite(driveWidth) && Number.isFinite(driveHeight) && driveWidth > 0 && driveHeight > 0;
   const orientation = hasDriveDimensions ? (driveHeight > driveWidth ? "portrait" : "wide") : imageOrientation?.id === activeAsset?.id ? imageOrientation.value : activeAsset ? inferOrientation(activeAsset) : "wide";
   const driveRatio = hasDriveDimensions ? `${driveWidth} / ${driveHeight}` : orientation === "portrait" ? "9 / 16" : "16 / 9";
-  const displayTitle = (activeAsset?.metadata?.localTitleOverride ? activeAsset.title : currentDrivePreview?.title) || activeAsset?.title || "Video";
+  const titleFor = (asset: JourneyAsset) => appearance.titleOverrides[journeyAssetTitleKey(asset)] || asset.title;
+  const displayTitle = (activeAsset && appearance.titleOverrides[journeyAssetTitleKey(activeAsset)]) || (activeAsset?.metadata?.localTitleOverride ? activeAsset.title : currentDrivePreview?.title) || activeAsset?.title || "Video";
   const thumbnailUrl = currentDrivePreview?.thumbnailUrl || (activeAsset ? assetThumbnailUrl(activeAsset) : null);
   const visibleThumbnail = thumbnailUrl && thumbnailUrl !== brokenThumbnail ? thumbnailUrl : null;
 
@@ -431,26 +435,27 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
   function landingCard(asset: JourneyAsset, index: number) {
     const thumbnail = assetThumbnailUrl(asset);
     return <article className={`jx-landing-card${index === heroIndex ? " jx-landing-hero" : ""}`} key={asset.id}>
-      {index === active ? player : <button className="jx-landing-cover" aria-label={`${asset.assetType === "video" ? "Play" : "Open"} ${asset.title}`} onClick={() => { selectAsset(index); setActivatedId(asset.id); }}>
+      {index === active ? player : <button className="jx-landing-cover" aria-label={`${asset.assetType === "video" ? "Play" : "Open"} ${titleFor(asset)}`} onClick={() => { selectAsset(index); setActivatedId(asset.id); }}>
         {thumbnail && <img src={thumbnail} alt="" loading="lazy" />}
         <span className="jx-landing-play">{asset.assetType === "video" ? <Play /> : <FileText />}</span>
       </button>}
-      <h3>{asset.title}</h3>
-      {(asset.note || asset.summary) && <p>{asset.note || asset.summary}</p>}
+      <h3>{titleFor(asset)}</h3>
     </article>;
   }
   return (
     <main ref={rootRef} style={appearanceStyle} className={`journey-experience spacing-${appearance.layout} is-${orientation} is-${variant}${isLanding ? " is-landing" : ""}${expanded ? " is-expanded" : ""}${activeAsset.assetType !== "video" ? " is-document" : ""}`}>
-      <header className="jx-header">
+      {isLanding && appearance.headerLogoUrl && <div className="jx-top-logo" style={{ textAlign: appearance.alignment }}><img src={appearance.headerLogoUrl} alt={appearance.companyName || "Company logo"} /></div>}
+      <header className={`jx-header${appearance.headlineGradient ? " jx-gradient-heading" : ""}`} style={isLanding ? { textAlign: appearance.alignment, justifyItems: appearance.alignment === "left" ? "start" : "center" } : undefined}>
         <span>{isLanding ? appearance.confirmationLabel : variant === "embed" ? "Explore the proof" : "Selected for you"}</span>
         <h1>{journey.heading || journey.title}</h1>
         {journey.description && <p className="jx-subheadline">{journey.description}</p>}
       </header>
       {isLanding ? <>
         {landingCard(journey.assets[heroIndex], heroIndex)}
+        {journey.cta_url && <div className="jx-landing-action"><a className={`jx-cta${appearance.buttonGradient ? " jx-gradient-button" : ""}`} href={journey.cta_url} onClick={trackCtaClick} target="_blank" rel="noreferrer">{journey.cta_label || "Access your resources"}<ArrowRight size={18} /></a></div>}
         <section className="jx-landing-intro" aria-label="Prepare for your next step">
           {appearance.preparationSteps.trim() && <ol>{appearance.preparationSteps.split("\n").map(s => s.trim()).filter(Boolean).map((step, i) => <li key={i}><span>{String(i + 1).padStart(2, "0")}</span><p>{step}</p></li>)}</ol>}
-          {appearance.calendarUrl && <a className="jx-cta" href={appearance.calendarUrl} target="_blank" rel="noreferrer">Calendar / appointment details <ExternalLink size={18} /></a>}
+          {appearance.calendarUrl && <a className={`jx-cta${appearance.buttonGradient ? " jx-gradient-button" : ""}`} href={appearance.calendarUrl} target="_blank" rel="noreferrer">Calendar / appointment details <ExternalLink size={18} /></a>}
           {journey.assets.length > 1 && <><h2>{appearance.resourcesHeading}</h2><div className="jx-breakout-grid">{journey.assets.map((asset, index) => index !== heroIndex ? landingCard(asset, index) : null)}</div></>}
         </section>
       </> : <>
@@ -468,21 +473,26 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
         {journey.assets.map((asset, index) => (
           <button className={index === active ? "is-active" : ""} aria-current={index === active ? "step" : undefined} key={asset.id} data-index={index} onClick={() => selectAsset(index)}>
             <span>{index + 1}</span>
-            <strong>{asset.title}</strong>
+            <strong>{titleFor(asset)}</strong>
           </button>
         ))}
       </section>
       </aside>
       </div>
       </>}
-      <footer className="jx-footer">
+      {isLanding && (appearance.resultsHeading || appearance.resultsUrl) && <section className="jx-landing-results">
+        {appearance.resultsHeading && <h2>{appearance.resultsHeading}</h2>}{appearance.resultsText && <p>{appearance.resultsText}</p>}
+        {appearance.resultsUrl && <a className={`jx-cta${appearance.buttonGradient ? " jx-gradient-button" : ""}`} href={appearance.resultsUrl} target="_blank" rel="noreferrer">{appearance.resultsButton || "See customer results"}<ExternalLink size={18} /></a>}
+      </section>}
+      {isLanding && appearance.aboutText && <section className="jx-landing-about"><h2>About {appearance.companyName || "us"}</h2><p>{appearance.aboutText}</p></section>}
+      {!isLanding && <footer className="jx-footer">
         <div>{finished ? <><strong>Ready for the next step?</strong><button onClick={restart}>Watch again</button></> : <span>{activeAsset.assetType !== "video" ? "Read at your own pace. Use the arrows to continue." : variant === "embed" ? "Explore at your own pace." : "Your proof, one story at a time."}</span>}</div>
       {journey.cta_url && (
-        <a className="jx-cta" href={journey.cta_url} onClick={trackCtaClick} target="_blank" rel="noreferrer">
+        <a className={`jx-cta${appearance.buttonGradient ? " jx-gradient-button" : ""}`} href={journey.cta_url} onClick={trackCtaClick} target="_blank" rel="noreferrer">
           {journey.cta_label || "Continue"} <ArrowRight size={18} />
         </a>
       )}
-      </footer>
+      </footer>}
       {appearance.branding === "trusttale" && <AppBrand />}
       {appearance.branding === "company" && <div className="jx-company-brand">
         {appearance.websiteUrl ? <a href={appearance.websiteUrl} target="_blank" rel="noreferrer">

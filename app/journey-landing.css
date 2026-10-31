@@ -1,4 +1,16 @@
 .jx-landing-intro { width: 100%; margin: 0 auto 32px; }
+.jx-top-logo { padding: 24px 0; border-bottom: 1px solid color-mix(in srgb, var(--jx-accent) 50%, transparent); }
+.jx-top-logo img { display: inline-block; max-width: min(240px, 80%); max-height: 100px; object-fit: contain; }
+.jx-landing-action, .jx-landing-results, .jx-landing-about { text-align: var(--jx-align, center); }
+.jx-landing-results, .jx-landing-about { padding: 32px 0; border-top: 1px solid color-mix(in srgb, currentColor 18%, transparent); }
+.jx-landing-results p, .jx-landing-about p { white-space: pre-line; line-height: 1.6; margin: 16px 0; }
+.is-landing .jx-landing-card h3, .is-landing .jx-landing-intro h2 { text-align: var(--jx-align, center); }
+.journey-experience .jx-cta { border-radius: var(--jx-button-radius, 12px); }
+.journey-experience .jx-cta.jx-gradient-button { background: linear-gradient(110deg, var(--jx-accent), var(--jx-gradient-end)); }
+@supports (background-clip: text) {
+  .jx-gradient-heading h1 { background: linear-gradient(110deg, var(--jx-accent), var(--jx-gradient-end)); background-clip: text; color: transparent; }
+}
+@media (forced-colors: active) { .jx-gradient-heading h1 { background: none; color: CanvasText; } }
 .jx-landing-intro ol { list-style: none; padding: 0; margin: 24px 0; display: grid; gap: 12px; }
 .jx-landing-intro li { display: flex; align-items: baseline; gap: 20px; padding: 20px; border: 1px solid color-mix(in srgb, currentColor 18%, transparent); border-radius: 16px; }
 .jx-landing-intro li > span { color: var(--jx-accent); font-size: 24px; font-weight: 700; }

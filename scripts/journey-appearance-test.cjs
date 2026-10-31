@@ -6,6 +6,18 @@ const code = ts.transpileModule(fs.readFileSync("lib/journey-appearance.ts", "ut
 const context = { exports: {}, URL };
 vm.runInNewContext(code, context);
 const { normalizeAppearance, appearanceColors } = context.exports;
+assert.equal(normalizeAppearance({ headerLogoUrl: "javascript:alert(1)" }).headerLogoUrl, "");
+assert.equal(normalizeAppearance({ alignment: "left", font: "geometric" }).alignment, "left");
+assert.equal(normalizeAppearance({ font: "geometric" }).font, "geometric");
+assert.equal(normalizeAppearance({ gradientEnd: "url(evil)" }).gradientEnd, "#faa916");
+assert.equal(normalizeAppearance({ googleTagId: "<script>" }).googleTagId, "");
+assert.equal(normalizeAppearance({ googleTagId: "G-ABC123" }).googleTagId, "G-ABC123");
+assert.equal(normalizeAppearance({ metaPixelId: "123456789" }).metaPixelId, "123456789");
+assert.equal(normalizeAppearance({ metaPixelId: "abc" }).metaPixelId, "");
+assert.equal(context.exports.journeyAssetTitleKey({ id: "new-row", libraryAssetId: "stable-asset" }), "stable-asset");
+assert.equal(normalizeAppearance({ titleOverrides: { stable: "  Custom title  " } }).titleOverrides.stable, "Custom title");
+const pageSource = fs.readFileSync("components/journey-viewer.tsx", "utf8");
+assert.doesNotMatch(pageSource.slice(pageSource.indexOf("function landingCard"), pageSource.indexOf("function landingCard") + 1100), /asset\.summary|asset\.note/);
 assert.equal(normalizeAppearance().branding, "none");
 assert.equal(normalizeAppearance().journeyType, "collection");
 assert.equal(normalizeAppearance({ journeyType: "landing" }).journeyType, "landing");
