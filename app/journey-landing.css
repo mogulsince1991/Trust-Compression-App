@@ -1,0 +1,14 @@
+.jx-landing-intro { width: 100%; margin: 0 auto 32px; }
+.jx-landing-intro ol { list-style: none; padding: 0; margin: 24px 0; display: grid; gap: 12px; }
+.jx-landing-intro li { display: flex; align-items: baseline; gap: 20px; padding: 20px; border: 1px solid color-mix(in srgb, currentColor 18%, transparent); border-radius: 16px; }
+.jx-landing-intro li > span { color: var(--jx-accent); font-size: 24px; font-weight: 700; }
+.jx-landing-intro li p { margin: 0; white-space: pre-wrap; }
+.jx-landing-intro h2 { margin: 40px 0 20px; font-size: clamp(24px, 4vw, 36px); letter-spacing: -.03em; }
+.jx-landing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 16px; }
+.jx-landing-grid button { display: flex; flex-direction: column; gap: 10px; text-align: left; padding: 12px; background: transparent; color: inherit; border: 1px solid color-mix(in srgb, currentColor 20%, transparent); border-radius: 16px; cursor: pointer; min-width: 0; }
+.jx-landing-grid button[aria-pressed="true"] { border-color: var(--jx-accent); box-shadow: 0 0 0 1px var(--jx-accent); }
+.jx-landing-grid button:focus-visible { outline: 3px solid var(--jx-accent); outline-offset: 3px; }
+.jx-landing-grid img, .jx-landing-placeholder { width: 100%; aspect-ratio: 16 / 9; object-fit: contain; background: #171717; border-radius: 10px; }
+.jx-landing-placeholder { display: grid; place-items: center; color: white; }
+.jx-landing-grid strong { overflow-wrap: anywhere; font-size: 16px; }
+.jx-landing-grid button > span:last-child { font-size: 13px; opacity: .75; }

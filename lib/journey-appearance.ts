@@ -1,4 +1,7 @@
 export type JourneyAppearance = {
+  journeyType: "collection" | "landing";
+  confirmationLabel: string; preparationSteps: string; resourcesHeading: string;
+  calendarUrl: string;
   branding: "none" | "trusttale" | "company";
   companyName: string; logoUrl: string; websiteUrl: string;
   theme: "dark" | "light" | "custom";
@@ -13,6 +16,11 @@ export function normalizeAppearance(value: unknown): JourneyAppearance {
   const a = value && typeof value === "object" ? value as Record<string, unknown> : {};
   const color = (v: unknown, fallback: string) => typeof v === "string" && /^#[\da-f]{6}$/i.test(v) ? v : fallback;
   return {
+    journeyType: a.journeyType === "landing" ? "landing" : "collection",
+    confirmationLabel: typeof a.confirmationLabel === "string" ? a.confirmationLabel.slice(0, 120) : "Thank you. You're in the right place.",
+    preparationSteps: typeof a.preparationSteps === "string" ? a.preparationSteps.slice(0, 2000) : "Check your confirmation email for the details.\nWatch the videos relevant to your questions.\nBring your questions to our conversation.",
+    resourcesHeading: typeof a.resourcesHeading === "string" ? a.resourcesHeading.slice(0, 160) : "Before we talk, explore these answers",
+    calendarUrl: safeBrandUrl(a.calendarUrl),
     branding: a.branding === "company" || a.branding === "trusttale" ? a.branding : "none",
     companyName: typeof a.companyName === "string" ? a.companyName.trim().slice(0, 100) : "",
     logoUrl: safeBrandUrl(a.logoUrl), websiteUrl: safeBrandUrl(a.websiteUrl),

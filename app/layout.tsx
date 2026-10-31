@@ -8,6 +8,7 @@ import "./final-polish.css";
 import "./journey-mobile-fix.css";
 import "./sage.css";
 import "./journey-experience.css";
+import "./journey-landing.css";
 
 export const metadata: Metadata = {
   title: "TrustTale",

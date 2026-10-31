@@ -362,10 +362,19 @@ export function JourneyViewer({ journey, variant = "share", preview = false }: {
   return (
     <main ref={rootRef} style={appearanceStyle} className={`journey-experience spacing-${appearance.layout} is-${orientation} is-${variant}${expanded ? " is-expanded" : ""}${activeAsset.assetType !== "video" ? " is-document" : ""}`}>
       <header className="jx-header">
-        <span>{variant === "embed" ? "Explore the proof" : "Selected for you"}</span>
+        <span>{appearance.journeyType === "landing" ? appearance.confirmationLabel : variant === "embed" ? "Explore the proof" : "Selected for you"}</span>
         <h1>{journey.heading || journey.title}</h1>
         {journey.description && <p className="jx-subheadline">{journey.description}</p>}
       </header>
+      {appearance.journeyType === "landing" && <section className="jx-landing-intro" aria-label="Prepare for your next step">
+        {appearance.preparationSteps.trim() && <ol>{appearance.preparationSteps.split("\n").map(s => s.trim()).filter(Boolean).map((step, i) => <li key={i}><span>{String(i + 1).padStart(2, "0")}</span><p>{step}</p></li>)}</ol>}
+        {appearance.calendarUrl && <a className="jx-cta" href={appearance.calendarUrl} target="_blank" rel="noreferrer">Calendar / appointment details <ExternalLink size={18} /></a>}
+        <h2>{appearance.resourcesHeading}</h2>
+        <div className="jx-landing-grid">{journey.assets.map((asset, index) => <button key={asset.id} aria-pressed={index === active} onClick={() => { selectAsset(index); stageRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>
+          {asset.thumbnailUrl ? <img src={asset.thumbnailUrl} alt="" loading="lazy" /> : <span className="jx-landing-placeholder">{asset.assetType === "video" ? <Play /> : <FileText />}</span>}
+          <strong>{asset.title}</strong><span>{index === active ? "Selected below" : asset.assetType === "video" ? "Watch video" : "View resource"}</span>
+        </button>)}</div>
+      </section>}
       {resume && <div className="jx-resume"><span>Pick up where you left off on this browser?</span><button onClick={() => { selectAsset(journey.assets.findIndex(a => a.id === resume.assetId), resume.position); setResume(null); }}>Continue</button><button onClick={restart}>Start over</button></div>}
       <div className="jx-layout">
       <section className="jx-stage" ref={stageRef} tabIndex={0} aria-label="Journey player">
