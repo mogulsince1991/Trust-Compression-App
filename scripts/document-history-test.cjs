@@ -25,6 +25,10 @@ const { readAllPages, documentCache, discoverSalesDocuments } = exportsObject;
 (async () => {
   const rows = await readAllPages(async params => params.page ? { nodes: [2] } : { nodes: [1], nextPage: 'p2' }, x => x, x => x);
   assert.equal(JSON.stringify(rows), '[1,2]');
+  let pages = 0;
+  const early = await readAllPages(async () => { pages++; return { nodes: [1], nextPage: 'unused' }; }, x => x, x => x, rows => rows.includes(1));
+  assert.equal(pages, 1, 'Stop after finding the earliest approval in ascending history');
+  assert.equal(early.length, 1);
   await assert.rejects(() => readAllPages(async () => ({ nodes: [1], nextPage: 'stuck' }), x => x, x => x), /did not advance/);
   await assert.rejects(() => readAllPages(async () => ({}), x => x, x => x), /incomplete/);
   const a = { workspace_id: 'a', id: 'connector' }, b = { workspace_id: 'b', id: 'connector' };
@@ -34,8 +38,9 @@ const { readAllPages, documentCache, discoverSalesDocuments } = exportsObject;
   assert.equal(await documentCache({ ...a, id: 'other' }).get('snapshot:May', 1000), null);
   assert.ok(Array.from(records.keys()).every(key => key.includes('document-sales-v1')));
   let historyQueries = 0, documentQueries = 0;
+  let price = 10;
   const query = async q => {
-    if (q.organization) { documentQueries++; return { organization: { documents: { nodes: [{ id: 'd', type: 'customerOrder', status: 'denied', priceWithTax: 10, job: { id: 'old-job' } }] } } }; }
+    if (q.organization) { documentQueries++; return { organization: { documents: { nodes: [{ id: 'd', type: 'customerOrder', status: 'denied', priceWithTax: price, job: { id: 'old-job' } }] } } }; }
     historyQueries++;
     return { document: { events: { nodes: [{ type: 'documentUpdated', createdAt: '2026-05-02T12:00:00Z', data: { next: { status: 'approved' }, previous: { status: 'draft' } } }] } } };
   };
@@ -49,5 +54,15 @@ const { readAllPages, documentCache, discoverSalesDocuments } = exportsObject;
   assert.equal(historyQueries, 1, 'Fresh document pages retain valid unchanged approval history');
   await discoverSalesDocuments(query, 'org', b);
   assert.equal(historyQueries, 2, 'History cannot leak across workspaces');
+  for (const [key, value] of records) if (key.includes('history:d')) value.updated_at = new Date(Date.now() - 2 * 86400000).toISOString();
+  await discoverSalesDocuments(query, 'org', a);
+  assert.equal(historyQueries, 2, 'Unchanged positive approvals survive the old daily expiry');
+  for (const [key, value] of records) if (key.includes('history:d')) value.updated_at = new Date(Date.now() - 8 * 86400000).toISOString();
+  await discoverSalesDocuments(query, 'org', a);
+  assert.equal(historyQueries, 3, 'Weekly reconciliation rereads old approvals');
+  price = 20;
+  for (const [key, value] of records) if (key.includes('document-page:')) value.updated_at = new Date(0).toISOString();
+  await discoverSalesDocuments(query, 'org', a);
+  assert.equal(historyQueries, 4, 'Changed document fields invalidate history immediately on refresh');
   console.log('Document pagination, incomplete scans, approval history, cache reuse, rule version and tenant isolation passed.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
