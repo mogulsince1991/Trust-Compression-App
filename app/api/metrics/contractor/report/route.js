@@ -80,9 +80,13 @@ export async function POST(request) {
     phase = "saving report";
     let savedReport = null;
     let savedRun = null;
+    let saveWarning = null;
 
     if (persist) {
-      const { data: insertedReport, error: saveError } = await userSupabase
+      try {
+      // Membership and reporting entitlement were checked above. Keep large server-owned
+      // report writes off the authenticated role's eight-second statement budget.
+      const { data: insertedReport, error: saveError } = await serviceSupabase
         .from("contractor_reports")
         .insert({
           workspace_id: workspaceId,
@@ -120,7 +124,7 @@ export async function POST(request) {
       if (saveError) throw saveError;
       savedReport = insertedReport;
 
-      const { data: insertedRun, error: runError } = await userSupabase
+      const { data: insertedRun, error: runError } = await serviceSupabase
         .from("contractor_report_runs")
         .insert({
           workspace_id: workspaceId,
@@ -130,12 +134,7 @@ export async function POST(request) {
           end_date: endDate,
           status: "completed",
           source_snapshot: current.sourceSnapshot,
-          output_snapshot: {
-            totals: current.totals,
-            breakdowns: current.breakdowns,
-            configuredMetrics: current.configuredMetrics,
-            dashboard: current.dashboard,
-          },
+          output_snapshot: { reportId: savedReport.id, totals: current.totals },
           rules_snapshot: ruleSet,
           created_by: user.id,
         })
@@ -144,6 +143,10 @@ export async function POST(request) {
 
       if (runError) console.error("Report saved, run log failed", { reportId: savedReport.id, code: runError.code });
       savedRun = insertedRun;
+      } catch (saveError) {
+        console.error("Report persistence failed", { code: saveError?.code, reportId: savedReport?.id, elapsedMs: Date.now() - startedAt });
+        if (!savedReport) saveWarning = "Your report finished, but could not be saved to report history. Keep this page open and download the report datasets now. Your calculated totals are shown below.";
+      }
     }
 
     try { await recordActivity(serviceSupabase, { workspaceId, actorUserId: user.id, eventType: "contractor_report_generated", entityType: "contractor_report", entityId: savedReport?.id ?? null, surface: "contractor_metrics", metadata: { persisted: persist, comparison: Boolean(comparison) } }); }
@@ -152,6 +155,7 @@ export async function POST(request) {
     return streamReport({
       startDate, endDate, clientName,
       reportId: savedReport?.id ?? null,
+      saveWarning,
       reportRunId: savedRun?.id ?? null,
       createdAt: savedReport?.created_at ?? new Date().toISOString(),
       ruleSet,
@@ -163,7 +167,7 @@ export async function POST(request) {
       unmatched: current.unmatched,
       dashboard: current.dashboard,
       debug: current.debug,
-      exportDatasets: persist ? undefined : current.exportDatasets,
+      exportDatasets: savedReport ? undefined : current.exportDatasets,
       comparison: comparison
         ? {
             label: "Previous period",
@@ -227,7 +231,7 @@ async function generateReportPayload({ userSupabase, serviceSupabase, workspaceI
             provider: "gohighlevel",
             accountLabel,
             snapshot: null,
-            error: error instanceof Error ? error.message : "GoHighLevel contact sync failed.",
+            error: error?.message || "GoHighLevel contact sync failed.",
           };
         }
       }

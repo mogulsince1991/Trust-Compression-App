@@ -17,6 +17,7 @@ export function ContractorTotalSales({ report }: { report: any }) {
   const sales = report.breakdowns?.totalSalesReport;
   if (!sales) return null;
   return <section className={styles.previewPanel} aria-label="Total Sales">
+    {report.saveWarning && <p role="alert">{report.saveWarning}</p>}
     {report.startDate && report.endDate ? <div className={styles.reportRow} aria-label="Report date range">
       <strong>Start date: <time dateTime={report.startDate}>{report.startDate}</time></strong>
       <strong>End date: <time dateTime={report.endDate}>{report.endDate}</time></strong>
